@@ -1,0 +1,58 @@
+export const jobRegistry = {
+  'casaley-export-all': {
+    id: 'casaley-export-all',
+    description: 'Exporta datos de CasaLey dentro del monolito sin subir a AppSheet',
+    type: 'native',
+    requiredEnv: ['CASALEY_USER', 'CASALEY_PASSWORD'],
+  },
+  'casaley-sync-appsheet': {
+    id: 'casaley-sync-appsheet',
+    description: 'Ejecuta la sincronizacion CasaLey -> AppSheet dentro del monolito',
+    type: 'native',
+    requiredEnv: [
+      'CASALEY_USER',
+      'CASALEY_PASSWORD',
+      'CASALEY_APPSHEET_APP_ID',
+      'CASALEY_APPSHEET_API_KEY',
+      'CASALEY_TABLA_PAGOS',
+      'CASALEY_PAGOS_KEY',
+      'CASALEY_TABLA_RELACIONADOS',
+      'CASALEY_RELACIONADOS_KEY',
+      'CASALEY_TABLA_FACTURAS',
+      'CASALEY_FACTURAS_KEY',
+    ],
+  },
+  'facturas-appsheet-sync': {
+    id: 'facturas-appsheet-sync',
+    description: 'Ejecuta la sincronizacion ClubFactura -> AppSheet dentro del monolito',
+    type: 'native',
+    requiredEnv: [
+      'FACTURAS_CLUBFACTURA_USER',
+      'FACTURAS_CLUBFACTURA_PASSWORD',
+      'FACTURAS_CLUBFACTURA_BASE',
+      'FACTURAS_APPSHEET_API_KEY',
+      'FACTURAS_APPSHEET_APP_ID',
+    ],
+  },
+  'facturas-native-sync': {
+    id: 'facturas-native-sync',
+    description: 'Ejecuta la sincronizacion ClubFactura -> AppSheet dentro del monolito',
+    type: 'native',
+    requiredEnv: [
+      'FACTURAS_CLUBFACTURA_USER',
+      'FACTURAS_CLUBFACTURA_PASSWORD',
+      'FACTURAS_CLUBFACTURA_BASE',
+      'FACTURAS_APPSHEET_API_KEY',
+      'FACTURAS_APPSHEET_APP_ID',
+    ],
+  },
+  'pedidos-native-sync': {
+    id: 'pedidos-native-sync',
+    description: 'Ejecuta la sincronizacion de pedidos/liberaciones dentro del monolito',
+    type: 'native',
+    requiredEnv: [
+      'PEDIDOS_APPSHEET_APP_ID',
+      'PEDIDOS_APPSHEET_API_KEY',
+    ],
+  },
+};

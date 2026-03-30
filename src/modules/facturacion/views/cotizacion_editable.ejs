@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <title>Cotizacion Editable</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 20px;
+        font-family: Arial, Helvetica, sans-serif;
+        color: #1f2937;
+        background: #f3f4f6;
+      }
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .subtitle {
+        margin: 0 0 20px;
+        font-size: 12px;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-weight: 700;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .card {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 16px;
+      }
+      label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #6b7280;
+        margin-bottom: 6px;
+        font-weight: 700;
+      }
+      input, select {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        outline: none;
+        background: #fff;
+      }
+      input:focus, select:focus {
+        border-color: #2563eb;
+      }
+      .row { margin-bottom: 14px; }
+      .totales {
+        display: grid;
+        gap: 10px;
+      }
+      .tot-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .tot-row.total {
+        border-top: 2px solid #111827;
+        padding-top: 8px;
+        font-weight: 800;
+        font-size: 16px;
+      }
+      .firma-box {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        text-align: center;
+      }
+      .firma-img {
+        height: 90px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px dashed #e5e7eb;
+        border-radius: 12px;
+        background: #fff;
+      }
+      .firma-img img {
+        max-height: 80px;
+      }
+      .bank {
+        font-size: 14px;
+        line-height: 1.5;
+        font-weight: 600;
+      }
+      .actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 14px;
+      }
+      .btn {
+        padding: 10px 14px;
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: #fff;
+        border-radius: 10px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .btn:hover { background: #1e40af; }
+      @media (max-width: 860px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+      @media print {
+        body { background: #fff; padding: 0; }
+        .page { box-shadow: none; border-radius: 0; }
+        .actions { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="actions">
+        <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      </div>
+      <h1>Cotizacion Editable</h1>
+      <div class="subtitle">Todos los campos editables</div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="row">
+            <label>Sucursal</label>
+            <input list="sucursales-list" id="sucursalInput" placeholder="Seleccionar o escribir sucursal">
+            <datalist id="sucursales-list">
+              <% (sucursales || []).forEach(function(s){ %>
+                <option value="<%= s.nombre %>"></option>
+              <% }) %>
+            </datalist>
+          </div>
+
+          <div class="row">
+            <label>Firma (seleccionable)</label>
+            <select id="firmaSelect">
+              <option value="">Seleccionar firma</option>
+              <% (firmas || []).forEach(function(f, i){ %>
+                <option
+                  value="<%= i %>"
+                  data-nombre="<%= f.nombre %>"
+                  data-puesto="<%= f.puesto %>"
+                  data-url="<%= f.firmaUrl %>"
+                >
+                  <%= f.nombre || "Sin nombre" %>
+                </option>
+              <% }) %>
+            </select>
+          </div>
+
+          <div class="row">
+            <label>Producto / Servicio</label>
+            <input id="productoInput" placeholder="Ej. Capacitacion Brigadas">
+          </div>
+
+          <div class="row">
+            <label>Tipo</label>
+            <input id="tipoInput" placeholder="Ej. Servicio, Producto, Curso">
+          </div>
+
+          <div class="row">
+            <label>Subtotal</label>
+            <input id="subtotalInput" type="number" step="0.01" min="0" value="0">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <label>Resumen</label>
+            <div class="totales">
+              <div class="tot-row">
+                <div>Subtotal</div>
+                <div id="subtotalLabel">$0.00</div>
+              </div>
+              <div class="tot-row">
+                <div>IVA (16%)</div>
+                <div id="ivaLabel">$0.00</div>
+              </div>
+              <div class="tot-row total">
+                <div>Total</div>
+                <div id="totalLabel">$0.00</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <label>Firma seleccionada</label>
+            <div class="firma-box">
+              <div class="firma-img" id="firmaImgWrap">
+                <span style="font-size:12px;color:#9ca3af;font-weight:700;">Sin firma</span>
+              </div>
+              <div id="firmaNombre" style="font-weight:700;">Sin nombre</div>
+              <div id="firmaPuesto" style="font-size:12px;color:#6b7280;">&nbsp;</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <label>Datos Bancarios</label>
+            <div class="bank">
+              Banco: BANORTE<br>
+              CLABE: 072730012443208577<br>
+              Cuenta: 1244320857
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        var subtotalInput = document.getElementById('subtotalInput');
+        var subtotalLabel = document.getElementById('subtotalLabel');
+        var ivaLabel = document.getElementById('ivaLabel');
+        var totalLabel = document.getElementById('totalLabel');
+        var firmaSelect = document.getElementById('firmaSelect');
+        var firmaImgWrap = document.getElementById('firmaImgWrap');
+        var firmaNombre = document.getElementById('firmaNombre');
+        var firmaPuesto = document.getElementById('firmaPuesto');
+
+        function fmt(n) {
+          if (!isFinite(n)) n = 0;
+          return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+        }
+
+        function calc() {
+          var val = parseFloat(subtotalInput.value || '0');
+          if (!isFinite(val)) val = 0;
+          var iva = val * 0.16;
+          var total = val + iva;
+          subtotalLabel.textContent = fmt(val);
+          ivaLabel.textContent = fmt(iva);
+          totalLabel.textContent = fmt(total);
+        }
+
+        function updateFirma() {
+          var opt = firmaSelect.options[firmaSelect.selectedIndex];
+          if (!opt || !opt.getAttribute) return;
+          var nombre = opt.getAttribute('data-nombre') || 'Sin nombre';
+          var puesto = opt.getAttribute('data-puesto') || '';
+          var url = opt.getAttribute('data-url') || '';
+
+          firmaNombre.textContent = nombre || 'Sin nombre';
+          firmaPuesto.textContent = puesto || ' ';
+
+          if (url) {
+            firmaImgWrap.innerHTML = '<img src="' + url + '" alt="Firma">';
+          } else {
+            firmaImgWrap.innerHTML = '<span style="font-size:12px;color:#9ca3af;font-weight:700;">Sin firma</span>';
+          }
+        }
+
+        subtotalInput.addEventListener('input', calc);
+        firmaSelect.addEventListener('change', updateFirma);
+        calc();
+        updateFirma();
+      })();
+    </script>
+  </body>
+</html>

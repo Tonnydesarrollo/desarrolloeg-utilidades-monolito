@@ -1,0 +1,10 @@
+node_modules/
+.wwebjs_cache/
+.wwebjs_auth/
+.env
+.env.*
+!.env.example
+*.log
+
+src/modules/facturacion/services/credentials.json
+src/modules/facturacion/services/token.json

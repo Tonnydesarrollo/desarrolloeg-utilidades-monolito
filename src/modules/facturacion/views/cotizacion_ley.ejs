@@ -1,0 +1,552 @@
+<%
+  var _centrosCountFromView = (data && data.centros) ? data.centros.length : 0;
+  var _centrosCountFromCot = (data && data.cotizacion && data.cotizacion.centroDeTrabajoCount)
+    ? data.cotizacion.centroDeTrabajoCount
+    : 0;
+  var _centrosCount = _centrosCountFromView || _centrosCountFromCot;
+  var _tituloBase = (data && data.cotizacion && data.cotizacion.TITULO) ? data.cotizacion.TITULO : "";
+  var _centroNombreFromView = (data && data.centros && data.centros[0]) ? (data.centros[0].sucursal || "") : "";
+  var _centroNombreFromCot = (data && data.cotizacion && data.cotizacion.centroNombre) ? data.cotizacion.centroNombre : "";
+  var _centroNombre = _centroNombreFromView || _centroNombreFromCot;
+  var _nombrePdf = "Factura / Cotización - Diseño Compacto";
+
+  if (_tituloBase) {
+    if (_centrosCount > 1) {
+      _nombrePdf = "COTIZACION " + _tituloBase;
+    } else if (_centrosCount === 1 && _centroNombre) {
+      _nombrePdf = "COTIZACION " + _centroNombre + " " + _tituloBase;
+    } else {
+      _nombrePdf = "COTIZACION " + _tituloBase;
+    }
+  }
+%>
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <title><%= _nombrePdf %></title>
+    <style>
+      /* ===============================
+   BLOQUES COMPLEMENTARIOS (BOX)
+   =============================== */
+/* EMPRESA CLIENTE (LOGO + NOMBRE) */
+.header-empresa{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+}
+
+.info-section {
+  margin-top: 22px;
+  page-break-inside: avoid;
+}
+
+.info-box {
+  border: 1px solid #dcdcdc;
+  border-left: 5px solid #b3202a;
+  background: #fafafa;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: 4px;
+}
+
+.info-box h3 {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #b3202a;
+}
+
+.info-box p {
+  margin: 4px 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.info-box ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.info-box li {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.info-box strong {
+  font-weight: 700;
+  color: #333;
+}
+
+      /* RESET Y CONFIGURACIÓN DE PÁGINA (Se mantienen igual) */
+      *{box-sizing:border-box}
+      @page{size:letter;margin:10mm 8mm}
+      html,body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:transparent;font-size:13px}
+
+      /* CONTENEDOR PRINCIPAL (Se mantienen igual) */
+      .page{
+        width:215.9mm;
+        max-width:215.9mm;
+        margin:5mm auto;
+        padding:8mm 10mm 20mm;
+        background:#fff;
+        border-radius:6px;
+        position:relative;
+        box-shadow:0 6px 18px rgba(0,0,0,0.08);
+        overflow:hidden;
+      }
+      .content{position:relative;z-index:1;padding-bottom:15mm}
+      
+      /* BOTONERA (Se mantienen igual) */
+      .botonera{text-align:right;margin-bottom:12px}
+      button{padding:8px 12px;border:1px solid #b3202a;background:#fff;border-radius:4px;cursor:pointer;font-weight:600;color:#b3202a;font-size:0.8rem}
+      button:hover{background:#b3202a;color:#fff}
+
+      /* HEADER (Se mantienen igual) */
+      .header{
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-start;
+        margin-bottom:10px;
+        border-bottom:3px solid #b3202a;
+        padding-bottom:10px;
+      }
+      .header-col{flex:1;min-width:0;padding:0 5px;}
+      .header-left{text-align:left;}
+      .logo-principal{max-height:55px;width:auto;display:block;}
+      .proveedor-block{font-size:0.75rem;margin-top:4px;}
+      .proveedor-nombre{font-weight:700;font-size:0.8rem;text-transform:uppercase}
+      /* CENTRAR LOGO PRINCIPAL + TEXTO EN HEADER CENTER */
+.header-center{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+}
+
+      .empresa-logo{max-height:50px;max-width:160px;margin:0 auto 4px;object-fit:contain}
+      .empresa-nombre{font-weight:700;font-size:0.9rem;text-transform:uppercase;color:#b3202a}
+      .header-right{text-align:right;font-size:0.75rem;}
+      .folio-chip{display:inline-block;background:#b3202a;color:#fff;padding:3px 8px;border-radius:6px;font-size:0.70rem;text-transform:uppercase;margin-bottom:4px}
+      .folio-num{font-weight:700;font-size:0.9rem;}
+      .fecha-label{margin-top:4px;}
+
+      h2{margin:15px 0 8px;font-size:0.86rem;text-transform:uppercase;color:#333;letter-spacing:0.04em}
+      
+      /* TABLA DE DETALLES (Se mantienen igual) */
+      table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-bottom:15px;table-layout:fixed;border:none;}
+      thead th{
+        background:#f0f3f8;
+        border:none;
+        border-bottom:2px solid #b3202a;
+        border-top:1px solid #dfe6ef;
+        padding:8px 6px;
+        text-transform:uppercase;
+        font-size:0.68rem;
+        color:#333;
+        font-weight:700;
+      }
+      th,td{border:none;padding:6px;vertical-align:top;}
+      tbody tr:nth-child(odd){background:#f9f9f9}
+      tbody td{border-bottom:1px solid #eee;}
+
+      col.tienda { width:8%; }
+      col.sucursal { width:20%; }
+      col.desc { width:38%; }
+      col.cantidad { width:6%; }
+      col.precioUnit { width:10%; }
+      col.subtotal { width:9%; }
+      col.iva { width:9%; }
+      .desc-cell {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-break:break-word;
+        font-size:0.72rem;
+        line-height:1.1;
+      }
+      .tienda-cell{font-weight:600;font-size:0.76rem}
+      .sucursal-cell{font-weight:600;font-size:0.78rem}
+      .sucursal-domicilio{font-size:0.62rem;color:#666;margin-top:2px;}
+      .tipo-linea{font-size:0.64rem;color:#666;margin-top:4px}
+      td.monto{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right;font-size:0.76rem;font-weight:500;}
+
+      /* SECCIÓN INFERIOR: Totales y Firma en paralelo (Se mantienen igual) */
+      .bottom-section{
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-end;
+        margin-top:20px;
+        page-break-inside:avoid;
+      }
+      .firma-wrapper{flex-basis: 40%; min-width: 250px; text-align: center; order: 1;}
+      .totales-wrapper{flex-basis: 45%; min-width: 220px; text-align: right; order: 2;}
+      .totales{font-size:0.78rem;width:100%;}
+      .totales-row{display:flex;justify-content:space-between;padding:4px 0}
+      .totales-label{color:#555;font-size:0.76rem;padding-right:12px;white-space:nowrap}
+      .totales-value{text-align:right;min-width:100px;font-variant-numeric:tabular-nums;font-size:0.8rem;font-weight:600;}
+      .totales-total{
+        border-top:2px solid #b3202a;
+        margin-top:8px;
+        padding-top:8px;
+        font-weight:700;
+        font-size:0.9rem;
+      }
+      .importe-letra{
+        text-align:left;
+        white-space:normal;
+        font-size:0.74rem;
+        margin-top:10px;
+        padding:4px 0;
+        border-top:1px solid #ddd;
+      }
+
+      /* BLOQUE DE FIRMA ADAPTADO */
+      .firma-block{
+        text-align:center;
+        page-break-inside:avoid;
+        margin-top: 15px;
+        width: 100%;
+        max-width: 280px; /* Permitir un ancho un poco mayor */
+        margin-left: auto;
+        margin-right: auto;
+      }
+      /* 1. Imagen de firma más grande */
+      .firma-block img{
+        max-height:65px; /* Aumentado de 50px a 65px */
+        display:block;
+        margin:0 auto 4px; /* Pequeño margen debajo de la imagen */
+        width: auto;
+      }
+
+      /* 2. Nueva clase para la línea divisoria: Va justo debajo de la imagen */
+      .firma-linea{
+        border-top: 1px solid #222;
+        width: 100%;
+        margin: 0 auto;
+        height: 1px;
+        margin-bottom: 6px; /* Espacio entre la línea y el texto */
+      }
+
+      /* 3. Contenedor del nombre (va debajo de la línea) */
+      .firma-info{
+        padding-top: 0; /* Ya no necesita padding, va después de la línea */
+        width: 100%;
+        margin: 0 auto;
+      }
+      /* Ajuste de texto según tu ejemplo */
+      .firma-nombre{font-weight: 700; margin-bottom: 0; padding-top: 0; text-transform: uppercase; font-size: 0.8rem;}
+      .firma-puesto{font-size: 0.68rem; color: #555; margin-bottom: 0;}
+
+      /* FOOTER (Se mantienen igual) */
+      .footer-bar{position:absolute;left:0;right:0;bottom:0;height:12mm;background:#b3202a;color:#fff;font-size:0.72rem;display:flex;align-items:center;padding:0 10mm;z-index:2}
+      .footer-bar-inner{display:flex;width:100%;justify-content:space-between}
+
+      /* MEDIA PRINT (Ajuste de tamaño de imagen para impresión) */
+      @media print{
+        *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+        .botonera{display:none!important}
+        .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 12mm}
+        html,body{font-size:10px} 
+        table{font-size:0.65rem}
+        thead th{padding:6px 4px;}
+        td{padding:5px 4px}
+        .footer-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;height:12mm!important;padding:0 5mm!important}
+        .content{padding-bottom:15mm!important}
+
+        .firma-block img{max-height:55px} /* Reducción ligera en impresión */
+        .firma-wrapper{flex-basis: 50%; min-width: 200px;}
+        .totales-wrapper{flex-basis: 50%; min-width: 200px;}
+      }
+
+      /* Responsive se mantienen */
+      @media (max-width:720px){
+        .header{flex-direction:column; text-align: center;}
+        .header-left, .header-center, .header-right{text-align:center; margin-bottom: 8px;}
+        .page{width:auto;margin:6mm}
+        .bottom-section{flex-direction: column; align-items: stretch;}
+        .firma-wrapper, .totales-wrapper{flex-basis: 100%; order: unset; margin-top: 15px;}
+        .totales-wrapper{text-align: left;}
+        .firma-block{margin-left: unset; margin-right: unset;}
+      }
+    </style>
+  </head>
+
+  <body>
+    <% /* helper formato moneda */ %>
+    <%  function fmtMoney(v){ 
+var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2}); } %>
+
+    <% 
+      /* Detección de todas lineas servicio (mantiene tu lógica) */
+      function isLineService(ln){
+        if(!ln) return false;
+        var candidates = [ln.tipo, ln.TIPO, ln.tipoProducto, (ln.raw && ln.raw.TIPO), (ln.raw && ln.raw.tipo)];
+        for(var i=0;i<candidates.length;i++){
+          var v = candidates[i];
+          if(v !== undefined && v !== null && String(v).trim() !== ''){
+            var s = String(v).trim().toUpperCase();
+            if(s.indexOf('SERV') !== -1 || s === 'SERVICIO' || s === 'SERVICIOS') return true;
+          }
+        }
+        var desc = String(ln.descripcion || ln.productoNombre || '').toUpperCase();
+        if(desc.indexOf('SERVICIO') !== -1 || desc.indexOf('PAGO') !== -1 || desc.indexOf('PIPC') !== -1) return true;
+        return false;
+      }
+
+      var allServicios = true;
+      var foundAnyLine = false;
+      if(data && data.centros && data.centros.length){
+        for(var ci=0; ci<data.centros.length; ci++){
+          var c = data.centros[ci] || {};
+          var lines = c.lineas || [];
+          for(var li=0; li<lines.length; li++){
+            foundAnyLine = true;
+            if(!isLineService(lines[li])){
+              allServicios = false;
+              break;
+            }
+          }
+          if(!allServicios) break;
+        }
+      } else {
+        allServicios = false;
+      }
+      if(!foundAnyLine) allServicios = false;
+      var showQtyAndUnit = !allServicios;
+    %>
+
+    <div class="page">
+      <div class="content">
+        <div class="botonera">
+          <button onclick="window.print()">Imprimir / Guardar como PDF</button>
+        </div>
+
+        <div class="header">
+
+  <!-- IZQUIERDA → EMPRESA CLIENTE -->
+ <div class="header-col header-left header-empresa">
+   <% if (data.logoCliente) { %>
+  <img
+    src="<%= data.logoCliente %>&sz=200"
+    class="empresa-logo"
+    alt="Logo empresa cliente"
+    referrerpolicy="no-referrer"
+  >
+<% } %>
+
+    <div class="empresa-nombre">
+     <%= data.empresa && data.empresa.razonSocial ? data.empresa.razonSocial : '' %>
+      <u><div class="proveedor-nombre">No. de proveedor: 3067702 </div></u>
+    </div>
+  </div>
+
+  <!-- CENTRO → GONZALEZ GAMEZ Y ASOCIADOS -->
+  <div class="header-col header-center">
+    <img class="logo-principal" src="<%= data.logoEmisor %>" alt="Logo GGA">
+    <div class="proveedor-block">
+      <div class="proveedor-nombre">GONZALEZ GAMEZ Y ASOCIADOS</div>
+      <div class="proveedor-rfc">RFC: GGA230218GL3</div>
+    </div>
+  </div>
+
+  <!-- DERECHA → FOLIO / FECHA -->
+  <div class="header-col header-right">
+    <div class="folio-chip">Cotización</div>
+    <div>
+      Folio:
+      <span class="folio-num">
+        <%= data.cotizacion && data.cotizacion.FOLIO ? data.cotizacion.FOLIO : '' %>
+      </span>
+    </div>
+    <div class="fecha-label">
+      Fecha:
+      <%= data.cotizacion && data.cotizacion.FECHA ? data.cotizacion.FECHA : '' %>
+    </div>
+  </div>
+
+</div>
+
+
+
+        <h2>Detalle por centro de trabajo</h2>
+
+        <table>
+          <colgroup>
+            <col class="tienda">
+            <col class="sucursal">
+            <col class="desc">
+            <% if(showQtyAndUnit){ %><col class="cantidad"><col class="precioUnit"><% } %>
+            <col class="subtotal"><col class="iva">
+            <col class="total">
+          </colgroup>
+
+          <thead>
+            <tr>
+              <th>Tienda</th>
+              <th>Sucursal</th>
+              <th>Producto / Servicio</th>
+              <% if(showQtyAndUnit){ %><th>Cant.</th><th>P. Unitario</th><% } %>
+              <th>SubTotal</th>
+              <th>IVA</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <% for(var i=0;i<(data.centros||[]).length;i++){
+                var ct = data.centros[i] || {};
+                var lines = ct.lineas || [];
+                var numLineas = Math.max(1, lines.length);
+
+                for(var j=0;j<numLineas;j++){
+                  var ln = lines[j] || {}; %>
+
+              <tr>
+                <% if(j===0){ %>
+                  <td rowspan="<%= numLineas %>" class="tienda-cell"><%= ct.tienda ? String(ct.tienda).replace(/,/g,'') : '' %></td>
+
+                  <td rowspan="<%= numLineas %>" class="sucursal-cell">
+                    <div><%= ct.sucursal || '' %></div>
+                    <% if(ct.domicilio){ %><div class="sucursal-domicilio"><%= ct.domicilio %></div><% } %>
+                  </td>
+                <% } %>
+
+                <td class="desc-cell">
+                  <div><%= ln.descripcion || '' %></div>
+                  <% if(ln.tipo && String(ln.tipo).trim()!==''){ %>
+                    <div class="tipo-linea">Tipo: <%= ln.tipo %></div>
+                  <% } else if(ln.raw && ln.raw.TIPO){ %>
+                    <div class="tipo-linea">Tipo: <%= ln.raw.TIPO %></div>
+                  <% } %>
+                </td>
+
+                <% if(showQtyAndUnit){ %>
+                  <td class="nowrap"><%= (ln.cantidad !== undefined && ln.cantidad !== null && ln.cantidad !== '') ? ln.cantidad : '' %></td>
+                  <td class="monto"><%= (ln.precioUnit !== undefined && ln.precioUnit !== null && ln.precioUnit !== '') ? ('$ ' + fmtMoney(ln.precioUnit)) : '' %></td>
+                <% } %>
+
+                <td class="monto <%= (String((ln.subLinea||'')).length>12) ? 'large' : '' %>"><%= '$ ' + fmtMoney(ln.subLinea) %></td>
+                <td class="monto <%= (String((ln.ivaLinea||'')).length>10) ? 'large' : '' %>"><%= '$ ' + fmtMoney(ln.ivaLinea) %></td>
+                <td class="monto <%= (String((ln.totalLinea||'')).length>12) ? 'large' : '' %>"><%= '$ ' + fmtMoney(ln.totalLinea) %></td>
+              </tr>
+
+            <% } } %>
+          </tbody>
+        </table>
+
+        <div class="bottom-section">
+            
+          <% if(data.firma){ %>
+            <div class="firma-wrapper">
+              <div class="firma-block">
+                
+                <img src="<%= data.firma.firmaUrl %>" alt="Firma">
+                
+                <div class="firma-linea"></div>
+
+                <div class="firma-info">
+                  <div class="firma-nombre"><%= data.firma.nombre %></div>
+                  <div class="firma-puesto"><%= data.firma.puesto %></div>
+                </div>
+              </div>
+            </div>
+          <% } %>
+
+
+          <div class="totales-wrapper">
+            <h2>Resumen Total</h2>
+            <div class="totales">
+              <div class="totales-row">
+                <div class="totales-label">SubTotal general:</div>
+                <div class="totales-value">$ <%= fmtMoney(data.totales && data.totales.subTotalGlobal) %></div>
+              </div>
+              <div class="totales-row">
+                <div class="totales-label">IVA general:</div>
+                <div class="totales-value">$ <%= fmtMoney(data.totales && data.totales.ivaGlobal) %></div>
+              </div>
+              <div class="totales-row totales-total">
+                <div class="totales-label">Total general:</div>
+                <div class="totales-value">$ <%= fmtMoney(data.totales && data.totales.totalGlobal) %></div>
+              </div>
+
+              <div class="importe-letra">
+                **Importe con letra:** <%= (data.totales && data.totales.totalEnLetra) ? data.totales.totalEnLetra : '' %>
+              </div>
+            </div>
+          </div>
+          
+        </div>
+              <div class="info-section">
+
+  <% if(data.cotizacion && data.cotizacion.proveedor){ %>
+  <div class="info-box">
+    <h3>Datos Bancarios</h3>
+    <p><strong>Banco:</strong> <%= data.cotizacion.proveedor.banco %></p>
+    <p><strong>CLABE:</strong> <%= data.cotizacion.proveedor.clabe %></p>
+    <p><strong>Cuenta:</strong> <%= data.cotizacion.proveedor.cuenta %></p>
+  </div>
+  <% } %>
+  <div class="info-box">
+    <h3>Garantías</h3>
+    <ul>
+      <li>
+        <strong>Condicionada:</strong> En el caso de cualquier aclaración ante las autoridades
+        correspondientes por los trabajos realizados, la responsabilidad recae en la validación
+        del Programa Interno de Protección Civil hasta el total cumplimiento normativo.
+      </li>
+      <li>
+        <strong>Confidencialidad de la información:</strong> Privacidad de los datos, resultados
+        y conclusiones derivados de cualquier trabajo realizado en sus instalaciones.
+      </li>
+    </ul>
+  </div>
+  <div class="info-box">
+    <h3>Condiciones Comerciales</h3>
+
+    <p><strong>Precios:</strong> Todos los precios se expresan en moneda nacional (MXN).</p>
+
+    <p><strong>Forma de pago:</strong></p>
+    <ul>
+      <li>50 % de anticipo al aceptar la propuesta.</li>
+      <li>50 % restante contra entrega o conforme a acuerdo entre las partes.</li>
+    </ul>
+
+    <p><strong>Inicio del servicio:</strong> El inicio se programará una vez efectuado el anticipo
+    correspondiente o tras formalizar el acuerdo de pago.</p>
+
+    <p><strong>Tiempo de entrega:</strong> 30 días naturales, sujeto a necesidades operativas
+    y a la disponibilidad de la información requerida.</p>
+
+    <p><strong>Duración del proyecto:</strong> La duración total no deberá exceder los
+    60 días naturales.</p>
+
+    <p><strong>Exclusiones:</strong></p>
+    <ul>
+      <li>No incluye fianzas de cumplimiento.</li>
+      <li>No se facturan ni comprueban pagos realizados por terceros.</li>
+    </ul>
+  </div>
+
+</div> <!-- info-section -->
+
+      </div>
+
+      <div class="footer-bar">
+        <div class="footer-bar-inner">
+          <div>Río Tehuantepec 1397-Local 6, Morelos, 80170 Culiacán Rosales, Sin.</div>
+          <div>WhatsApp: (667) 3059813 · Cel: (667) 3059813  y (667)4950697 · Oficina: (667) 690 2218</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

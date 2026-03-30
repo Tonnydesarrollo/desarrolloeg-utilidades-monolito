@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Generador de Diplomas Pro - Desarrollo EG</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Montserrat:wght@400;700&family=Playfair+Display:ital,wght@1,600&display=swap');
+
+        @media print {
+            @page { size: A4 landscape; margin: 0; }
+            body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+            .diploma-canvas { box-shadow: none !important; border: none !important; width: 1123px !important; height: 794px !important; }
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: #2c3e50;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; font-family: 'Montserrat', sans-serif;
+        }
+
+        .toolbar { position: fixed; top: 20px; right: 20px; z-index: 100; }
+        .btn-save {
+            background-color: #e74c3c; color: white; border: none; padding: 12px 25px;
+            font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .diploma-canvas {
+            width: 1123px; height: 794px;
+            background-color: #fff; padding: 20px; box-sizing: border-box;
+            position: relative; overflow: hidden;
+        }
+
+        .border-frame {
+            width: 100%; height: 100%;
+            border: 6px solid #1a2a3a; outline: 2px solid #c0392b; outline-offset: -12px;
+            padding: 25px 50px; box-sizing: border-box;
+            display: flex; flex-direction: column; justify-content: space-between; background: #fff;
+        }
+
+        /* --- ENCABEZADO REESTRUCTURADO --- */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            height: 180px; /* Altura generosa para el logo */
+            position: relative;
+        }
+
+        /* TU LOGO: MÁS GRANDE */
+        .logo-eg-container {
+            width: 450px; /* Espacio masivo para tu marca */
+            height: 100%;
+            display: flex;
+            align-items: center;
+            z-index: 2;
+        }
+        .logo-eg-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            image-rendering: -webkit-optimize-contrast;
+        }
+
+        /* TEXTO CENTRAL: FIJADO AL CENTRO */
+        .center-info {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 400px; /* Ancho controlado para que no choque con logos */
+            text-align: center;
+            z-index: 1;
+        }
+
+        .client-name {
+            font-family: 'Cinzel', serif; font-size: 22px; color: #1a2a3a;
+            margin: 0; text-transform: uppercase; white-space: nowrap;
+            line-height: 1.2;
+        }
+
+        /* LOGO CLIENTE: SE MANTIENE IGUAL */
+        .logo-cliente-container {
+            width: 250px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            z-index: 2;
+        }
+        .logo-cliente-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        /* --- CUERPO --- */
+        .title-constancia {
+            font-family: 'Cinzel', serif; font-size: 60px; color: #1a2a3a;
+            letter-spacing: 8px; margin: 0; text-align: center;
+        }
+
+        .recipient-section { text-align: center; margin: 5px 0; }
+        .recipient-name {
+            font-family: 'Playfair Display', serif; font-style: italic;
+            font-size: 55px; color: #c0392b; border-bottom: 2px solid #1a2a3a;
+            display: inline-block; white-space: nowrap;
+            padding: 5px 15px; line-height: 1.1; min-width: 300px;
+        }
+
+        .course-text {
+            width: 90%; margin: 5px auto;
+            text-align: justify; text-align-last: center;
+            font-size: 18px; line-height: 1.4; color: #222;
+        }
+
+        /* --- FIRMAS --- */
+        .footer-signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: end; }
+        .sig-block { text-align: center; display: flex; flex-direction: column; align-items: center; }
+        .sig-line { width: 280px; border-top: 2px solid #1a2a3a; margin: 5px 0; }
+        .sig-img { max-height: 90px; margin-bottom: -15px; }
+
+        .signer-name {
+            font-size: 13px; font-weight: bold; text-transform: uppercase;
+            white-space: nowrap; width: 300px; line-height: 1.5;
+        }
+
+        .autofit { display: inline-block; overflow: visible !important; }
+        .editable:focus { outline: none; background: #fffde7; }
+    </style>
+</head>
+<body>
+
+    <div class="toolbar no-print">
+        <button class="btn-save" onclick="window.print()">🖨️ IMPRIMIR / GUARDAR PDF</button>
+    </div>
+
+    <div class="diploma-canvas">
+        <div class="border-frame">
+            
+            <div class="header">
+                <div class="logo-eg-container">
+                    <img src="https://drive.google.com/thumbnail?id=15YmFa3PwCXcZCdgzrtlFGcdIGXXF0XvL" class="logo-eg-img" alt="Desarrollo EG">
+                </div>
+
+                <div class="center-info">
+                    <div class="client-name editable autofit" contenteditable="true" data-max-size="22">NOMBRE DE LA EMPRESA CLIENTE</div>
+                    <div style="font-size: 13px; color: #666;" class="editable" contenteditable="true">SUCURSAL / TIENDA</div>
+                </div>
+
+                <div class="logo-cliente-container">
+                    <img src="https://drive.google.com/thumbnail?id=1MZ_qbQkgojJRpYgxsUi5C-1UKPoxJJRY" class="logo-cliente-img" alt="Logo Cliente">
+                </div>
+            </div>
+
+            <div style="text-align: center; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
+                <p style="margin:0; font-size:16px;">Se otorga la presente</p>
+                <h1 class="title-constancia">CONSTANCIA</h1>
+                <p style="margin:0; font-size:16px;">a:</p>
+                
+                <div class="recipient-section">
+                    <div class="recipient-name editable autofit" contenteditable="true" data-max-size="55">Nombre del Participante</div>
+                </div>
+
+                <p style="font-weight: bold; margin: 5px 0; font-size: 16px;">Por su Participación en el curso:</p>
+                <div class="course-text">
+                    Formación organización e Integración de Brigadistas de Protección Civil (En primeros auxilios, combate contra incendios, Búsqueda y Rescate, Evacuación de inmueble).
+                </div>
+                
+                <div style="margin-top: 8px; font-size: 15px;">
+                    Celebrado el día <strong class="editable" contenteditable="true">01</strong> de <strong class="editable" contenteditable="true">ENERO</strong> del <strong class="editable" contenteditable="true">2024</strong><br>
+                    En el Municipio de <strong class="editable" contenteditable="true">Culiacán</strong>, <strong class="editable" contenteditable="true">Sinaloa</strong>. Con una Duración de 8 horas.
+                </div>
+            </div>
+
+            <div class="footer-signatures">
+                <div></div> 
+                <div class="sig-block">
+                    <div style="height: 60px;"></div>
+                    <div class="sig-line"></div>
+                    <div class="signer-name editable autofit" contenteditable="true" data-max-size="13">NOMBRE DEL CAPACITADOR</div>
+                    <div style="font-size: 11px;">Instructor Capacitador</div>
+                </div>
+                <div class="sig-block">
+                    <img src="https://i.imgur.com/rN9e8sH.png" class="sig-img" alt="Firma Morelos">
+                    <div class="sig-line"></div>
+                    <div class="signer-name">MORELOS ENRIQUE PEREZ PICOS</div>
+                    <div style="font-size: 10px; color: #c0392b; font-weight: bold;">CONSULTOR | IEPC-SIN/CC/0128/2024</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        function fittearTexto(el) {
+            const maxFontSize = parseInt(el.getAttribute('data-max-size'));
+            let currentFontSize = maxFontSize;
+            el.style.fontSize = currentFontSize + "px";
+            const parentWidth = el.parentNode.clientWidth - 15;
+            while (el.scrollWidth > parentWidth && currentFontSize > 8) {
+                currentFontSize -= 0.5;
+                el.style.fontSize = currentFontSize + "px";
+            }
+        }
+
+        const elementosEditables = document.querySelectorAll('.autofit');
+        elementosEditables.forEach(el => {
+            fittearTexto(el);
+            el.addEventListener('input', () => fittearTexto(el));
+            el.addEventListener('keydown', (e) => { if (e.key === "Enter") e.preventDefault(); });
+            el.addEventListener('blur', () => fittearTexto(el));
+        });
+        window.onload = () => { elementosEditables.forEach(el => fittearTexto(el)); };
+    </script>
+</body>
+</html>
