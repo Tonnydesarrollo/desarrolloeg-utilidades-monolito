@@ -15,7 +15,8 @@ const client = wrapper(axios.create({
     'Accept-Language': 'es-ES,es;q=0.9',
     'Content-Type': 'application/json',
     'Origin': 'https://www.clubfactura.mx',
-    'Referer': 'https://www.clubfactura.mx/cfAppN/account/login'
+    'Referer': 'https://www.clubfactura.mx/cfAppN/account/login',
+    'the-timezone-iana': process.env.FACTURAS_CLUBFACTURA_TIMEZONE || 'America/Mazatlan'
   }
 }));
 

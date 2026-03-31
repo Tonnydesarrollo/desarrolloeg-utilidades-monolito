@@ -5,6 +5,7 @@ import axios from "axios";
 import { CookieJar } from "tough-cookie";
 import { wrapper } from "axios-cookiejar-support";
 import * as cheerio from "cheerio";
+import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from "../../services/localReplica.js";
 
 const VALID_UPLOAD_TARGETS = new Set(["none", "all", "pagos", "relacionados", "facturas", "secuencial"]);
 
@@ -153,6 +154,15 @@ function writeCsv(rows, outputPath) {
     lines.push(headers.map((header) => csvEscape(row?.[header])).join(","));
   }
   fs.writeFileSync(outputPath, lines.join("\n"), "utf8");
+}
+
+function resolveReplicaFile(config, label) {
+  return path.join(config.outputDir, `${label}_replica.json`);
+}
+
+function applyRowLimit(rows, maxRows) {
+  if (!Number.isFinite(maxRows) || maxRows <= 0) return rows;
+  return rows.slice(0, maxRows);
 }
 
 function computeStableKey(row, keyColumnName) {
@@ -606,6 +616,7 @@ function buildConfig(options = {}) {
   }
 
   const base = readEnv(["CASALEY_BASE"], "https://aplicaciones.casaley.com.mx").replace(/\/+$/, "");
+  const maxRowsPerTable = Math.max(0, readNumber(["CASALEY_MAX_ROWS_PER_TABLE"], 0));
 
   return {
     base,
@@ -636,6 +647,11 @@ function buildConfig(options = {}) {
       0,
       readNumber(["CASALEY_DELAY_BETWEEN_UPLOADS_MS", "DELAY_BETWEEN_UPLOADS_MS"], 0)
     ),
+    maxUsers: Math.max(0, readNumber(["CASALEY_MAX_USERS"], 0)),
+    maxRowsPerTable,
+    maxPagosRows: Math.max(0, readNumber(["CASALEY_MAX_PAGOS_ROWS"], maxRowsPerTable)),
+    maxRelacionadosRows: Math.max(0, readNumber(["CASALEY_MAX_RELACIONADOS_ROWS"], maxRowsPerTable)),
+    maxFacturasRows: Math.max(0, readNumber(["CASALEY_MAX_FACTURAS_ROWS"], maxRowsPerTable)),
     outputDir,
     users,
   };
@@ -650,7 +666,8 @@ async function runCasaleyJob(options = {}) {
   fs.writeFileSync(path.join(config.outputDir, "appsheet_errors_facturas.log"), "", "utf8");
 
   const results = [];
-  for (const account of config.users) {
+  const usersToProcess = config.maxUsers > 0 ? config.users.slice(0, config.maxUsers) : config.users;
+  for (const account of usersToProcess) {
     results.push(await runForUser(config, account.label, account.user, account.password));
   }
 
@@ -666,19 +683,58 @@ async function runCasaleyJob(options = {}) {
     ? ensureKey(allFacturas.map(sanitizeRowValuesOnly), config.facturasKey)
     : allFacturas;
 
+  const pagosSelected = applyRowLimit(pagosPrepared, config.maxPagosRows);
+  const relacionadosSelected = applyRowLimit(relacionadosPrepared, config.maxRelacionadosRows);
+  const facturasSelected = applyRowLimit(facturasPrepared, config.maxFacturasRows);
+
   writeCsv(pagosPrepared, path.join(config.outputDir, "pagos_ALL.csv"));
   writeCsv(relacionadosPrepared, path.join(config.outputDir, "relacionados_ALL.csv"));
   writeCsv(facturasPrepared, path.join(config.outputDir, "facturas_ALL.csv"));
 
+  const pagosReplicaPath = resolveReplicaFile(config, "pagos");
+  const relacionadosReplicaPath = resolveReplicaFile(config, "relacionados");
+  const facturasReplicaPath = resolveReplicaFile(config, "facturas");
+
+  const pagosDiff = config.pagosKey
+    ? diffRowsAgainstReplica(pagosSelected, config.pagosKey, loadReplica(pagosReplicaPath).rows)
+    : { changedRows: pagosSelected, unchangedRows: [], rowsWithoutKey: [] };
+  const relacionadosDiff = config.relacionadosKey
+    ? diffRowsAgainstReplica(relacionadosSelected, config.relacionadosKey, loadReplica(relacionadosReplicaPath).rows)
+    : { changedRows: relacionadosSelected, unchangedRows: [], rowsWithoutKey: [] };
+  const facturasDiff = config.facturasKey
+    ? diffRowsAgainstReplica(facturasSelected, config.facturasKey, loadReplica(facturasReplicaPath).rows)
+    : { changedRows: facturasSelected, unchangedRows: [], rowsWithoutKey: [] };
+
+  writeCsv(pagosDiff.changedRows, path.join(config.outputDir, "pagos_to_upload.csv"));
+  writeCsv(relacionadosDiff.changedRows, path.join(config.outputDir, "relacionados_to_upload.csv"));
+  writeCsv(facturasDiff.changedRows, path.join(config.outputDir, "facturas_to_upload.csv"));
+
   const summary = {
     ok: true,
-    users: config.users.length,
+    users: usersToProcess.length,
     uploadTarget: config.uploadTarget,
     dryRun: config.dryRun,
     pagos: pagosPrepared.length,
     relacionados: relacionadosPrepared.length,
     facturas: facturasPrepared.length,
+    selected: {
+      pagos: pagosSelected.length,
+      relacionados: relacionadosSelected.length,
+      facturas: facturasSelected.length,
+    },
     uploads: {},
+    replica: {
+      pagos: { changed: pagosDiff.changedRows.length, unchanged: pagosDiff.unchangedRows.length },
+      relacionados: { changed: relacionadosDiff.changedRows.length, unchanged: relacionadosDiff.unchangedRows.length },
+      facturas: { changed: facturasDiff.changedRows.length, unchanged: facturasDiff.unchangedRows.length },
+    },
+    limits: {
+      maxUsers: config.maxUsers || null,
+      maxRowsPerTable: config.maxRowsPerTable || null,
+      maxPagosRows: config.maxPagosRows || null,
+      maxRelacionadosRows: config.maxRelacionadosRows || null,
+      maxFacturasRows: config.maxFacturasRows || null,
+    },
     outputDir: config.outputDir,
   };
 
@@ -687,29 +743,67 @@ async function runCasaleyJob(options = {}) {
   }
 
   if (config.shouldUpload.pagos) {
-    summary.uploads.pagos = await upsertMany(config, config.tablaPagos, pagosPrepared, config.pagosKey, "pagos");
+    if (pagosDiff.changedRows.length === 0) {
+      summary.uploads.pagos = { total: 0, ok: 0, edited: 0, added: 0, failed: 0, skippedUnchanged: pagosDiff.unchangedRows.length };
+      saveReplicaRows(pagosReplicaPath, pagosSelected, config.pagosKey, { mergeWithExisting: true });
+    } else {
+      summary.uploads.pagos = await upsertMany(config, config.tablaPagos, pagosDiff.changedRows, config.pagosKey, "pagos");
+      if (summary.uploads.pagos.failed === 0) {
+        saveReplicaRows(pagosReplicaPath, pagosSelected, config.pagosKey, { mergeWithExisting: true });
+      }
+    }
     if (config.isSequential) await sleep(config.delayBetweenUploadsMs);
   }
 
   if (config.shouldUpload.relacionados) {
-    summary.uploads.relacionados = await upsertMany(
-      config,
-      config.tablaRelacionados,
-      relacionadosPrepared,
-      config.relacionadosKey,
-      "relacionados"
-    );
+    if (relacionadosDiff.changedRows.length === 0) {
+      summary.uploads.relacionados = {
+        total: 0,
+        ok: 0,
+        edited: 0,
+        added: 0,
+        failed: 0,
+        skippedUnchanged: relacionadosDiff.unchangedRows.length,
+      };
+      saveReplicaRows(relacionadosReplicaPath, relacionadosSelected, config.relacionadosKey, { mergeWithExisting: true });
+    } else {
+      summary.uploads.relacionados = await upsertMany(
+        config,
+        config.tablaRelacionados,
+        relacionadosDiff.changedRows,
+        config.relacionadosKey,
+        "relacionados"
+      );
+      if (summary.uploads.relacionados.failed === 0) {
+        saveReplicaRows(relacionadosReplicaPath, relacionadosSelected, config.relacionadosKey, { mergeWithExisting: true });
+      }
+    }
     if (config.isSequential) await sleep(config.delayBetweenUploadsMs);
   }
 
   if (config.shouldUpload.facturas) {
-    summary.uploads.facturas = await upsertMany(
-      config,
-      config.tablaFacturas,
-      facturasPrepared,
-      config.facturasKey,
-      "facturas"
-    );
+    if (facturasDiff.changedRows.length === 0) {
+      summary.uploads.facturas = {
+        total: 0,
+        ok: 0,
+        edited: 0,
+        added: 0,
+        failed: 0,
+        skippedUnchanged: facturasDiff.unchangedRows.length,
+      };
+      saveReplicaRows(facturasReplicaPath, facturasSelected, config.facturasKey, { mergeWithExisting: true });
+    } else {
+      summary.uploads.facturas = await upsertMany(
+        config,
+        config.tablaFacturas,
+        facturasDiff.changedRows,
+        config.facturasKey,
+        "facturas"
+      );
+      if (summary.uploads.facturas.failed === 0) {
+        saveReplicaRows(facturasReplicaPath, facturasSelected, config.facturasKey, { mergeWithExisting: true });
+      }
+    }
   }
 
   return summary;

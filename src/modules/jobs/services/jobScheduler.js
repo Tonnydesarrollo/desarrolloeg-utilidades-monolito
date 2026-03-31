@@ -90,7 +90,7 @@ export function startJobScheduler() {
     jobId: "facturas-native-sync",
     label: "Facturas ClubFactura",
     enabled: parseBoolean(process.env.FACTURAS_SYNC_ENABLED, false),
-    intervalMinutes: parsePositiveMinutes(process.env.FACTURAS_SYNC_INTERVAL_MINUTES, 180),
+    intervalMinutes: parsePositiveMinutes(process.env.FACTURAS_SYNC_INTERVAL_MINUTES, 5),
     runOnStart: parseBoolean(process.env.FACTURAS_SYNC_RUN_ON_START, true),
   });
 
@@ -98,7 +98,7 @@ export function startJobScheduler() {
     jobId: "casaley-sync-appsheet",
     label: "CasaLey AppSheet",
     enabled: parseBoolean(process.env.CASALEY_SYNC_ENABLED, false),
-    intervalMinutes: parsePositiveMinutes(process.env.CASALEY_SYNC_INTERVAL_MINUTES, 30),
+    intervalMinutes: parsePositiveMinutes(process.env.CASALEY_SYNC_INTERVAL_MINUTES, 5),
     runOnStart: parseBoolean(process.env.CASALEY_SYNC_RUN_ON_START, true),
   });
 
@@ -106,7 +106,7 @@ export function startJobScheduler() {
     jobId: "pedidos-native-sync",
     label: "Pedidos y Liberaciones",
     enabled: parseBoolean(process.env.PEDIDOS_SYNC_ENABLED, false),
-    intervalMinutes: parsePositiveMinutes(process.env.PEDIDOS_SYNC_INTERVAL_MINUTES, 30),
+    intervalMinutes: parsePositiveMinutes(process.env.PEDIDOS_SYNC_INTERVAL_MINUTES, 5),
     runOnStart: parseBoolean(process.env.PEDIDOS_SYNC_RUN_ON_START, false),
   });
 }

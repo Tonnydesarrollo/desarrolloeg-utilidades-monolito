@@ -1,11 +1,33 @@
 import { client } from '../config/axios.js';
 
+function getCurrentMonthFilter(timeZone = process.env.FACTURAS_CLUBFACTURA_TIMEZONE || 'America/Mazatlan') {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric'
+  }).formatToParts(new Date());
+
+  const year = Number(parts.find((part) => part.type === 'year')?.value || 0);
+  const month = Number(parts.find((part) => part.type === 'month')?.value || 0);
+
+  if (!year || !month) {
+    const now = new Date();
+    return {
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+    };
+  }
+
+  return { year, month };
+}
+
 export async function obtenerFacturasEmitidas({ empresa, pageNumber = 1, pageSize = 100 }) {
+  const { year, month } = getCurrentMonthFilter();
   const response = await client.post('/api/CFDI/GetCfdisList', {
     empresa,
-    filtrarPorFecha: false,
-    anio: null,
-    mes: null,
+    filtrarPorFecha: true,
+    anio: year,
+    mes: month,
     estatus: 1,
     tipoCFDI: null,
     filter: '',

@@ -4,6 +4,11 @@ import { loginClubFactura } from './services/clubfactura.auth.js';
 import { obtenerFacturasEmitidas } from './services/clubfactura.facturas.js';
 import { enviarAAppSheet } from './services/appsheet.service.js';
 import { descargarXml } from './services/clubfactura.download.js';
+import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from '../../services/localReplica.js';
+
+const MAX_EMPRESAS = Math.max(0, Number(process.env.FACTURAS_MAX_EMPRESAS || '0'));
+const MAX_PAGES = Math.max(0, Number(process.env.FACTURAS_MAX_PAGES || '0'));
+const MAX_ROWS = Math.max(0, Number(process.env.FACTURAS_MAX_ROWS || '0'));
 
 function extractPedidoFromXmlText(xmlText) {
   if (!xmlText) return null;
@@ -36,11 +41,6 @@ function resolveDumpFile(name) {
   return `${pathValue.replace(/[\\/]$/, '')}/${name}`;
 }
 
-function loadSnapshot(path) {
-  if (!fs.existsSync(path)) return {};
-  try { return JSON.parse(fs.readFileSync(path, 'utf8')) || {}; } catch { return {}; }
-}
-function saveSnapshot(path, snapshot) { fs.writeFileSync(path, JSON.stringify(snapshot, null, 2), 'utf8'); }
 function writeCsv(path, rows) {
   const header = ['id', 'PEDIDO', 'UUID'];
   const lines = [header.join(',')];
@@ -61,21 +61,18 @@ function writeUuidMissingCsv(path, rows) {
   }
   fs.writeFileSync(path, lines.join('\n'), 'utf8');
 }
-function diffRows(rows, snapshot) {
-  const toUpload = [];
-  for (const r of rows) {
-    const id = r.id != null ? String(r.id) : '';
-    const pedido = r.PEDIDO ?? '';
-    const uuid = r.UUID ?? '';
-    const prev = snapshot[id];
-    let uuidChanged = false;
-    if (!prev) uuidChanged = true;
-    else if (Object.prototype.hasOwnProperty.call(prev, 'UUID')) uuidChanged = prev.UUID !== uuid;
-    else uuidChanged = uuid !== '';
-    if (!prev || prev.PEDIDO !== pedido || uuidChanged) toUpload.push(r);
-  }
-  return toUpload;
+
+function isLegacyFacturasReplicaMatch(entry, row) {
+  const legacyRow = entry?.row;
+  if (!legacyRow || entry?.hash) return false;
+
+  const keys = Object.keys(legacyRow);
+  if (!keys.length || !keys.every((key) => key === 'PEDIDO' || key === 'UUID')) return false;
+
+  return String(legacyRow.PEDIDO ?? '') === String(row.PEDIDO ?? '')
+    && String(legacyRow.UUID ?? '') === String(row.UUID ?? '');
 }
+
 function formatearFechaAppSheet(fecha) {
   if (!fecha) return null;
   const d = new Date(fecha);
@@ -96,15 +93,23 @@ export async function syncFacturasNative() {
       { id: 15622, proveedor: 'xwDqa6Mt6a42iqKHzJG9L6' },
       { id: 15673, proveedor: 'EiHiUQ9YHf4mA-C7L_ziyc' }
     ];
+    const empresasToProcess = MAX_EMPRESAS > 0 ? empresas.slice(0, MAX_EMPRESAS) : empresas;
 
-    for (const empresa of empresas) {
+    for (const empresa of empresasToProcess) {
       let page = 1;
       let total = 0;
+      let pagesProcessed = 0;
       while (true) {
+        if (MAX_PAGES > 0 && pagesProcessed >= MAX_PAGES) break;
+        if (MAX_ROWS > 0 && acumuladas.length >= MAX_ROWS) break;
+
         const { items, totalCount } = await obtenerFacturasEmitidas({ empresa: empresa.id, pageNumber: page, pageSize: 100 });
         if (!items.length) break;
+        const remainingRows = MAX_ROWS > 0 ? Math.max(MAX_ROWS - acumuladas.length, 0) : items.length;
+        const pageItems = MAX_ROWS > 0 ? items.slice(0, remainingRows) : items;
+        if (!pageItems.length) break;
         const rows = [];
-        for (const f of items) {
+        for (const f of pageItems) {
           const folio = f.serieFolio?.trim();
           let pedido = f?.pedido ?? f?.PEDIDO ?? f?.pedidoDesc ?? f?.pedidoNum ?? null;
           let uuid = f?.uuid ?? f?.UUID ?? f?.Uuid ?? null;
@@ -139,13 +144,19 @@ export async function syncFacturasNative() {
         acumuladas.push(...rows);
         total += rows.length;
         page++;
+        pagesProcessed++;
+        if (MAX_ROWS > 0 && acumuladas.length >= MAX_ROWS) break;
         if (total >= totalCount) break;
       }
+
+      if (MAX_ROWS > 0 && acumuladas.length >= MAX_ROWS) break;
     }
 
     const snapshotPath = resolveDumpFile('cfdis_snapshot.json');
-    const snapshot = loadSnapshot(snapshotPath);
-    const toUpload = diffRows(acumuladas, snapshot);
+    const snapshot = loadReplica(snapshotPath);
+    const { changedRows: toUpload, unchangedRows } = diffRowsAgainstReplica(acumuladas, 'id', snapshot.rows, {
+      entryMatchesRow: isLegacyFacturasReplicaMatch,
+    });
     const missingUuid = acumuladas.filter(r => !r.UUID);
 
     writeCsv(resolveDumpFile('cfdis_all.csv'), acumuladas);
@@ -156,13 +167,20 @@ export async function syncFacturasNative() {
       await enviarAAppSheet(toUpload);
     }
 
-    const nextSnapshot = {};
-    for (const r of acumuladas) {
-      if (r.id != null) nextSnapshot[String(r.id)] = { PEDIDO: r.PEDIDO ?? '', UUID: r.UUID ?? '' };
-    }
-    saveSnapshot(snapshotPath, nextSnapshot);
+    saveReplicaRows(snapshotPath, acumuladas, 'id', { mergeWithExisting: true });
 
-    return { ok: true, uploaded: toUpload.length, total: acumuladas.length, missingUuid: missingUuid.length };
+    return {
+      ok: true,
+      uploaded: toUpload.length,
+      unchanged: unchangedRows.length,
+      total: acumuladas.length,
+      missingUuid: missingUuid.length,
+      limits: {
+        maxEmpresas: MAX_EMPRESAS || null,
+        maxPages: MAX_PAGES || null,
+        maxRows: MAX_ROWS || null,
+      },
+    };
   } finally {
     isRunning = false;
   }

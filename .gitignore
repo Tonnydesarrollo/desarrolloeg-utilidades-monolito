@@ -8,3 +8,8 @@ node_modules/
 
 src/modules/facturacion/services/credentials.json
 src/modules/facturacion/services/token.json
+
+src/modules/jobs/native/facturas/data/
+src/modules/jobs/native/casaley/data/*_replica.json
+src/modules/jobs/native/casaley/data/*_to_upload.csv
+src/modules/jobs/native/pedidos/data/*_replica.json

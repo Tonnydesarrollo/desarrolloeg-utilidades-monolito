@@ -4,6 +4,7 @@ import pdfParse from "pdf-parse";
 import { getAuthClient } from "./auth.js";
 import { createDriveClient } from "./drive.js";
 import * as pedidosExtractors from "./pedidos_extractors.js";
+import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from "../../services/localReplica.js";
 
 const CONFIG = {
   credentialsPath: process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS || process.env.GOOGLE_CLIENT_CREDENTIALS || "credentials.json",
@@ -41,6 +42,31 @@ function isBadProveedor(v) {
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function ensureOutputDir() { fs.mkdirSync(CONFIG.outputDir, { recursive: true }); }
 function writeJson(name, data) { ensureOutputDir(); fs.writeFileSync(path.join(CONFIG.outputDir, name), JSON.stringify(data, null, 2), "utf8"); }
+function resolveReplicaPath(name) { return path.join(CONFIG.outputDir, `${name}_replica.json`); }
+function isTrackedRowUnchanged(row, keyField, replicaRows) {
+  return diffRowsAgainstReplica([row], keyField, replicaRows).changedRows.length === 0;
+}
+function buildPedidoReplicaRow(row, pedido, overrides = {}) {
+  return {
+    [CONFIG.appsheetKeyPedidos]: pedido,
+    PDF: row.PDF || row.Pdf || row.pdf || "",
+    PROVEEDOR: row.PROVEEDOR ?? "",
+    ESTABLECIMIENTO: row.ESTABLECIMIENTO ?? "",
+    FECHA: row.FECHA ?? "",
+    IMPORTE: row.IMPORTE ?? "",
+    DESCRIPCION: row.DESCRIPCION ?? "",
+    ...overrides,
+  };
+}
+function buildLiberacionReplicaRow(row, liberacion, overrides = {}) {
+  return {
+    [CONFIG.appsheetKeyLiberaciones]: liberacion,
+    PDF: row.PDF || row.Pdf || row.pdf || "",
+    "NUM. DE PEDIDO": row["NUM. DE PEDIDO"] ?? "",
+    FECHA: row.FECHA ?? "",
+    ...overrides,
+  };
+}
 
 async function fetchWithRetry(url, options = {}, meta = {}) {
   let lastErr;
@@ -136,14 +162,28 @@ async function getPdfText(row, drive) {
 
 async function processPedidos(drive) {
   const rows = await fetchFromAppSheet(CONFIG.appsheetTablePedidos);
+  const replicaPath = resolveReplicaPath("pedidos");
+  const replica = loadReplica(replicaPath);
+  const nextReplicaRows = [];
   const limit = CONFIG.maxRows > 0 ? Math.min(CONFIG.maxRows, rows.length) : rows.length;
-  let updated = 0, skipped = 0; const skippedRows = [];
+  let updated = 0, skipped = 0, skippedUnchanged = 0; const skippedRows = [];
   for (let i = 0; i < limit; i++) {
     const row = rows[i];
     const pedido = row.PEDIDO || row[CONFIG.appsheetKeyPedidos];
     if (isEmpty(pedido)) { skippedRows.push({ row: i + 1, pedido: "", reason: "sin_pedido" }); skipped++; continue; }
+    const trackedRow = buildPedidoReplicaRow(row, pedido);
     const needs = { PROVEEDOR: isEmpty(row.PROVEEDOR) || isBadProveedor(row.PROVEEDOR), ESTABLECIMIENTO: isEmpty(row.ESTABLECIMIENTO), FECHA: isEmpty(row.FECHA), IMPORTE: isEmpty(row.IMPORTE), DESCRIPCION: isEmpty(row.DESCRIPCION) };
-    if (!Object.values(needs).some(Boolean)) { skippedRows.push({ row: i + 1, pedido, reason: "sin_campos_faltantes" }); continue; }
+    if (!Object.values(needs).some(Boolean)) {
+      nextReplicaRows.push(trackedRow);
+      skippedRows.push({ row: i + 1, pedido, reason: "sin_campos_faltantes" });
+      continue;
+    }
+    if (isTrackedRowUnchanged(trackedRow, CONFIG.appsheetKeyPedidos, replica.rows)) {
+      nextReplicaRows.push(trackedRow);
+      skippedRows.push({ row: i + 1, pedido, reason: "sin_cambios_desde_snapshot" });
+      skippedUnchanged++;
+      continue;
+    }
     let text;
     try { text = await getPdfText(row, drive); } catch (err) { skippedRows.push({ row: i + 1, pedido, reason: `pdf_error: ${err?.message || err}` }); skipped++; continue; }
     const updates = {};
@@ -152,37 +192,65 @@ async function processPedidos(drive) {
     if (needs.FECHA) { const fecha = pedidosExtractors.extractFecha(text); if (!isEmpty(fecha)) updates.FECHA = fecha; }
     if (needs.IMPORTE) { const importe = pedidosExtractors.extractImporte(text); if (!isEmpty(importe)) updates.IMPORTE = importe; }
     if (needs.DESCRIPCION) { const desc = pedidosExtractors.extractDescripcion(text); if (!isEmpty(desc)) updates.DESCRIPCION = desc; }
-    if (!Object.values(updates).some(v => !isEmpty(v))) { skippedRows.push({ row: i + 1, pedido, reason: "sin_actualizaciones" }); skipped++; continue; }
+    if (!Object.values(updates).some(v => !isEmpty(v))) {
+      nextReplicaRows.push(trackedRow);
+      skippedRows.push({ row: i + 1, pedido, reason: "sin_actualizaciones" });
+      skipped++;
+      continue;
+    }
     updates[CONFIG.appsheetKeyPedidos] = pedido;
     await updateAppSheet(CONFIG.appsheetTablePedidos, updates);
+    nextReplicaRows.push(buildPedidoReplicaRow(row, pedido, updates));
     updated++;
     if (CONFIG.appsheetDelayMs > 0) await sleep(CONFIG.appsheetDelayMs);
   }
-  return { updated, skipped, skippedRows };
+  saveReplicaRows(replicaPath, nextReplicaRows, CONFIG.appsheetKeyPedidos);
+  return { updated, skipped, skippedUnchanged, skippedRows };
 }
 
 async function processLiberaciones(drive) {
   const rows = await fetchFromAppSheet(CONFIG.appsheetTableLiberaciones);
+  const replicaPath = resolveReplicaPath("liberaciones");
+  const replica = loadReplica(replicaPath);
+  const nextReplicaRows = [];
   const limit = CONFIG.maxRows > 0 ? Math.min(CONFIG.maxRows, rows.length) : rows.length;
-  let updated = 0, skipped = 0; const skippedRows = [];
+  let updated = 0, skipped = 0, skippedUnchanged = 0; const skippedRows = [];
   for (let i = 0; i < limit; i++) {
     const row = rows[i];
     const liberacion = row.LIBERACION || row[CONFIG.appsheetKeyLiberaciones];
     if (isEmpty(liberacion)) { skippedRows.push({ row: i + 1, liberacion: "", reason: "sin_liberacion" }); skipped++; continue; }
+    const trackedRow = buildLiberacionReplicaRow(row, liberacion);
     const needs = { "NUM. DE PEDIDO": isEmpty(row["NUM. DE PEDIDO"]), FECHA: isEmpty(row.FECHA) };
-    if (!Object.values(needs).some(Boolean)) { skippedRows.push({ row: i + 1, liberacion, reason: "sin_campos_faltantes" }); continue; }
+    if (!Object.values(needs).some(Boolean)) {
+      nextReplicaRows.push(trackedRow);
+      skippedRows.push({ row: i + 1, liberacion, reason: "sin_campos_faltantes" });
+      continue;
+    }
+    if (isTrackedRowUnchanged(trackedRow, CONFIG.appsheetKeyLiberaciones, replica.rows)) {
+      nextReplicaRows.push(trackedRow);
+      skippedRows.push({ row: i + 1, liberacion, reason: "sin_cambios_desde_snapshot" });
+      skippedUnchanged++;
+      continue;
+    }
     let text;
     try { text = await getPdfText(row, drive); } catch (err) { skippedRows.push({ row: i + 1, liberacion, reason: `pdf_error: ${err?.message || err}` }); skipped++; continue; }
     const updates = {};
     if (needs["NUM. DE PEDIDO"]) updates["NUM. DE PEDIDO"] = pedidosExtractors.extractPedidoNumber(text);
     if (needs.FECHA) updates.FECHA = pedidosExtractors.extractFecha(text);
-    if (!Object.values(updates).some(v => !isEmpty(v))) { skippedRows.push({ row: i + 1, liberacion, reason: "sin_actualizaciones" }); skipped++; continue; }
+    if (!Object.values(updates).some(v => !isEmpty(v))) {
+      nextReplicaRows.push(trackedRow);
+      skippedRows.push({ row: i + 1, liberacion, reason: "sin_actualizaciones" });
+      skipped++;
+      continue;
+    }
     updates[CONFIG.appsheetKeyLiberaciones] = liberacion;
     await updateAppSheet(CONFIG.appsheetTableLiberaciones, updates);
+    nextReplicaRows.push(buildLiberacionReplicaRow(row, liberacion, updates));
     updated++;
     if (CONFIG.appsheetDelayMs > 0) await sleep(CONFIG.appsheetDelayMs);
   }
-  return { updated, skipped, skippedRows };
+  saveReplicaRows(replicaPath, nextReplicaRows, CONFIG.appsheetKeyLiberaciones);
+  return { updated, skipped, skippedUnchanged, skippedRows };
 }
 
 export async function syncPedidosNative() {
