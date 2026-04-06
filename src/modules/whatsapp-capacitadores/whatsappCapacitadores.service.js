@@ -90,6 +90,14 @@ function splitList(raw) {
     .filter(Boolean);
 }
 
+function getDefaultChromePath() {
+  if (process.platform === "win32") {
+    return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+  }
+
+  return "/usr/bin/chromium";
+}
+
 function getConfig() {
   const sessionDir = readEnv(
     ["WHATSAPP_CAP_SESSION_DIR", "SESSION_DIR"],
@@ -130,7 +138,7 @@ function getConfig() {
     tmpDir,
     chromePath: readEnv(
       ["WHATSAPP_CAP_CHROME_PATH", "CHROME_PATH"],
-      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+      getDefaultChromePath()
     ),
     keywordCapacitaciones: normalizeText(
       readEnv(["WHATSAPP_CAP_KEYWORD_CAPACITACIONES", "KEYWORD_CAPACITACIONES"], "CAPACITACIONES")
@@ -1109,6 +1117,40 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function removeChromiumSingletonLocks(rootDir) {
+  const targetNames = new Set(["SingletonCookie", "SingletonLock", "SingletonSocket"]);
+  let removed = 0;
+
+  function walk(currentDir) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+
+      if (!targetNames.has(entry.name)) continue;
+
+      try {
+        fs.rmSync(fullPath, { force: true });
+        removed += 1;
+      } catch {
+        // Ignore stale lock cleanup errors and let Chromium report any real issue.
+      }
+    }
+  }
+
+  walk(rootDir);
+  return removed;
+}
+
 function isRetryableInitializeError(error) {
   const message = error instanceof Error ? error.message : String(error || "");
   const normalized = message.toLowerCase();
@@ -1116,7 +1158,10 @@ function isRetryableInitializeError(error) {
     normalized.includes("execution context was destroyed") ||
     normalized.includes("target closed") ||
     normalized.includes("session closed") ||
-    normalized.includes("most likely because of a navigation")
+    normalized.includes("most likely because of a navigation") ||
+    normalized.includes("profile appears to be in use") ||
+    normalized.includes("process_singleton_posix") ||
+    normalized.includes("chromium has locked the profile")
   );
 }
 
@@ -1269,6 +1314,11 @@ async function bootWhatsAppService(config) {
   const maxInitializeAttempts = 3;
 
   for (let attempt = 1; attempt <= maxInitializeAttempts; attempt += 1) {
+    const removedLocks = removeChromiumSingletonLocks(config.sessionDir);
+    if (removedLocks > 0) {
+      runtime.logger.warn({ attempt, removedLocks }, "removed stale chromium singleton locks");
+    }
+
     const client = createWhatsAppClient(config);
     runtime.client = client;
 
@@ -1303,14 +1353,22 @@ async function bootWhatsAppService(config) {
 }
 
 export function getWhatsAppCapacitadoresStatus() {
+  const config = runtime.config || getConfig();
+  const enabled = config.enabled;
+  const sessionDir = serviceState.sessionDir || config.sessionDir;
+  const status =
+    enabled && !serviceState.startedAt && !serviceState.startPromise && serviceState.status === "disabled"
+      ? "idle"
+      : serviceState.status;
+
   return {
-    enabled: serviceState.enabled,
-    status: serviceState.status,
+    enabled,
+    status,
     startedAt: serviceState.startedAt,
     readyAt: serviceState.readyAt,
     qrGeneratedAt: serviceState.qrGeneratedAt,
     lastError: serviceState.lastError,
-    sessionDir: serviceState.sessionDir,
+    sessionDir,
     connected: serviceState.connected,
   };
 }

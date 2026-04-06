@@ -1,0 +1,32 @@
+services:
+  monolito:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: desarrolloeg-utilidades-monolito:latest
+    container_name: desarrolloeg-monolito
+    restart: unless-stopped
+    ports:
+      - "7000:7000"
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      PORT: 7000
+      PUBLICIMG_PATH: /app/publicimg
+      FACTURACION_GOOGLE_CREDENTIALS_PATH: /app/secrets/facturacion/credentials.json
+      FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
+      FACTURAS_NATIVE_DUMP_DIR: /app/runtime/jobs/facturas
+      PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
+      PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json
+      PEDIDOS_OUTPUT_DIR: /app/runtime/jobs/pedidos
+      CASALEY_OUTPUT_DIR: /app/runtime/jobs/casaley
+      WHATSAPP_CAP_SESSION_DIR: /app/runtime/whatsapp-capacitadores/session
+      WHATSAPP_CAP_TMP_DIR: /app/runtime/whatsapp-capacitadores/tmp
+      WHATSAPP_CAP_CHROME_PATH: /usr/bin/chromium
+      WHATSAPP_CAP_GOOGLE_SERVICE_ACCOUNT_JSON: /app/secrets/whatsapp/credentials.json
+      WHATSAPP_CAP_GOOGLE_OAUTH_TOKEN_PATH: /app/runtime/whatsapp-capacitadores/token.json
+    volumes:
+      - ./runtime:/app/runtime
+      - ./secrets:/app/secrets:ro
+      - ./publicimg:/app/publicimg

@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { getBackgroundServicesStatus } from "../../services/backgroundServices.js";
+import { getClusterCoordinatorStatus } from "../../services/clusterCoordinator.js";
 
 const execAsync = promisify(exec);
 const LOG_LINES = 8;
@@ -198,6 +199,10 @@ function getWhatsAppState(service = {}) {
   if (!service.enabled) return { tone: "neutral", label: "Desactivado" };
 
   switch (service.status) {
+    case "standby":
+      return { tone: "neutral", label: "Standby" };
+    case "idle":
+      return { tone: "neutral", label: "En espera" };
     case "ready":
       return { tone: "ok", label: "Conectado" };
     case "awaiting_qr":
@@ -288,7 +293,12 @@ async function getMonolithStatuses(baseUrl) {
 async function getPm2Processes() {
   try {
     const { stdout } = await execAsync("npx pm2 jlist", { windowsHide: true });
-    const rawList = JSON.parse(stdout);
+    const normalizedStdout = String(stdout || "").trim();
+    if (!normalizedStdout.startsWith("[")) {
+      return [];
+    }
+
+    const rawList = JSON.parse(normalizedStdout);
     const relevant = rawList.filter((proc) => {
       const cwd = String(proc?.pm2_env?.pm_cwd || proc?.pm2_env?.cwd || "");
       const script = String(proc?.pm2_env?.pm_exec_path || "");
@@ -338,28 +348,17 @@ async function getPm2Processes() {
       return left.name.localeCompare(right.name);
     });
   } catch (error) {
-    return [
-      {
-        name: "pm2",
-        status: "error",
-        cwd: "",
-        script: "",
-        outLog: "",
-        errLog: "",
-        outTail: [],
-        errTail: [error instanceof Error ? error.message : "No se pudo leer PM2"],
-        preview: error instanceof Error ? error.message : "No se pudo leer PM2",
-        isMonolith: false,
-      },
-    ];
+    return [];
   }
 }
 
 function getBackgroundData() {
   const raw = getBackgroundServicesStatus();
+  const cluster = getClusterCoordinatorStatus();
+  const standbyNode = cluster.enabled && cluster.role === "standby";
   const jobs = Array.isArray(raw.scheduler) ? raw.scheduler : [];
   const normalizedJobs = jobs.map((job) => {
-    const state = getJobState(job);
+    const state = standbyNode && job.enabled ? { tone: "neutral", label: "Standby" } : getJobState(job);
     return {
       ...job,
       tone: state.tone,
@@ -367,17 +366,50 @@ function getBackgroundData() {
       runPath: `/jobs/${encodeURIComponent(job.jobId)}/run`,
     };
   });
-  const schedulerState = getSchedulerState(normalizedJobs, Boolean(raw.started));
+  const schedulerState = standbyNode
+    ? {
+        tone: "neutral",
+        label: "Standby",
+        enabledJobs: normalizedJobs.filter((job) => job.enabled).length,
+        runningJobs: 0,
+        failingJobs: 0,
+      }
+    : getSchedulerState(normalizedJobs, Boolean(raw.started));
+
+  const whatsappRaw = standbyNode && raw.whatsappCapacitadores?.enabled
+    ? { ...(raw.whatsappCapacitadores || {}), status: "standby", connected: false, lastError: null }
+    : raw.whatsappCapacitadores;
 
   const whatsapp = {
-    ...(raw.whatsappCapacitadores || {}),
-    ...getWhatsAppState(raw.whatsappCapacitadores),
+    ...(whatsappRaw || {}),
+    ...getWhatsAppState(whatsappRaw),
     healthPath: "/whatsapp-capacitadores/health",
     qrPath: "/whatsapp-capacitadores/qr",
   };
 
   return {
     started: Boolean(raw.started),
+    cluster: {
+      ...cluster,
+      tone: !cluster.enabled
+        ? "neutral"
+        : cluster.conflictingLeaderDetected
+          ? "fail"
+          : cluster.role === "leader"
+            ? "ok"
+            : cluster.role === "standby"
+              ? "warn"
+              : "neutral",
+      label: !cluster.enabled
+        ? "Modo unico"
+        : cluster.conflictingLeaderDetected
+          ? "Conflicto"
+          : cluster.role === "leader"
+            ? "Lider"
+            : cluster.role === "standby"
+              ? "Standby"
+              : "Sin rol",
+    },
     scheduler: {
       tone: schedulerState.tone,
       label: schedulerState.label,
@@ -394,11 +426,39 @@ function buildSummary(services, background, pm2) {
   const healthyServices = services.filter((service) => service.ok).length;
   const totalServices = services.length;
   const primaryProcess = pm2.find((proc) => proc.isMonolith) || null;
+  const pm2HasPrimary = Boolean(primaryProcess);
   const legacyActive = pm2.filter((proc) => !proc.isMonolith && proc.status === "online");
   const legacyRetired = pm2.filter((proc) => !proc.isMonolith && proc.status === "stopped");
   const legacyAlerts = pm2.filter(
     (proc) => !proc.isMonolith && proc.status !== "online" && proc.status !== "stopped"
   );
+  const cluster = background.cluster || {};
+  const standbyNode = cluster.enabled && cluster.role === "standby";
+  const clusterTone = !cluster.enabled
+    ? "neutral"
+    : cluster.conflictingLeaderDetected
+      ? "fail"
+      : cluster.role === "leader"
+        ? "ok"
+        : cluster.role === "standby"
+          ? "warn"
+          : "neutral";
+  const clusterLabel = !cluster.enabled
+    ? "Modo unico"
+    : cluster.conflictingLeaderDetected
+      ? "Conflicto"
+      : cluster.role === "leader"
+        ? "Nodo lider"
+        : cluster.role === "standby"
+          ? "Nodo standby"
+          : "Sin rol";
+  const clusterDetail = !cluster.enabled
+    ? "Este nodo siempre ejecuta los servicios singleton."
+    : cluster.conflictingLeaderDetected
+      ? "Se detecto mas de un lider publico; conviene revisar el failover."
+      : cluster.role === "leader"
+        ? "Este nodo ejecuta jobs y WhatsApp."
+        : "Este nodo espera a que el health publico deje de reportar un lider.";
 
   let overallTone = "ok";
   let overallLabel = "Operativo";
@@ -406,14 +466,19 @@ function buildSummary(services, background, pm2) {
 
   if (
     healthyServices !== totalServices ||
-    primaryProcess?.status !== "online" ||
+    (pm2HasPrimary && primaryProcess?.status !== "online") ||
     background.scheduler.tone === "fail" ||
     background.whatsappCapacitadores.tone === "fail" ||
+    clusterTone === "fail" ||
     legacyAlerts.length
   ) {
     overallTone = "fail";
     overallLabel = "Atencion requerida";
     overallDetail = "Hay fallas activas o diagnosticos rojos que revisar.";
+  } else if (standbyNode) {
+    overallTone = "warn";
+    overallLabel = "Nodo en espera";
+    overallDetail = "Otro nodo deberia estar ejecutando los servicios singleton en este momento.";
   } else if (
     background.whatsappCapacitadores.tone === "warn" ||
     legacyActive.length
@@ -450,11 +515,18 @@ function buildSummary(services, background, pm2) {
       ready: backgroundReadyCount,
       total: backgroundTotal,
       tone:
-        background.scheduler.tone === "fail" || background.whatsappCapacitadores.tone === "fail"
+        standbyNode
+          ? "neutral"
+          : background.scheduler.tone === "fail" || background.whatsappCapacitadores.tone === "fail"
           ? "fail"
           : background.whatsappCapacitadores.tone === "warn"
             ? "warn"
             : "ok",
+    },
+    cluster: {
+      tone: clusterTone,
+      label: clusterLabel,
+      detail: clusterDetail,
     },
     pm2: {
       total: pm2.length,
@@ -511,7 +583,15 @@ function renderSummaryCards(summary) {
       tone: summary.background.tone,
       eyebrow: "Servicios de fondo",
       value: `${summary.background.ready}/${summary.background.total}`,
-      detail: "Scheduler y bot de WhatsApp dentro del monolito.",
+      detail: summary.cluster.label === "Nodo standby"
+        ? "Este nodo esta en espera y no ejecuta scheduler ni WhatsApp."
+        : "Scheduler y bot de WhatsApp dentro del monolito.",
+    },
+    {
+      tone: summary.cluster.tone,
+      eyebrow: "Cluster",
+      value: summary.cluster.label,
+      detail: summary.cluster.detail,
     },
     {
       tone: summary.pm2.tone,
@@ -592,6 +672,30 @@ function renderWhatsAppCard(whatsapp) {
         <a class="inline-link" href="${escapeHtml(whatsapp.healthPath)}" target="_blank" rel="noreferrer">Health</a>
         ${qrLink}
       </div>
+    </article>
+  `;
+}
+
+function renderClusterCard(cluster) {
+  return `
+    <article class="panel accent">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Cluster</p>
+          <h3>Coordinacion entre nodos</h3>
+        </div>
+        ${renderBadge(cluster.tone, cluster.label)}
+      </div>
+      <p class="panel-copy">El nodo consulta el health publico antes de activar jobs y WhatsApp, para reducir colisiones entre maquinas.</p>
+      <dl class="meta-list">
+        <div><dt>Instance ID</dt><dd>${escapeHtml(cluster.instanceId || "Sin dato")}</dd></div>
+        <div><dt>Estrategia</dt><dd>${escapeHtml(cluster.strategy || "Sin dato")}</dd></div>
+        <div><dt>Ultimo check</dt><dd>${escapeHtml(formatDateTime(cluster.lastCheckAt))}</dd></div>
+        <div><dt>Ultimo lider visto</dt><dd>${escapeHtml(formatDateTime(cluster.lastLeaderSeenAt))}</dd></div>
+        <div><dt>Proxima promocion</dt><dd>${escapeHtml(formatDateTime(cluster.nextPromotionAt))}</dd></div>
+        <div><dt>Decision</dt><dd>${escapeHtml(cluster.lastDecision || "Sin dato")}</dd></div>
+      </dl>
+      <a class="inline-link" href="${escapeHtml(cluster.publicHealthUrl || "/health")}" target="_blank" rel="noreferrer">Ver health publico</a>
     </article>
   `;
 }
@@ -1050,10 +1154,11 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>Servicios De Fondo</h2>
-          <p class="section-copy">Aqui vive lo que antes dependia de procesos separados: scheduler, jobs migrados y el bot de WhatsApp.</p>
+          <p class="section-copy">Aqui vive lo que antes dependia de procesos separados: coordinacion del nodo, scheduler, jobs migrados y el bot de WhatsApp.</p>
         </div>
       </div>
       <div class="panel-grid">
+        ${renderClusterCard(background.cluster)}
         ${renderSchedulerCard(background.scheduler)}
         ${renderWhatsAppCard(background.whatsappCapacitadores)}
       </div>

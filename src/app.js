@@ -10,6 +10,7 @@ import { jobsRouter } from "./modules/jobs/jobs.router.js";
 import { clubfacturaDownloadProxyRouter } from "./modules/jobs/native/facturas/downloadProxy.router.js";
 import { whatsappCapacitadoresRouter } from "./modules/whatsapp-capacitadores/whatsappCapacitadores.router.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
+import { getClusterCoordinatorStatus } from "./services/clusterCoordinator.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,7 +104,8 @@ export function createApp() {
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
-      background: getBackgroundServicesStatus()
+      background: getBackgroundServicesStatus(),
+      cluster: getClusterCoordinatorStatus(),
     });
   });
 

@@ -1,6 +1,7 @@
 import { runJob } from "./jobRunner.js";
 
 const schedulerState = {
+  initialized: false,
   started: false,
   jobs: new Map(),
 };
@@ -17,74 +18,9 @@ function parsePositiveMinutes(value, fallbackMinutes) {
   return parsed;
 }
 
-function scheduleNext(entry, delayMs) {
-  clearTimeout(entry.timeout);
-  entry.nextRunAt = new Date(Date.now() + delayMs).toISOString();
-  entry.timeout = setTimeout(async () => {
-    await executeScheduledJob(entry.jobId);
-  }, delayMs);
-}
-
-async function executeScheduledJob(jobId) {
-  const entry = schedulerState.jobs.get(jobId);
-  if (!entry || !entry.enabled) return;
-  if (entry.running) return;
-
-  entry.running = true;
-  entry.lastStartedAt = new Date().toISOString();
-  entry.lastError = null;
-
-  try {
-    const result = await runJob(jobId);
-    entry.lastFinishedAt = new Date().toISOString();
-    entry.lastResult = {
-      ok: result?.ok ?? true,
-      code: result?.code ?? 0,
-      native: Boolean(result?.native),
-      result: result?.result ?? null,
-    };
-    if (!result?.ok) {
-      entry.lastError = result?.stderr || result?.error || "El job termino con error";
-    }
-  } catch (error) {
-    entry.lastFinishedAt = new Date().toISOString();
-    entry.lastError = error instanceof Error ? error.message : String(error);
-    entry.lastResult = { ok: false };
-  } finally {
-    entry.running = false;
-    scheduleNext(entry, entry.intervalMs);
-  }
-}
-
-function registerIntervalJob({ jobId, label, enabled, intervalMinutes, runOnStart }) {
-  const intervalMs = intervalMinutes * 60 * 1000;
-  const entry = {
-    jobId,
-    label,
-    enabled,
-    intervalMinutes,
-    intervalMs,
-    runOnStart,
-    running: false,
-    lastStartedAt: null,
-    lastFinishedAt: null,
-    lastResult: null,
-    lastError: null,
-    nextRunAt: null,
-    timeout: null,
-  };
-
-  schedulerState.jobs.set(jobId, entry);
-
-  if (!enabled) return entry;
-
-  scheduleNext(entry, runOnStart ? 0 : intervalMs);
-  return entry;
-}
-
-export function startJobScheduler() {
-  if (schedulerState.started) return;
-  schedulerState.started = true;
+function ensureJobsRegistered() {
+  if (schedulerState.initialized) return;
+  schedulerState.initialized = true;
 
   registerIntervalJob({
     jobId: "facturas-native-sync",
@@ -111,7 +47,87 @@ export function startJobScheduler() {
   });
 }
 
+function scheduleNext(entry, delayMs) {
+  clearTimeout(entry.timeout);
+  entry.nextRunAt = new Date(Date.now() + delayMs).toISOString();
+  entry.timeout = setTimeout(async () => {
+    await executeScheduledJob(entry.jobId);
+  }, delayMs);
+}
+
+async function executeScheduledJob(jobId) {
+  const entry = schedulerState.jobs.get(jobId);
+  if (!entry || !entry.enabled || !schedulerState.started) return;
+  if (entry.running) return;
+
+  entry.running = true;
+  entry.lastStartedAt = new Date().toISOString();
+  entry.lastError = null;
+
+  try {
+    const result = await runJob(jobId);
+    entry.lastFinishedAt = new Date().toISOString();
+    entry.lastResult = {
+      ok: result?.ok ?? true,
+      code: result?.code ?? 0,
+      native: Boolean(result?.native),
+      result: result?.result ?? null,
+    };
+    if (!result?.ok) {
+      entry.lastError = result?.stderr || result?.error || "El job termino con error";
+    }
+  } catch (error) {
+    entry.lastFinishedAt = new Date().toISOString();
+    entry.lastError = error instanceof Error ? error.message : String(error);
+    entry.lastResult = { ok: false };
+  } finally {
+    entry.running = false;
+    if (schedulerState.started && entry.enabled) {
+      scheduleNext(entry, entry.intervalMs);
+    } else {
+      entry.nextRunAt = null;
+    }
+  }
+}
+
+function registerIntervalJob({ jobId, label, enabled, intervalMinutes, runOnStart }) {
+  const intervalMs = intervalMinutes * 60 * 1000;
+  const entry = {
+    jobId,
+    label,
+    enabled,
+    intervalMinutes,
+    intervalMs,
+    runOnStart,
+    running: false,
+    lastStartedAt: null,
+    lastFinishedAt: null,
+    lastResult: null,
+    lastError: null,
+    nextRunAt: null,
+    timeout: null,
+  };
+
+  schedulerState.jobs.set(jobId, entry);
+
+  if (!enabled) return entry;
+  return entry;
+}
+
+export function startJobScheduler() {
+  ensureJobsRegistered();
+  if (schedulerState.started) return;
+  schedulerState.started = true;
+
+  for (const entry of schedulerState.jobs.values()) {
+    if (!entry.enabled) continue;
+    if (entry.timeout) clearTimeout(entry.timeout);
+    scheduleNext(entry, entry.runOnStart ? 0 : entry.intervalMs);
+  }
+}
+
 export function getJobSchedulerStatus() {
+  ensureJobsRegistered();
   return Array.from(schedulerState.jobs.values()).map((entry) => ({
     jobId: entry.jobId,
     label: entry.label,
