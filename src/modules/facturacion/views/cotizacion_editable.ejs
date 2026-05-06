@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
   <head>
     <base target="_top">
@@ -259,14 +259,14 @@
               <input type="checkbox" id="desglosePipc">
               <div>
                 <strong>PIPC</strong>
-                <p>Programa Interno de ProtecciÃ³n Civil con redacciÃ³n, gestiÃ³n y seguimiento del trÃ¡mite.</p>
+                <p>Programa Interno de ProtecciÃƒÂ³n Civil con redacciÃƒÂ³n, gestiÃƒÂ³n y seguimiento del trÃƒÂ¡mite.</p>
               </div>
             </label>
             <label class="desglose-option">
               <input type="checkbox" id="desgloseCapacitaciones">
               <div>
-                <strong>Capacitaciones en ProtecciÃ³n Civil</strong>
-                <p>Incluye servicio integral y temario con primeros auxilios, combate de incendios y evacuaciÃ³n.</p>
+                <strong>Capacitación de Brigadas</strong>
+                <p>Incluye capacitación multifuncional, constancias al término y temario en primeros auxilios, incendios y evacuación.</p>
               </div>
             </label>
           </div>
@@ -291,28 +291,27 @@
         var desglosePreview = document.getElementById('desglosePreview');
         var preselectedDesglose = <%- JSON.stringify((typeof desglose !== 'undefined' && Array.isArray(desglose)) ? desglose : []) %>;
         var desgloseCatalogo = {
-          pipc: {
-            tag: 'PIPC',
-            titulo: 'PIPC (Programa Interno de ProtecciÃ³n Civil)',
-            intro: 'Servicio integral que ofrecemos para la elaboraciÃ³n, gestiÃ³n y tramitaciÃ³n del Programa Interno de ProtecciÃ³n Civil ante la autoridad competente.',
-            detalles: [
-              'Incluye el desarrollo tÃ©cnico del documento.',
-              'Integra la informaciÃ³n requerida para el trÃ¡mite.',
-              'Da seguimiento hasta la obtenciÃ³n de la opiniÃ³n tÃ©cnica correspondiente.',
-              'No incluye el pago de derechos asociados a la emisiÃ³n de la opiniÃ³n favorable.'
-            ]
-          },
-          capacitaciones: {
-            tag: 'Capacitaciones',
-            titulo: 'Capacitaciones en ProtecciÃ³n Civil',
-            intro: 'Ofrecemos un servicio integral de capacitaciÃ³n multifuncional orientado a la preparaciÃ³n del personal para la atenciÃ³n de emergencias. El servicio contempla la planeaciÃ³n, imparticiÃ³n y evaluaciÃ³n de los cursos, bajo un enfoque teÃ³rico-prÃ¡ctico y conforme a lineamientos tÃ©cnicos aplicables en materia de ProtecciÃ³n Civil.',
-            temario: [
-              'Primeros auxilios: EvaluaciÃ³n inicial de la escena, soporte bÃ¡sico de vida, control de hemorragias, manejo de lesiones y atenciÃ³n primaria a personas lesionadas.',
-              'PrevenciÃ³n y combate de incendios: IdentificaciÃ³n de riesgos, tipos de fuego, uso de extintores, y tÃ©cnicas bÃ¡sicas de control y supresiÃ³n de incendios.',
-              'EvacuaciÃ³n de inmuebles: OrganizaciÃ³n de brigadas, rutas y puntos de reuniÃ³n, procedimientos de evacuaciÃ³n y protocolos de actuaciÃ³n ante emergencias.'
-            ]
-          }
-        };
+    pipc: {
+      tag: "PIPC",
+      titulo: "PIPC (Programa Interno de Protección Civil)",
+      intro: "Proporcionamos un servicio integral para la elaboración, gestión y tramitación del Programa Interno de Protección Civil ante la autoridad competente. El servicio comprende el desarrollo técnico del documento conforme a la normatividad aplicable, la integración y validación de la información requerida, así como el seguimiento puntual del proceso administrativo hasta la obtención de la opinión técnica correspondiente.",
+      detalles: [
+        "Incluye la elaboración del programa y la gestión ante la autoridad de Protección Civil.",
+        "No incluye el pago de derechos correspondientes a la emisión de la opinión favorable."
+      ]
+    },
+    capacitaciones: {
+      tag: "Capacitación",
+      titulo: "Capacitación de Brigadas",
+      intro: "Brindamos un servicio integral de capacitación multifuncional, orientado al fortalecimiento de las capacidades del personal para la prevención y atención de emergencias. El servicio contempla la planeación, impartición y evaluación de los cursos, bajo un enfoque teórico-práctico y conforme a lineamientos técnicos y normativos vigentes en materia de Protección Civil. Al término de cada capacitación, se emite constancia de participación y/o acreditación para los asistentes.",
+      detalles: [],
+      temario: [
+        "Primeros auxilios: Evaluación primaria de la escena, soporte básico de vida (RCP), control de hemorragias, atención de lesiones comunes y estabilización inicial de personas lesionadas.",
+        "Prevención y combate de incendios: Identificación de riesgos, clasificación de fuegos, manejo y uso adecuado de extintores, así como técnicas básicas para el control y supresión de incendios en su fase inicial.",
+        "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
+      ]
+    }
+  };
 
         function fmt(n) {
           if (!isFinite(n)) n = 0;
@@ -410,3 +409,4 @@
     </script>
   </body>
 </html>
+

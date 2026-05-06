@@ -1,4 +1,4 @@
-<% 
+﻿<% 
 var pagoDerechos = {
   estatal: {},    // key = estadoId
   municipal: {}   // key = municipioId
@@ -14,7 +14,7 @@ if (data && data.centros) {
       var desc = String(ln.descripcion || '').toUpperCase().trim();
       var precioConcepto = Number(ln.precioUnit || ln.subLinea || 0);
 
-      // 🔹 MUNICIPAL
+      // ðŸ”¹ MUNICIPAL
       if (
         desc === 'PAGO DE DERECHOS MUNICIPAL' &&
         precioConcepto === 0 &&
@@ -32,7 +32,7 @@ if (data && data.centros) {
         }
       }
 
-      // 🔹 ESTATAL
+      // ðŸ”¹ ESTATAL
       if (
         desc === 'PAGO DE DERECHOS ESTATAL' &&
         precioConcepto === 0 &&
@@ -64,7 +64,7 @@ if (data && data.centros) {
   var _centroNombreFromView = (data && data.centros && data.centros[0]) ? (data.centros[0].sucursal || "") : "";
   var _centroNombreFromCot = (data && data.cotizacion && data.cotizacion.centroNombre) ? data.cotizacion.centroNombre : "";
   var _centroNombre = _centroNombreFromView || _centroNombreFromCot;
-  var _nombrePdf = "Factura / Cotización - Diseño Compacto";
+  var _nombrePdf = "Factura / CotizaciÃ³n - DiseÃ±o Compacto";
 
   if (_tituloBase) {
     if (_centrosCount > 1) {
@@ -83,23 +83,22 @@ if (data && data.centros) {
   var desgloseCatalogo = {
     pipc: {
       tag: "PIPC",
-      titulo: "PIPC (Programa Interno de ProtecciÃ³n Civil)",
-      intro: "Servicio integral que ofrecemos para la elaboraciÃ³n, gestiÃ³n y tramitaciÃ³n del Programa Interno de ProtecciÃ³n Civil ante la autoridad competente.",
+      titulo: "PIPC (Programa Interno de Protección Civil)",
+      intro: "Proporcionamos un servicio integral para la elaboración, gestión y tramitación del Programa Interno de Protección Civil ante la autoridad competente. El servicio comprende el desarrollo técnico del documento conforme a la normatividad aplicable, la integración y validación de la información requerida, así como el seguimiento puntual del proceso administrativo hasta la obtención de la opinión técnica correspondiente.",
       detalles: [
-        "Incluye el desarrollo tÃ©cnico del documento.",
-        "Integra la informaciÃ³n requerida para el trÃ¡mite.",
-        "Da seguimiento hasta la obtenciÃ³n de la opiniÃ³n tÃ©cnica correspondiente.",
-        "No incluye el pago de derechos asociados a la emisiÃ³n de la opiniÃ³n favorable."
+        "Incluye la elaboración del programa y la gestión ante la autoridad de Protección Civil.",
+        "No incluye el pago de derechos correspondientes a la emisión de la opinión favorable."
       ]
     },
     capacitaciones: {
-      tag: "Capacitaciones",
-      titulo: "Capacitaciones en ProtecciÃ³n Civil",
-      intro: "Ofrecemos un servicio integral de capacitaciÃ³n multifuncional orientado a la preparaciÃ³n del personal para la atenciÃ³n de emergencias. El servicio contempla la planeaciÃ³n, imparticiÃ³n y evaluaciÃ³n de los cursos, bajo un enfoque teÃ³rico-prÃ¡ctico y conforme a lineamientos tÃ©cnicos aplicables en materia de ProtecciÃ³n Civil.",
+      tag: "Capacitación",
+      titulo: "Capacitación de Brigadas",
+      intro: "Brindamos un servicio integral de capacitación multifuncional, orientado al fortalecimiento de las capacidades del personal para la prevención y atención de emergencias. El servicio contempla la planeación, impartición y evaluación de los cursos, bajo un enfoque teórico-práctico y conforme a lineamientos técnicos y normativos vigentes en materia de Protección Civil. Al término de cada capacitación, se emite constancia de participación y/o acreditación para los asistentes.",
+      detalles: [],
       temario: [
-        "Primeros auxilios: EvaluaciÃ³n inicial de la escena, soporte bÃ¡sico de vida, control de hemorragias, manejo de lesiones y atenciÃ³n primaria a personas lesionadas.",
-        "PrevenciÃ³n y combate de incendios: IdentificaciÃ³n de riesgos, tipos de fuego, uso de extintores, y tÃ©cnicas bÃ¡sicas de control y supresiÃ³n de incendios.",
-        "EvacuaciÃ³n de inmuebles: OrganizaciÃ³n de brigadas, rutas y puntos de reuniÃ³n, procedimientos de evacuaciÃ³n y protocolos de actuaciÃ³n ante emergencias."
+        "Primeros auxilios: Evaluación primaria de la escena, soporte básico de vida (RCP), control de hemorragias, atención de lesiones comunes y estabilización inicial de personas lesionadas.",
+        "Prevención y combate de incendios: Identificación de riesgos, clasificación de fuegos, manejo y uso adecuado de extintores, así como técnicas básicas para el control y supresión de incendios en su fase inicial.",
+        "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
       ]
     }
   };
@@ -258,7 +257,7 @@ if (data && data.centros) {
   color: #1f4e79;
 }
 
-      /* RESET Y CONFIGURACIÓN DE PÁGINA (Se mantienen igual) */
+      /* RESET Y CONFIGURACIÃ“N DE PÃGINA (Se mantienen igual) */
       *{box-sizing:border-box}
       @page{size:letter;margin:10mm 8mm}
       html,body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:transparent;font-size:13px}
@@ -355,7 +354,7 @@ col.total { width:5%; }
       .tipo-linea{font-size:0.64rem;color:#666;margin-top:4px}
       td.monto{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right;font-size:0.76rem;font-weight:500;}
 
-      /* SECCIÓN INFERIOR: Totales y Firma en paralelo (Se mantienen igual) */
+      /* SECCIÃ“N INFERIOR: Totales y Firma en paralelo (Se mantienen igual) */
       .bottom-section{
         display:flex;
         justify-content:space-between;
@@ -395,30 +394,30 @@ col.total { width:5%; }
         margin-left: auto;
         margin-right: auto;
       }
-      /* 1. Imagen de firma más grande */
+      /* 1. Imagen de firma mÃ¡s grande */
       .firma-block img{
         max-height:65px; /* Aumentado de 50px a 65px */
         display:block;
-        margin:0 auto 4px; /* Pequeño margen debajo de la imagen */
+        margin:0 auto 4px; /* PequeÃ±o margen debajo de la imagen */
         width: auto;
       }
 
-      /* 2. Nueva clase para la línea divisoria: Va justo debajo de la imagen */
+      /* 2. Nueva clase para la lÃ­nea divisoria: Va justo debajo de la imagen */
       .firma-linea{
         border-top: 1px solid #222;
         width: 100%;
         margin: 0 auto;
         height: 1px;
-        margin-bottom: 6px; /* Espacio entre la línea y el texto */
+        margin-bottom: 6px; /* Espacio entre la lÃ­nea y el texto */
       }
 
-      /* 3. Contenedor del nombre (va debajo de la línea) */
+      /* 3. Contenedor del nombre (va debajo de la lÃ­nea) */
       .firma-info{
-        padding-top: 0; /* Ya no necesita padding, va después de la línea */
+        padding-top: 0; /* Ya no necesita padding, va despuÃ©s de la lÃ­nea */
         width: 100%;
         margin: 0 auto;
       }
-      /* Ajuste de texto según tu ejemplo */
+      /* Ajuste de texto segÃºn tu ejemplo */
       .firma-nombre{font-weight: 700; margin-bottom: 0; padding-top: 0; text-transform: uppercase; font-size: 0.8rem;}
       .firma-puesto{font-size: 0.68rem; color: #555; margin-bottom: 0;}
 
@@ -426,7 +425,7 @@ col.total { width:5%; }
       .footer-bar{position:absolute;left:0;right:0;bottom:0;height:12mm;background:#b3202a;color:#fff;font-size:0.72rem;display:flex;align-items:center;padding:0 10mm;z-index:2}
       .footer-bar-inner{display:flex;width:100%;justify-content:space-between}
 
-      /* MEDIA PRINT (Ajuste de tamaño de imagen para impresión) */
+      /* MEDIA PRINT (Ajuste de tamaÃ±o de imagen para impresiÃ³n) */
 @media print{
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
   .botonera{display:none!important}
@@ -439,7 +438,7 @@ col.total { width:5%; }
         .footer-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;height:12mm!important;padding:0 5mm!important}
         .content{padding-bottom:15mm!important}
 
-        .firma-block img{max-height:55px} /* Reducción ligera en impresión */
+        .firma-block img{max-height:55px} /* ReducciÃ³n ligera en impresiÃ³n */
         .firma-wrapper{flex-basis: 50%; min-width: 200px;}
         .totales-wrapper{flex-basis: 50%; min-width: 200px;}
       }
@@ -472,7 +471,7 @@ col.total { width:5%; }
 var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2}); } %>
 
     <% 
-      /* Detección de todas lineas servicio (mantiene tu lógica) */
+      /* DetecciÃ³n de todas lineas servicio (mantiene tu lÃ³gica) */
       function isLineService(ln){
         if(!ln) return false;
         var candidates = [ln.tipo, ln.TIPO, ln.tipoProducto, (ln.raw && ln.raw.TIPO), (ln.raw && ln.raw.tipo)];
@@ -548,8 +547,8 @@ function shouldOmitLine(ln){
             <label class="desglose-option">
               <input type="checkbox" id="desgloseCapacitaciones">
               <div>
-                <strong>Capacitaciones en Proteccion Civil</strong>
-                <p>Incluye servicio integral y temario con primeros auxilios, combate de incendios y evacuacion.</p>
+                <strong>Capacitación de Brigadas</strong>
+                <p>Incluye capacitación multifuncional, constancias al término y temario en primeros auxilios, incendios y evacuación.</p>
               </div>
             </label>
           </div>
@@ -558,7 +557,7 @@ function shouldOmitLine(ln){
 
       <div class="header">
 
-<!-- IZQUIERDA → EMPRESA CLIENTE -->
+<!-- IZQUIERDA â†’ EMPRESA CLIENTE -->
 <div class="header-col header-left header-empresa">
 
   <% if (data.logoCliente) { %>
@@ -575,7 +574,7 @@ function shouldOmitLine(ln){
   </div>
 </div>
 
-  <!-- CENTRO → GONZALEZ GAMEZ Y ASOCIADOS -->
+  <!-- CENTRO â†’ GONZALEZ GAMEZ Y ASOCIADOS -->
   <div class="header-col header-center">
     <img class="logo-principal" src="<%= data.logoEmisor %>" alt="Logo GGA">
     <div class="proveedor-block">
@@ -584,9 +583,9 @@ function shouldOmitLine(ln){
     </div>
   </div>
 
-  <!-- DERECHA → FOLIO / FECHA -->
+  <!-- DERECHA â†’ FOLIO / FECHA -->
   <div class="header-col header-right">
-    <div class="folio-chip">Cotización</div>
+    <div class="folio-chip">CotizaciÃ³n</div>
     <div>
       Folio:
       <span class="folio-num">
@@ -633,7 +632,7 @@ for (var i = 0; i < (data.centros || []).length; i++) {
   var ct = data.centros[i] || {};
   var allLines = ct.lineas || [];
 
-  // Filtrar líneas visibles
+  // Filtrar lÃ­neas visibles
   var lines = [];
   for (var x = 0; x < allLines.length; x++) {
     if (!shouldOmitLine(allLines[x])) {
@@ -784,15 +783,15 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
 
 
   <div class="info-box">
-    <h3>Garantías</h3>
+    <h3>GarantÃ­as</h3>
     <ul>
       <li>
-        <strong>Condicionada:</strong> En el caso de cualquier aclaración ante las autoridades
-        correspondientes por los trabajos realizados, la responsabilidad recae en la validación
-        del Programa Interno de Protección Civil hasta el total cumplimiento normativo.
+        <strong>Condicionada:</strong> En el caso de cualquier aclaraciÃ³n ante las autoridades
+        correspondientes por los trabajos realizados, la responsabilidad recae en la validaciÃ³n
+        del Programa Interno de ProtecciÃ³n Civil hasta el total cumplimiento normativo.
       </li>
       <li>
-        <strong>Confidencialidad de la información:</strong> Privacidad de los datos, resultados
+        <strong>Confidencialidad de la informaciÃ³n:</strong> Privacidad de los datos, resultados
         y conclusiones derivados de cualquier trabajo realizado en sus instalaciones.
       </li>
     </ul>
@@ -808,14 +807,14 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
       <li>50 % restante contra entrega o conforme a acuerdo entre las partes.</li>
     </ul>
 
-    <p><strong>Inicio del servicio:</strong> El inicio se programará una vez efectuado el anticipo
+    <p><strong>Inicio del servicio:</strong> El inicio se programarÃ¡ una vez efectuado el anticipo
     correspondiente o tras formalizar el acuerdo de pago.</p>
 
-    <p><strong>Tiempo de entrega:</strong> 30 días naturales, sujeto a necesidades operativas
-    y a la disponibilidad de la información requerida.</p>
+    <p><strong>Tiempo de entrega:</strong> 30 dÃ­as naturales, sujeto a necesidades operativas
+    y a la disponibilidad de la informaciÃ³n requerida.</p>
 
-    <p><strong>Duración del proyecto:</strong> La duración total no deberá exceder los
-    60 días naturales.</p>
+    <p><strong>DuraciÃ³n del proyecto:</strong> La duraciÃ³n total no deberÃ¡ exceder los
+    60 dÃ­as naturales.</p>
 
     <p><strong>Exclusiones:</strong></p>
     <ul>
@@ -836,24 +835,27 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
           var desglosePreview = document.getElementById('desglosePreview');
           var preselectedDesglose = <%- JSON.stringify(desgloseSeleccionado || []) %>;
           var desgloseCatalogo = {
-            pipc: {
-              tag: 'PIPC',
-              titulo: 'PIPC (Programa Interno de Proteccion Civil)',
-              intro: 'Servicio integral que ofrecemos para la elaboracion, gestion y tramitacion del Programa Interno de Proteccion Civil ante la autoridad competente. Incluye el desarrollo tecnico del documento, la integracion de la informacion requerida y el seguimiento del tramite para la obtencion de la opinion tecnica correspondiente. No incluye el pago de derechos asociados a la emision de la opinion favorable.',
-              detalles: []
-            },
-            capacitaciones: {
-              tag: 'Capacitaciones',
-              titulo: 'Capacitaciones en Proteccion Civil',
-              intro: 'Ofrecemos un servicio integral de capacitacion multifuncional orientado a la preparacion del personal para la atencion de emergencias. El servicio contempla la planeacion, imparticion y evaluacion de los cursos, bajo un enfoque teorico-practico y conforme a lineamientos tecnicos aplicables en materia de Proteccion Civil.',
-              detalles: [],
-              temario: [
-                'Primeros auxilios: Evaluacion inicial de la escena, soporte basico de vida, control de hemorragias, manejo de lesiones y atencion primaria a personas lesionadas.',
-                'Prevencion y combate de incendios: Identificacion de riesgos, tipos de fuego, uso de extintores, y tecnicas basicas de control y supresion de incendios.',
-                'Evacuacion de inmuebles: Organizacion de brigadas, rutas y puntos de reunion, procedimientos de evacuacion y protocolos de actuacion ante emergencias.'
-              ]
-            }
-          };
+    pipc: {
+      tag: "PIPC",
+      titulo: "PIPC (Programa Interno de Protección Civil)",
+      intro: "Proporcionamos un servicio integral para la elaboración, gestión y tramitación del Programa Interno de Protección Civil ante la autoridad competente. El servicio comprende el desarrollo técnico del documento conforme a la normatividad aplicable, la integración y validación de la información requerida, así como el seguimiento puntual del proceso administrativo hasta la obtención de la opinión técnica correspondiente.",
+      detalles: [
+        "Incluye la elaboración del programa y la gestión ante la autoridad de Protección Civil.",
+        "No incluye el pago de derechos correspondientes a la emisión de la opinión favorable."
+      ]
+    },
+    capacitaciones: {
+      tag: "Capacitación",
+      titulo: "Capacitación de Brigadas",
+      intro: "Brindamos un servicio integral de capacitación multifuncional, orientado al fortalecimiento de las capacidades del personal para la prevención y atención de emergencias. El servicio contempla la planeación, impartición y evaluación de los cursos, bajo un enfoque teórico-práctico y conforme a lineamientos técnicos y normativos vigentes en materia de Protección Civil. Al término de cada capacitación, se emite constancia de participación y/o acreditación para los asistentes.",
+      detalles: [],
+      temario: [
+        "Primeros auxilios: Evaluación primaria de la escena, soporte básico de vida (RCP), control de hemorragias, atención de lesiones comunes y estabilización inicial de personas lesionadas.",
+        "Prevención y combate de incendios: Identificación de riesgos, clasificación de fuegos, manejo y uso adecuado de extintores, así como técnicas básicas para el control y supresión de incendios en su fase inicial.",
+        "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
+      ]
+    }
+  };
 
           function hasDesglose(key) {
             return preselectedDesglose.indexOf(key) !== -1;
@@ -910,10 +912,11 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
 
       <div class="footer-bar">
         <div class="footer-bar-inner">
-          <div>Río Tehuantepec 1397-Local 6, Morelos, 80170 Culiacán Rosales, Sin.</div>
-          <div>WhatsApp: (667) 3059813 · Cel: (667) 3059813  y (667)4950697 · Oficina: (667) 690 2218</div>
+          <div>RÃ­o Tehuantepec 1397-Local 6, Morelos, 80170 CuliacÃ¡n Rosales, Sin.</div>
+          <div>WhatsApp: (667) 3059813 Â· Cel: (667) 3059813 Â y (667)4950697 Â· Oficina: (667) 690 2218</div>
         </div>
       </div>
     </div>
   </body>
 </html>
+
