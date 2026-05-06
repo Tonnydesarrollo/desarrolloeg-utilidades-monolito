@@ -122,6 +122,16 @@ if (-not $dockerReady) {
 }
 
 try {
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    throw "git no esta disponible en PATH"
+  }
+
+  Write-Log "Actualizando repo con git pull --ff-only origin main"
+  & git -C $repoRoot pull --ff-only origin main >> $logPath 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "git pull fallo con codigo $LASTEXITCODE"
+  }
+
   $hadPm2Monolith = $false
   if (Test-Pm2ProcessExists -Name "desarrolloeg-monolito") {
     $hadPm2Monolith = $true
