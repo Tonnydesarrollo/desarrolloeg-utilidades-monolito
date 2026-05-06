@@ -126,10 +126,34 @@ try {
     throw "git no esta disponible en PATH"
   }
 
+  $hadStash = $false
+  $stashMarker = "auto-deploy-stash"
+  $gitStatus = & git -C $repoRoot status --porcelain
+  if ($LASTEXITCODE -ne 0) {
+    throw "No fue posible leer el estado de git"
+  }
+
+  if ($gitStatus) {
+    Write-Log "Guardando cambios locales en stash temporal"
+    & git -C $repoRoot stash push --include-untracked --message $stashMarker >> $logPath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      throw "No se pudo crear el stash temporal"
+    }
+    $hadStash = $true
+  }
+
   Write-Log "Actualizando repo con git pull --ff-only origin main"
   & git -C $repoRoot pull --ff-only origin main >> $logPath 2>&1
   if ($LASTEXITCODE -ne 0) {
     throw "git pull fallo con codigo $LASTEXITCODE"
+  }
+
+  if ($hadStash) {
+    Write-Log "Restaurando cambios locales desde stash temporal"
+    & git -C $repoRoot stash pop --index >> $logPath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      throw "No se pudo restaurar el stash temporal"
+    }
   }
 
   $hadPm2Monolith = $false
