@@ -1,0 +1,57 @@
+<section class="doc-header-block">
+  <p class="doc-kicker">Documento Base</p>
+  <h1 class="doc-heading">{{document_title}}</h1>
+  <p class="doc-subheading">{{document_subtitle}}</p>
+</section>
+
+<section class="doc-copy">
+  <p class="doc-paragraph">
+    Por medio de la presente se deja preparado este formato para generar documentos con los datos de la
+    sucursal seleccionada desde AppSheet.
+  </p>
+  <p class="doc-paragraph">
+    Puedes reemplazar este cuerpo por cualquier otro archivo HTML y conservar el mismo membrete.
+  </p>
+</section>
+
+<section class="doc-info-grid">
+  <div class="info-card">
+    <span class="info-label">Sucursal</span>
+    <strong class="info-value">{{document_label}}</strong>
+  </div>
+  <div class="info-card">
+    <span class="info-label">Tienda</span>
+    <strong class="info-value">{{TIENDA}}</strong>
+  </div>
+  <div class="info-card">
+    <span class="info-label">ID</span>
+    <strong class="info-value">{{ID}}</strong>
+  </div>
+  <div class="info-card">
+    <span class="info-label">Fecha de Generacion</span>
+    <strong class="info-value">{{generated_date}}</strong>
+  </div>
+</section>
+
+<section class="doc-copy">
+  <p class="doc-paragraph">
+    Si una columna existe en AppSheet, puedes usarla directamente como placeholder dentro del cuerpo.
+    Ejemplo: <code>&#123;&#123;MUNICIPIO&#125;&#125;</code>, <code>&#123;&#123;ESTADO&#125;&#125;</code>,
+    <code>&#123;&#123;DIRECCION&#125;&#125;</code> o cualquier otro nombre normalizado.
+  </p>
+</section>
+
+<section class="doc-table-block">
+  <h2 class="table-title">Campos Disponibles de la Sucursal</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Campo</th>
+        <th>Valor</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{{all_fields_rows}}}
+    </tbody>
+  </table>
+</section>

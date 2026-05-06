@@ -1,0 +1,281 @@
+<style>
+  .delivery-letter {
+    font-size: 12px;
+    line-height: 1.48;
+    color: #111827;
+  }
+
+  .delivery-date-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 18px;
+  }
+
+  .delivery-recipient {
+    margin-bottom: 16px;
+  }
+
+  .delivery-recipient-line {
+    margin: 0 0 4px;
+  }
+
+  .field-line,
+  .field-block {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-transform: uppercase;
+    outline: none;
+    padding: 0 2px 1px;
+    margin: 0;
+    border-bottom: 1px solid rgba(91, 100, 115, 0.72);
+  }
+
+  .field-line {
+    display: inline-block;
+    min-width: 190px;
+    vertical-align: baseline;
+    text-align: center;
+  }
+
+  .field-block {
+    display: block;
+    width: 100%;
+    min-height: 34px;
+    resize: none;
+    overflow: hidden;
+    text-align: left;
+    line-height: 1.25;
+  }
+
+  .field-date {
+    width: 320px;
+    min-width: 320px;
+    text-align: center;
+  }
+
+  .field-company {
+    min-width: 280px;
+  }
+
+  .field-sucursal-label {
+    min-width: 210px;
+  }
+
+  .field-address {
+    min-height: 34px;
+  }
+
+  .address-wrap {
+    display: block;
+    margin: 2px 0 2px;
+  }
+
+  .field-address-block {
+    width: 100%;
+    min-height: 22px;
+    padding: 0 2px 2px;
+    border: 0;
+    border-bottom: 1px solid rgba(91, 100, 115, 0.72);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-transform: uppercase;
+    outline: none;
+    overflow: hidden;
+    line-height: 1.2;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .letter-paragraph {
+    margin: 0 0 12px;
+    text-align: justify;
+  }
+
+  .letter-signature {
+    margin-top: 30px;
+    text-align: center;
+  }
+
+  .letter-signature-label {
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+
+  .letter-signature-space {
+    min-height: 96px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+
+  .letter-signature-image {
+    max-width: 250px;
+    max-height: 96px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .letter-signature-empty {
+    width: 250px;
+    height: 96px;
+  }
+
+  .letter-signature-name,
+  .letter-signature-role {
+    margin: 0;
+  }
+
+  .letter-signature-name .field-line,
+  .letter-signature-role .field-line {
+    min-width: 360px;
+  }
+
+  .field-line[data-autosize="width"] {
+    width: auto;
+    min-width: 190px;
+  }
+
+  .field-line[data-field="fecha_carta"] {
+    min-width: 320px;
+  }
+
+  .field-line[data-field="encargado_pc"] {
+    min-width: 320px;
+  }
+
+  .field-line[data-field="puesto_destinatario"] {
+    min-width: 340px;
+  }
+
+  .field-line[data-field="empresa"] {
+    min-width: 280px;
+  }
+
+  .field-line[data-field="label"] {
+    min-width: 210px;
+  }
+
+  .field-line[data-field="nombre_firma"],
+  .field-line[data-field="puesto_firma"] {
+    min-width: 360px;
+  }
+
+  .field-block[data-field="direccion_google"] {
+    min-height: 34px;
+  }
+</style>
+
+<section class="delivery-letter">
+  <div class="delivery-date-row">
+    <input class="field-line field-date" type="text" data-field="fecha_carta" data-autosize="width" data-inline-field="fecha_carta" data-uppercase="true" value="{{fecha_carta}}" aria-label="Fecha de carta">
+  </div>
+
+  <div class="delivery-recipient">
+    <p class="delivery-recipient-line">
+      <input class="field-line" type="text" data-field="encargado_pc" data-autosize="width" data-inline-field="encargado_pc" data-uppercase="true" value="{{encargado_pc}}" aria-label="Encargado PC">
+    </p>
+    <p class="delivery-recipient-line">
+      <input class="field-line" type="text" data-field="puesto_destinatario" data-autosize="width" data-inline-field="puesto_destinatario" data-uppercase="true" value="{{puesto_destinatario}}" aria-label="Puesto destinatario">
+    </p>
+  </div>
+
+  <div class="letter-body">
+    <p class="letter-paragraph">
+      Por este conducto me estoy permitiendo solicitar ante la coordinación de protección civil Culiacán la revisión y validación del Programa Interno de Protección Civil de la empresa
+      <input class="field-line field-company" type="text" data-field="empresa" data-autosize="width" data-inline-field="empresa" data-uppercase="true" value="{{empresa}}" aria-label="Empresa">
+      SUCURSAL
+      <input class="field-line field-sucursal-label" type="text" data-field="label" data-autosize="width" data-inline-field="label" data-uppercase="true" value="{{label}}" aria-label="Sucursal">
+      , ubicada en
+    </p>
+    <div class="address-wrap">
+      <div class="field-address-block" contenteditable="true" data-field="direccion_google" data-autosize="height" data-inline-field="direccion_google" data-uppercase="true" role="textbox" aria-label="Direccion">{{direccion_google}}</div>
+    </div>
+    <p class="letter-paragraph">
+      A fin de dar cumplimiento para que se le otorgue la opinión favorable de protección civil.
+    </p>
+
+    <p class="letter-paragraph">
+      Sin otro particular, y atento a cualquier duda o aclaración al respecto, me despido de usted enviándole un cordial saludo.
+    </p>
+  </div>
+
+  <div class="letter-signature">
+    <div class="letter-signature-label">ATENTAMENTE</div>
+    <div class="letter-signature-space">{{{firma_image_html}}}</div>
+    <p class="letter-signature-name">
+      <input class="field-line" type="text" data-field="nombre_firma" data-autosize="width" data-inline-field="nombre_firma" data-uppercase="true" value="{{nombre_firma}}" aria-label="Nombre firma">
+    </p>
+    <p class="letter-signature-role">
+      <input class="field-line" type="text" data-field="puesto_firma" data-autosize="width" data-inline-field="puesto_firma" data-uppercase="true" value="{{puesto_firma}}" aria-label="Puesto firma">
+    </p>
+  </div>
+</section>
+
+<script>
+  (() => {
+    const READY_FLAG = "__LETTER_READY__";
+    const AUTOSIZE_PADDING = 24;
+    const measurer = document.createElement("canvas").getContext("2d");
+
+    function syncWidth(target) {
+      const minWidth = target.dataset.minWidth ? Number(target.dataset.minWidth) : 190;
+      const computed = window.getComputedStyle(target);
+      measurer.font = computed.font;
+      const text = target.value || target.placeholder || "";
+      const measured = text ? measurer.measureText(text).width : 0;
+      const next = Math.max(minWidth, measured + AUTOSIZE_PADDING);
+      target.style.width = `${Math.ceil(next)}px`;
+    }
+
+    function syncHeight(target) {
+      target.style.height = "auto";
+      target.style.height = `${Math.max(34, target.scrollHeight)}px`;
+    }
+
+    function syncLayout(target) {
+      if (target.dataset.autosize === "height") {
+        syncHeight(target);
+        return;
+      }
+      if (target.dataset.autosize === "width") {
+        syncWidth(target);
+      }
+    }
+
+    function syncInlineField(target) {
+      const key = target.dataset.inlineField;
+      if (!key) return;
+      const value = String(target.isContentEditable ? target.textContent || "" : target.value || "");
+      if (target.dataset.uppercase === "true") {
+        const upper = value.toLocaleUpperCase("es-MX");
+        if (target.isContentEditable) {
+          if ((target.textContent || "") !== upper) target.textContent = upper;
+        } else if (target.value !== upper) {
+          target.value = upper;
+        }
+        syncLayout(target);
+        parent.postMessage({ type: "carta-inline-field", name: key, value: upper }, "*");
+        return;
+      }
+      syncLayout(target);
+      parent.postMessage({ type: "carta-inline-field", name: key, value }, "*");
+    }
+
+    window.addEventListener("input", (event) => {
+      const inline = event.target.closest("[data-inline-field]");
+      if (!inline) return;
+      syncInlineField(inline);
+    });
+
+    window.addEventListener("load", () => {
+      document.querySelectorAll("[data-inline-field]").forEach((node) => syncLayout(node));
+      window[READY_FLAG] = true;
+    });
+  })();
+</script>

@@ -1,0 +1,15 @@
+{
+  "companyName": "DESARROLLO EG",
+  "companySubtitle": "",
+  "logoPath": "../assets/logo.png",
+  "footerLeftLines": [
+    "Rio Tehuantepec 1704-1, Morelos,",
+    "Los Pinos, 80170 Culiacan Rosales,",
+    "Sin."
+  ],
+  "footerRightLines": [
+    "WhatsApp: (667) 305 9813",
+    "Cel: (667) 1766584 y (667) 4950697",
+    "Oficina: (667) 690 2218"
+  ]
+}

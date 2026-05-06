@@ -1,0 +1,260 @@
+<style>
+  .municipal-letter {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #111827;
+  }
+
+  .letter-date-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 18px;
+  }
+
+  .letter-recipient {
+    margin-bottom: 18px;
+  }
+
+  .letter-recipient-line {
+    margin: 0 0 4px;
+  }
+
+  .field-line,
+  .field-block {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-transform: uppercase;
+    outline: none;
+    padding: 0 2px 1px;
+    margin: 0;
+    border-bottom: 1px solid rgba(91, 100, 115, 0.7);
+  }
+
+  .field-line {
+    display: inline-block;
+    min-width: 180px;
+    vertical-align: baseline;
+    text-align: center;
+  }
+
+  .field-block {
+    display: block;
+    width: 100%;
+    text-align: left;
+    min-height: 42px;
+    resize: none;
+    overflow: hidden;
+  }
+
+  .field-date {
+    min-width: 320px;
+    width: 320px;
+    text-align: center;
+  }
+
+  .field-company {
+    min-width: 320px;
+  }
+
+  .field-label {
+    min-width: 160px;
+  }
+
+  .field-rfc {
+    min-width: 220px;
+  }
+
+  .field-risk {
+    min-width: 220px;
+  }
+
+  .letter-paragraph {
+    margin: 0 0 12px;
+    text-align: justify;
+  }
+
+  .letter-signature {
+    margin-top: 28px;
+    text-align: center;
+  }
+
+  .letter-signature-label {
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+
+  .letter-signature-space {
+    min-height: 92px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+
+  .letter-signature-image {
+    max-width: 250px;
+    max-height: 92px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .letter-signature-empty {
+    width: 250px;
+    height: 92px;
+  }
+
+  .letter-signature-name,
+  .letter-signature-role {
+    margin: 0;
+  }
+
+  .letter-signature-name .field-line,
+  .letter-signature-role .field-line {
+    min-width: 420px;
+  }
+
+  .field-line[data-autosize="width"] {
+    width: auto;
+    min-width: 180px;
+  }
+
+  .field-line[data-field="fecha_carta"] {
+    min-width: 320px;
+  }
+
+  .field-line[data-field="empresa"] {
+    min-width: 320px;
+  }
+
+  .field-line[data-field="label"] {
+    min-width: 160px;
+  }
+
+  .field-line[data-field="rfc"] {
+    min-width: 220px;
+  }
+
+  .field-line[data-field="nivel_de_riesgo"] {
+    min-width: 220px;
+  }
+
+  .field-line[data-field="nombre_firma"],
+  .field-line[data-field="puesto_firma"] {
+    min-width: 420px;
+  }
+</style>
+
+<section class="municipal-letter">
+  <div class="letter-date-row">
+    <input class="field-line field-date" type="text" data-field="fecha_carta" data-autosize="width" data-inline-field="fecha_carta" data-uppercase="true" value="{{fecha_carta}}" aria-label="Fecha de carta">
+  </div>
+
+  <div class="letter-recipient">
+    <p class="letter-recipient-line">
+      <input class="field-line" type="text" data-field="encargado_pc" data-autosize="width" data-inline-field="encargado_pc" data-uppercase="true" value="{{encargado_pc}}" aria-label="Encargado PC">
+    </p>
+    <p class="letter-recipient-line">
+      <input class="field-line" type="text" data-field="puesto_destinatario" data-autosize="width" data-inline-field="puesto_destinatario" data-uppercase="true" value="{{puesto_destinatario}}" aria-label="Puesto destinatario">
+    </p>
+  </div>
+
+  <div class="letter-body">
+    <p class="letter-paragraph">
+      Por medio de la presente, le envio un cordial saludo y a la vez me dirijo a usted para hacer de su
+      conocimiento que la empresa
+      <input class="field-line field-company" type="text" data-field="empresa" data-autosize="width" data-inline-field="empresa" data-uppercase="true" value="{{empresa}}" aria-label="Empresa">
+      , Suc.
+      <input class="field-line field-label" type="text" data-field="label" data-autosize="width" data-inline-field="label" data-uppercase="true" value="{{label}}" aria-label="Sucursal">
+      ubicada en
+      <textarea class="field-block" data-field="direccion_google" data-autosize="height" data-inline-field="direccion_google" data-uppercase="true" aria-label="Direccion">{{direccion_google}}</textarea>
+      con RFC
+      <input class="field-line field-rfc" type="text" data-field="rfc" data-autosize="width" data-inline-field="rfc" data-uppercase="true" value="{{rfc}}" aria-label="RFC">
+      y con determinacion de riesgo
+      <input class="field-line field-risk" type="text" data-field="nivel_de_riesgo" data-autosize="width" data-inline-field="nivel_de_riesgo" data-uppercase="true" value="{{nivel_de_riesgo}}" aria-label="Nivel de riesgo">
+      , me ha sido contratada para la elaboracion del Programa Interno de Proteccion Civil.
+    </p>
+
+    <p class="letter-paragraph">
+      Con la intencion de su integracion del expediente y dar cumplimiento ante la Coordinacion de Proteccion
+      Civil Municipal en un maximo de 20 dias habiles.
+    </p>
+
+    <p class="letter-paragraph">
+      Sin otro particular, y atento a cualquier duda o aclaracion al respecto, me despido de Usted
+      enviandole un cordial saludo.
+    </p>
+  </div>
+
+  <div class="letter-signature">
+    <div class="letter-signature-label">ATENTAMENTE</div>
+    <div class="letter-signature-space">{{{firma_image_html}}}</div>
+    <p class="letter-signature-name">
+      <input class="field-line" type="text" data-field="nombre_firma" data-autosize="width" data-inline-field="nombre_firma" data-uppercase="true" value="{{nombre_firma}}" aria-label="Nombre firma">
+    </p>
+    <p class="letter-signature-role">
+      <input class="field-line" type="text" data-field="puesto_firma" data-autosize="width" data-inline-field="puesto_firma" data-uppercase="true" value="{{puesto_firma}}" aria-label="Puesto firma">
+    </p>
+  </div>
+</section>
+
+<script>
+  (() => {
+    const READY_FLAG = "__LETTER_READY__";
+    const AUTOSIZE_PADDING = 24;
+    const measurer = document.createElement("canvas").getContext("2d");
+
+    function syncWidth(target) {
+      const minWidth = target.dataset.minWidth ? Number(target.dataset.minWidth) : 180;
+      const computed = window.getComputedStyle(target);
+      measurer.font = computed.font;
+      const text = target.value || target.placeholder || "";
+      const measured = text ? measurer.measureText(text).width : 0;
+      const next = Math.max(minWidth, measured + AUTOSIZE_PADDING);
+      target.style.width = `${Math.ceil(next)}px`;
+    }
+
+    function syncHeight(target) {
+      target.style.height = "auto";
+      target.style.height = `${Math.max(28, target.scrollHeight)}px`;
+    }
+
+    function syncLayout(target) {
+      if (target.dataset.autosize === "height") {
+        syncHeight(target);
+        return;
+      }
+      if (target.dataset.autosize === "width") {
+        syncWidth(target);
+      }
+    }
+
+    function syncInlineField(target) {
+      const key = target.dataset.inlineField;
+      if (!key) return;
+      const value = String(target.value || "");
+      if (target.dataset.uppercase === "true") {
+        const upper = value.toLocaleUpperCase("es-MX");
+        if (target.value !== upper) target.value = upper;
+        syncLayout(target);
+        parent.postMessage({ type: "carta-inline-field", name: key, value: upper }, "*");
+        return;
+      }
+      syncLayout(target);
+      parent.postMessage({ type: "carta-inline-field", name: key, value }, "*");
+    }
+
+    window.addEventListener("input", (event) => {
+      const inline = event.target.closest("[data-inline-field]");
+      if (!inline) return;
+      syncInlineField(inline);
+    });
+
+    window.addEventListener("load", () => {
+      document.querySelectorAll("[data-inline-field]").forEach((node) => syncLayout(node));
+      window[READY_FLAG] = true;
+    });
+  })();
+</script>

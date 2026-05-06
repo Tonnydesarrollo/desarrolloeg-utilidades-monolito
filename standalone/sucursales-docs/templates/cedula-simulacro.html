@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cedula de Simulacro - {{document_label}}</title>
+  <style>
+    @page { size: Letter; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #d1d5db;
+      color: #111;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 8.5px;
+    }
+    body { padding: 8px 0; }
+    .page {
+      width: 8.5in;
+      height: 11in;
+      margin: 0 auto 8px;
+      padding: 0.03in 0.04in 0.04in;
+      background: #fff;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+      overflow: hidden;
+    }
+    .page-break { break-after: page; }
+    .header {
+      display: grid;
+      grid-template-columns: 1.52in 1fr 1.02in;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+    .logo-box {
+      height: 0.76in;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .branch-logo {
+      width: 1.44in;
+      height: 0.68in;
+      object-fit: contain;
+      display: block;
+    }
+    .pc-logo {
+      width: 0.94in;
+      height: 0.68in;
+      object-fit: contain;
+      display: block;
+    }
+    .title {
+      text-align: center;
+      font-size: 10.9px;
+      line-height: 1.1;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      padding-top: 6px;
+    }
+    .code { white-space: nowrap; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    td, th {
+      border: 1px solid #ff5b5b;
+      padding: 1px 4px;
+      vertical-align: middle;
+    }
+    th {
+      font-weight: 700;
+      text-transform: uppercase;
+      text-align: center;
+      background: #c8c8c8;
+    }
+    .band th,
+    .band td {
+      background: #c8c8c8;
+      text-align: center;
+      text-transform: uppercase;
+      font-weight: 700;
+      font-size: 8.3px;
+      height: 17px;
+      padding: 0 4px;
+    }
+    .subhead {
+      text-transform: uppercase;
+      font-weight: 700;
+      text-align: center;
+      font-size: 8.05px;
+      height: 15px;
+      padding: 0 3px;
+    }
+    .left-head {
+      text-transform: uppercase;
+      font-weight: 700;
+      text-align: left;
+      font-size: 7.95px;
+      height: 15px;
+      padding: 0 5px;
+    }
+    .value {
+      height: 19px;
+      font-weight: 700;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .value.left { text-align: left; }
+    .value.top {
+      vertical-align: top;
+      padding-top: 4px;
+    }
+    .inline-field {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: transparent;
+      color: #111;
+      font: inherit;
+      font-weight: 700;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 0;
+      margin: 0;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .inline-field.left { text-align: left; }
+    .inline-field.tall {
+      min-height: 100%;
+      resize: none;
+      overflow: hidden;
+    }
+    .inline-field.blank {
+      display: block;
+      width: 100%;
+      height: 16px;
+    }
+    .inline-field::placeholder {
+      color: #bbb;
+      opacity: 1;
+    }
+    .value .inline-field,
+    .stack-value .inline-field,
+    .duration-box .inline-field,
+    .blank-box .inline-field {
+      display: block;
+    }
+    .duration-box .inline-field,
+    .blank-box .inline-field {
+      height: 100%;
+    }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .tiny { font-size: 7px; }
+    .mini { font-size: 7.3px; }
+    .stack-head {
+      text-transform: uppercase;
+      font-weight: 700;
+      text-align: center;
+      font-size: 7.7px;
+      line-height: 1.02;
+    }
+    .stack-value {
+      height: 18px;
+      text-align: center;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .top-grid td,
+    .top-grid th {
+      height: 19px;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    .top-grid .subhead {
+      font-size: 9px;
+      font-weight: 700;
+    }
+    .top-grid .value {
+      height: 18px;
+      font-size: 8px;
+    }
+    .choice-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-start;
+      min-height: 28px;
+      padding-left: 8px;
+      text-transform: uppercase;
+      font-weight: 700;
+      font-size: 7.9px;
+    }
+    .choice-wrap.centered {
+      justify-content: center;
+      padding-left: 0;
+    }
+    .choice-wrap.compact {
+      min-height: 21px;
+      gap: 6px;
+      padding-left: 4px;
+    }
+    .station-choice {
+      text-align: center;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 8.4px;
+      height: 18px;
+      padding: 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .station-choice .label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+    .station-choice.is-selected {
+      background: #00b050;
+      color: #fff;
+    }
+    .blank-box {
+      border: 1px solid #ff5b5b;
+      height: 18px;
+      width: 100%;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 2px;
+    }
+    .dependencia-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      line-height: 1;
+    }
+    .dependencia-main {
+      width: 100%;
+      text-align: center;
+    }
+    .dependencia-sub {
+      width: 100%;
+      margin-top: 1px;
+      font-size: 6.8px;
+      font-weight: 700;
+      text-align: center;
+      text-transform: uppercase;
+    }
+    .choice {
+      width: 13px;
+      height: 13px;
+      border: 1px solid #ff5b5b;
+      border-radius: 999px;
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: transparent;
+      cursor: pointer;
+      user-select: none;
+      flex: 0 0 auto;
+      font-size: 7px;
+      font-weight: 700;
+    }
+    .choice.square {
+      width: 16px;
+      height: 16px;
+      border-radius: 0;
+    }
+    .choice.square.wide {
+      width: 18px;
+      height: 15px;
+    }
+    .choice.is-selected {
+      background: #00b050;
+      border-color: #007c36;
+      color: transparent;
+    }
+    .doc-grid td {
+      height: 22px;
+      padding: 0;
+    }
+    .doc-grid .subhead {
+      height: 16px;
+    }
+    .doc-option {
+      text-align: center;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0;
+      height: 22px;
+    }
+    .doc-option .inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 22px;
+    }
+    .duration-table td,
+    .duration-table th {
+      border-color: transparent;
+    }
+    .duration-table .band th {
+      border: 1px solid #ff5b5b;
+    }
+    .duration-box {
+      width: 1.18in;
+      height: 0.35in;
+      border: 1px solid #ff5b5b;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .duration-box.small {
+      width: 0.56in;
+      height: 0.34in;
+    }
+    .duration-row td {
+      height: 0.38in;
+      padding: 1px 6px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .duration-row .label {
+      text-align: right;
+      padding-right: 10px;
+    }
+    .question-table td {
+      height: 24px;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 7.7px;
+    }
+    .question-label {
+      padding-left: 6px;
+      font-size: 7.7px;
+    }
+    .yes-no {
+      text-align: center;
+      padding: 0;
+    }
+    .yes-no .inline {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 22px;
+    }
+    .yn-text {
+      min-width: 12px;
+      text-align: center;
+    }
+    .senalizados {
+      padding: 0;
+    }
+    .senalizados table td,
+    .senalizados table th {
+      height: 22px;
+      padding: 0;
+    }
+    .list-block td {
+      height: 34px;
+      border-left: 1px solid #ff5b5b;
+      border-right: 1px solid #ff5b5b;
+      border-top: 0;
+      border-bottom: 0;
+    }
+    .list-block .head-cell {
+      border-top: 1px solid #ff5b5b;
+      font-size: 7.9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      text-align: left;
+      padding-left: 6px;
+      height: 26px;
+    }
+    .list-block .bottom {
+      border-bottom: 1px solid #ff5b5b;
+    }
+    .list-choice {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-start;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding-left: 18px;
+      min-height: 26px;
+    }
+    .equipment-table td {
+      height: 31px;
+      border-top: 0;
+      border-bottom: 0;
+    }
+    .equipment-table .head-cell,
+    .support-table .head-cell {
+      border-top: 1px solid #ff5b5b;
+      font-size: 7.95px;
+      font-weight: 700;
+      text-transform: uppercase;
+      text-align: left;
+      padding-left: 6px;
+      height: 26px;
+    }
+    .equipment-table .bottom,
+    .support-table .bottom {
+      border-bottom: 1px solid #ff5b5b;
+    }
+    .report-note {
+      height: 80px;
+      vertical-align: top;
+      font-size: 7.6px;
+      text-transform: uppercase;
+      padding: 10px 8px 0;
+      line-height: 1.15;
+      font-weight: 700;
+    }
+    .blank-large {
+      height: 100px;
+      vertical-align: top;
+      padding-top: 6px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .eval-table th,
+    .eval-table td {
+      height: 21px;
+      padding: 0 5px;
+      font-size: 7.85px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .eval-table .desc {
+      text-align: center;
+      font-size: 7.75px;
+    }
+    .eval-table .mark {
+      text-align: center;
+      padding: 0;
+    }
+    .eval-cell {
+      min-height: 21px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .eval-fill {
+      width: 100%;
+      min-height: 21px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      text-transform: uppercase;
+      background: transparent;
+      cursor: pointer;
+      user-select: none;
+    }
+    .eval-fill.is-selected {
+      background: #00b050;
+      color: transparent;
+    }
+    .note-row {
+      height: 70px;
+      text-align: center;
+      text-transform: uppercase;
+      font-weight: 700;
+      font-size: 8px;
+    }
+    .signature-box {
+      height: 1.34in;
+      vertical-align: bottom;
+      text-align: center;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding-bottom: 3px;
+    }
+    .signature-wide {
+      height: 1.34in;
+      vertical-align: bottom;
+      text-align: center;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding-bottom: 3px;
+    }
+    .foot-sign {
+      text-align: center;
+      text-transform: uppercase;
+      font-weight: 700;
+      height: 22px;
+      font-size: 7.6px;
+    }
+    .spacer-1 { height: 2px; }
+    @media print {
+      html, body { background: #fff; padding: 0; }
+      .page { margin: 0; box-shadow: none; }
+      .choice, .eval-fill { cursor: default; }
+    }
+  </style>
+  <script>
+    (() => {
+      const READY_FLAG = "__LETTER_READY__";
+      function syncSingle(target) {
+        const group = target.dataset.choiceGroup;
+        if (!group) return;
+        const isSelected = target.classList.contains("is-selected");
+        document.querySelectorAll(`[data-choice-group="${group}"]`).forEach((node) => {
+          node.classList.remove("is-selected");
+        });
+        const nextValue = isSelected ? "" : (target.dataset.choiceValue || "");
+        if (!isSelected) {
+          target.classList.add("is-selected");
+        }
+        parent.postMessage({ type: "cedula-choice", name: group, value: nextValue }, "*");
+      }
+      function syncToggle(target) {
+        const key = target.dataset.toggleName;
+        if (!key) return;
+        target.classList.toggle("is-selected");
+        parent.postMessage({
+          type: "cedula-choice",
+          name: key,
+          value: target.classList.contains("is-selected") ? "si" : ""
+        }, "*");
+      }
+      function syncInlineField(target) {
+        const key = target.dataset.inlineField;
+        if (!key) return;
+        const value = target.type === "date"
+          ? String(target.value || "")
+          : String(target.value || "").toLocaleUpperCase("es-MX");
+        if (target.type !== "date" && target.value !== value) target.value = value;
+        parent.postMessage({
+          type: "cedula-inline-field",
+          name: key,
+          value,
+        }, "*");
+      }
+      window.addEventListener("click", (event) => {
+        const single = event.target.closest("[data-choice-group]");
+        if (single) {
+          event.preventDefault();
+          syncSingle(single);
+          return;
+        }
+        const toggle = event.target.closest("[data-toggle-name]");
+        if (toggle) {
+          event.preventDefault();
+          syncToggle(toggle);
+        }
+      });
+      window.addEventListener("input", (event) => {
+        const inline = event.target.closest("[data-inline-field]");
+        if (!inline) return;
+        syncInlineField(inline);
+      });
+      window.addEventListener("load", () => { window[READY_FLAG] = true; });
+    })();
+  </script>
+</head>
+<body>
+  <section class="page page-break">
+    <header class="header">
+      <div class="logo-box">
+        <img class="branch-logo" src="{{{branch_logo_data_uri}}}" alt="Logo sucursal">
+      </div>
+      <div class="title">C&eacute;dula para la evaluaci&oacute;n de simulacros <span class="code">(DCS-002-04)</span></div>
+      <div class="logo-box">
+        <img class="pc-logo" src="{{{proteccion_civil_logo_data_uri}}}" alt="Proteccion Civil">
+      </div>
+    </header>
+
+    <table>
+      <tr class="band"><th colspan="3">Informaci&oacute;n general</th></tr>
+      <tr>
+        <td class="subhead" style="width:27%;">Fecha</td>
+        <td class="subhead" style="width:48%;">Dependencia o instituci&oacute;n</td>
+        <td class="subhead" style="width:25%;">Tel&eacute;fono</td>
+      </tr>
+      <tr>
+        <td class="value"><input class="inline-field" data-inline-field="fecha" type="date" value="{{fecha}}" aria-label="Fecha"></td>
+        <td class="value">
+          <div class="dependencia-block">
+            <input class="inline-field dependencia-main" data-inline-field="dependencia" value="{{dependencia}}" aria-label="Dependencia o institucion">
+            <div class="dependencia-sub">({{sucursal_label}})</div>
+          </div>
+        </td>
+        <td class="value"><input class="inline-field" data-inline-field="telefono" value="{{telefono}}" aria-label="Telefono"></td>
+      </tr>
+      <tr>
+        <td colspan="2" class="subhead">Direcci&oacute;n</td>
+        <td class="subhead">Entidad federativa</td>
+      </tr>
+      <tr>
+        <td colspan="2" class="value left"><textarea class="inline-field left tall" data-inline-field="direccion" aria-label="Direccion">{{direccion}}</textarea></td>
+        <td class="value"><input class="inline-field" data-inline-field="entidad_federativa" value="{{entidad_federativa}}" aria-label="Entidad federativa"></td>
+      </tr>
+      <tr>
+        <td class="subhead">Tipo de inmueble o instalaci&oacute;n</td>
+        <td class="subhead">Poblaci&oacute;n fija</td>
+        <td class="subhead">Poblaci&oacute;n flotante</td>
+      </tr>
+      <tr>
+        <td class="value left"><input class="inline-field left" data-inline-field="tipo_inmueble" value="{{tipo_inmueble}}" aria-label="Tipo de inmueble"></td>
+        <td class="value"><input class="inline-field" data-inline-field="poblacion_fija" value="{{poblacion_fija}}" aria-label="Poblacion fija"></td>
+        <td class="value"><input class="inline-field" data-inline-field="poblacion_flotante" value="{{poblacion_flotante}}" aria-label="Poblacion flotante"></td>
+      </tr>
+    </table>
+
+    <table>
+      <tr>
+        <td colspan="4" class="left-head">No. de trabajadores por turno</td>
+      </tr>
+      <tr>
+        <td class="stack-head" style="width:13%;">Matutino</td>
+        <td style="width:37%;" class="stack-value"><input class="inline-field" data-inline-field="trabajadores_matutino" value="{{trabajadores_matutino}}" aria-label="Trabajadores matutino"></td>
+        <td class="stack-head" style="width:13%;">Nocturno</td>
+        <td style="width:37%;" class="stack-value"><input class="inline-field" data-inline-field="trabajadores_nocturno" value="{{trabajadores_nocturno}}" aria-label="Trabajadores nocturno"></td>
+      </tr>
+      <tr>
+        <td class="stack-head">Vespertino</td>
+        <td class="stack-value"><input class="inline-field" data-inline-field="trabajadores_vespertino" value="{{trabajadores_vespertino}}" aria-label="Trabajadores vespertino"></td>
+        <td class="stack-head">Mixto</td>
+        <td class="stack-value"><input class="inline-field" data-inline-field="trabajadores_mixto" value="{{trabajadores_mixto}}" aria-label="Trabajadores mixto"></td>
+      </tr>
+      <tr>
+        <td colspan="4" class="left-head">No. de brigadistas por turno</td>
+      </tr>
+      <tr>
+        <td class="stack-head">Matutino</td>
+        <td class="stack-value"><input class="inline-field" data-inline-field="brigadistas_matutino" value="{{brigadistas_matutino}}" aria-label="Brigadistas matutino"></td>
+        <td class="stack-head">Nocturno</td>
+        <td class="stack-value"><input class="inline-field" data-inline-field="brigadistas_nocturno" value="{{brigadistas_nocturno}}" aria-label="Brigadistas nocturno"></td>
+      </tr>
+      <tr>
+        <td class="stack-head">Vespertino</td>
+        <td class="stack-value"><input class="inline-field" data-inline-field="brigadistas_vespertino" value="{{brigadistas_vespertino}}" aria-label="Brigadistas vespertino"></td>
+        <td class="stack-head">Mixto</td>
+        <td class="stack-value"><input class="inline-field" data-inline-field="brigadistas_mixto" value="{{brigadistas_mixto}}" aria-label="Brigadistas mixto"></td>
+      </tr>
+    </table>
+
+    <table class="top-grid">
+      <colgroup>
+        <col style="width:12.5%;">
+        <col style="width:12.5%;">
+        <col style="width:12.5%;">
+        <col style="width:12.5%;">
+        <col style="width:12.5%;">
+        <col style="width:12.5%;">
+        <col style="width:12.5%;">
+        <col style="width:12.5%;">
+      </colgroup>
+      <tr>
+        <td colspan="2" class="subhead">Niveles</td>
+        <td colspan="2" class="subhead">Elevadores</td>
+        <td colspan="2" class="subhead">Escaleras de emergencia</td>
+        <td colspan="2" class="subhead">Helipuerto</td>
+      </tr>
+      <tr>
+        <td colspan="2" class="value"></td>
+        <td class="station-choice {{mark_choice_elevadores_SI}}" data-choice-group="choice_elevadores" data-choice-value="si"><div class="label">Si</div></td>
+        <td class="station-choice {{mark_choice_elevadores_NO}}" data-choice-group="choice_elevadores" data-choice-value="no"><div class="label">No</div></td>
+        <td class="station-choice {{mark_choice_escaleras_emergencia_SI}}" data-choice-group="choice_escaleras_emergencia" data-choice-value="si"><div class="label">Si</div></td>
+        <td class="station-choice {{mark_choice_escaleras_emergencia_NO}}" data-choice-group="choice_escaleras_emergencia" data-choice-value="no"><div class="label">No</div></td>
+        <td class="station-choice {{mark_choice_helipuerto_SI}}" data-choice-group="choice_helipuerto" data-choice-value="si"><div class="label">Si</div></td>
+        <td class="station-choice {{mark_choice_helipuerto_NO}}" data-choice-group="choice_helipuerto" data-choice-value="no"><div class="label">No</div></td>
+      </tr>
+      <tr>
+        <td colspan="2" class="subhead">Estacionamiento</td>
+        <td class="subhead">Niveles</td>
+        <td class="subhead">S&oacute;tano</td>
+        <td class="subhead">Superiores</td>
+        <td class="subhead">Capacidad</td>
+        <td class="subhead">Abierto</td>
+        <td class="subhead">Acomodo</td>
+      </tr>
+      <tr>
+        <td class="station-choice {{mark_choice_estacionamiento_SI}}" data-choice-group="choice_estacionamiento" data-choice-value="si"><div class="label">Si</div></td>
+        <td class="station-choice {{mark_choice_estacionamiento_NO}}" data-choice-group="choice_estacionamiento" data-choice-value="no"><div class="label">No</div></td>
+        <td class="value"><input class="inline-field" data-inline-field="niveles" value="{{niveles}}" aria-label="Niveles"></td>
+        <td class="value"><input class="inline-field" data-inline-field="sotanos" value="{{sotanos}}" aria-label="Sotano"></td>
+        <td><div class="blank-box"><input class="inline-field blank" data-inline-field="superiores" value="{{superiores}}" aria-label="Superiores"></div></td>
+        <td><div class="blank-box"><input class="inline-field blank" data-inline-field="capacidad_estacionamiento" value="{{capacidad_estacionamiento}}" aria-label="Capacidad estacionamiento"></div></td>
+        <td><div class="blank-box"><input class="inline-field blank" data-inline-field="estacionamiento_abierto" value="{{estacionamiento_abierto}}" aria-label="Abierto"></div></td>
+        <td><div class="blank-box"><input class="inline-field blank" data-inline-field="estacionamiento_acomodo" value="{{estacionamiento_acomodo}}" aria-label="Acomodo"></div></td>
+      </tr>
+    </table>
+
+    <table>
+      <tr class="band"><th colspan="6">Datos generales del simulacro</th></tr>
+      <tr>
+        <td colspan="5" style="height:74px; vertical-align: top; padding-top: 4px;">
+          <div style="font-weight:700; text-transform:uppercase; padding-left:2px;">Hip&oacute;tesis planteada</div>
+          <table style="border-collapse: collapse; width:100%; margin-top:2px;">
+            <tr>
+              <td style="border:0; width:33%; padding:0;">
+                <div class="choice-wrap"><span class="choice {{mark_choice_hipotesis_SISMO}}" data-choice-group="choice_hipotesis" data-choice-value="sismo"></span><span>Sismo</span></div>
+              </td>
+              <td style="border:0; width:30%; padding:0;">
+                <div class="choice-wrap"><span class="choice {{mark_choice_hipotesis_INCENDIO}}" data-choice-group="choice_hipotesis" data-choice-value="incendio"></span><span>Incendio</span></div>
+              </td>
+              <td style="border:0; width:37%; padding:0;">
+                <div class="choice-wrap"><span class="choice {{mark_choice_hipotesis_AMENAZA_BOMBA}}" data-choice-group="choice_hipotesis" data-choice-value="amenaza_bomba"></span><span>Amenaza de bomba</span></div>
+              </td>
+            </tr>
+            <tr>
+              <td style="border:0; padding:0;">
+                <div class="choice-wrap"><span class="choice {{mark_choice_hipotesis_HURACAN}}" data-choice-group="choice_hipotesis" data-choice-value="huracan"></span><span>Hurac&aacute;n</span></div>
+              </td>
+              <td style="border:0; padding:0;">
+                <div class="choice-wrap"><span class="choice {{mark_choice_hipotesis_OTRA}}" data-choice-group="choice_hipotesis" data-choice-value="otra"></span><span>Otra</span></div>
+              </td>
+              <td style="border:0; padding:0;"></td>
+            </tr>
+          </table>
+        </td>
+        <td style="width:18%; padding:0;">
+          <table class="doc-grid">
+            <tr><td class="subhead" colspan="2">Documento</td></tr>
+            <tr>
+              <td class="doc-option"><div class="inner"><span class="choice square wide {{mark_choice_documento_SI}}" data-choice-group="choice_documento" data-choice-value="si"></span><span>Si</span></div></td>
+              <td class="doc-option"><div class="inner"><span class="choice square wide {{mark_choice_documento_NO}}" data-choice-group="choice_documento" data-choice-value="no"></span><span>No</span></div></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="6" style="height:74px; vertical-align: top; padding-top: 4px;">
+          <div style="font-weight:700; text-transform:uppercase; padding-left:2px;">Tipo de simulacro</div>
+          <table style="border-collapse: collapse; width:100%; margin-top:2px;">
+            <tr>
+              <td style="border:0; width:24%; padding:0;"><div class="choice-wrap"><span class="choice {{mark_choice_tipo_simulacro_INDIVIDUAL}}" data-choice-group="choice_tipo_simulacro" data-choice-value="individual"></span><span>Individual</span></div></td>
+              <td style="border:0; width:24%; padding:0;"><div class="choice-wrap"><span class="choice {{mark_choice_tipo_simulacro_INTEGRAL}}" data-choice-group="choice_tipo_simulacro" data-choice-value="integral"></span><span>Integral</span></div></td>
+              <td style="border:0; width:18%; padding:0;"><div class="choice-wrap"><span class="choice {{mark_choice_tipo_simulacro_MACRO}}" data-choice-group="choice_tipo_simulacro" data-choice-value="macro"></span><span>Macro</span></div></td>
+              <td style="border:0; width:34%; padding:0;"><div class="choice-wrap"><span class="choice {{mark_choice_modalidad_evacuacion_EVACUACION_TOTAL}}" data-choice-group="choice_modalidad_evacuacion" data-choice-value="evacuacion_total"></span><span>Evacuaci&oacute;n total</span></div></td>
+            </tr>
+            <tr>
+              <td style="border:0; padding:0;"><div class="choice-wrap"><span class="choice {{mark_choice_modalidad_evacuacion_REPLIEGUE}}" data-choice-group="choice_modalidad_evacuacion" data-choice-value="repliegue"></span><span>Repliegue</span></div></td>
+              <td style="border:0; padding:0;" colspan="2"><div class="choice-wrap"><span class="choice {{mark_choice_modalidad_evacuacion_EVACUACION_PARCIAL}}" data-choice-group="choice_modalidad_evacuacion" data-choice-value="evacuacion_parcial"></span><span>Evacuaci&oacute;n parcial</span></div></td>
+              <td style="border:0; padding:0;"></td>
+            </tr>
+            <tr>
+              <td style="border:0; padding:0;" colspan="2"><div class="choice-wrap"><span class="choice {{mark_choice_aviso_CON_PREVIO_AVISO}}" data-choice-group="choice_aviso" data-choice-value="con_previo_aviso"></span><span>Con previo aviso</span></div></td>
+              <td style="border:0; padding:0;" colspan="2"><div class="choice-wrap"><span class="choice {{mark_choice_aviso_SIN_PREVIO_AVISO}}" data-choice-group="choice_aviso" data-choice-value="sin_previo_aviso"></span><span>Sin previo aviso</span></div></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="6" style="height:74px; vertical-align: top; padding-top: 4px;">
+          <div style="font-weight:700; text-transform:uppercase; padding-left:2px;">Difusi&oacute;n del simulacro</div>
+          <table style="border-collapse: collapse; width:100%; margin-top:3px;">
+            <tr>
+              <td style="border:0; width:44%; font-weight:700; text-transform:uppercase; padding-left:2px;">&iquest;A quien y a trav&eacute;s de que medios?</td>
+              <td style="border:0; width:18%; padding:0;"><div class="choice-wrap centered compact"><span class="choice {{mark_choice_difusion_SI}}" data-choice-group="choice_difusion" data-choice-value="si"></span><span>Si</span></div></td>
+              <td style="border:0; width:16%; padding:0;"><div class="choice-wrap centered compact"><span class="choice {{mark_choice_difusion_NO}}" data-choice-group="choice_difusion" data-choice-value="no"></span><span>No</span></div></td>
+              <td style="border:0; width:22%;"></td>
+            </tr>
+            <tr>
+              <td style="border:0; padding:0;"><div class="choice-wrap"><span class="choice {{mark_choice_difusion_personal_interno_SI}}" data-toggle-name="choice_difusion_personal_interno"></span><span>Personal interno</span></div></td>
+              <td style="border:0; padding:0;"><div class="choice-wrap"><span class="choice {{mark_choice_difusion_vecinos_SI}}" data-toggle-name="choice_difusion_vecinos"></span><span>Vecinos</span></div></td>
+              <td colspan="2" style="border:0; padding:0;"><div class="choice-wrap"><span class="choice {{mark_choice_difusion_autoridades_SI}}" data-toggle-name="choice_difusion_autoridades"></span><span>Autoridades e instituciones</span></div></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table class="duration-table">
+      <tr class="band"><th colspan="4">Duraci&oacute;n del simulacro</th></tr>
+      <tr class="duration-row">
+        <td class="label">Hora de inicio:</td>
+        <td><div class="duration-box"><input class="inline-field" data-inline-field="hora_inicio" value="{{hora_inicio}}" aria-label="Hora inicio"></div></td>
+        <td class="label">Hora de t&eacute;rmino:</td>
+        <td><div class="duration-box"><input class="inline-field" data-inline-field="hora_termino" value="{{hora_termino}}" aria-label="Hora termino"></div></td>
+      </tr>
+      <tr class="duration-row">
+        <td colspan="2" class="label">Tiempo realizado en la evacuaci&oacute;n del inmueble:</td>
+        <td colspan="2"><div class="duration-box"><input class="inline-field" data-inline-field="tiempo_evacuacion" value="{{tiempo_evacuacion}}" aria-label="Tiempo evacuacion"></div></td>
+      </tr>
+      <tr class="duration-row">
+        <td colspan="2" class="label">Duraci&oacute;n total del ejercicio:</td>
+        <td colspan="2"><div class="duration-box"><input class="inline-field" data-inline-field="duracion_total" value="{{duracion_total}}" aria-label="Duracion total"></div></td>
+      </tr>
+      <tr class="duration-row">
+        <td class="label">Personas evacuadas:</td>
+        <td><div class="duration-box small"></div></td>
+        <td class="center">Empleados</td>
+        <td class="center">Visitantes</td>
+      </tr>
+    </table>
+
+    <table>
+      <tr class="band"><th colspan="6">Realizaci&oacute;n del simulacro</th></tr>
+      <tr><td colspan="6" class="left-head">Sistema de alertamiento utilizado</td></tr>
+      <tr>
+        <td><div class="choice-wrap centered"><span class="choice {{mark_choice_alertamiento_tipo_TIMBRE}}" data-choice-group="choice_alertamiento_tipo" data-choice-value="timbre"></span><span>Timbre</span></div></td>
+        <td><div class="choice-wrap centered"><span class="choice {{mark_choice_alertamiento_tipo_SIRENA}}" data-choice-group="choice_alertamiento_tipo" data-choice-value="sirena"></span><span>Sirena</span></div></td>
+        <td><div class="choice-wrap centered"><span class="choice {{mark_choice_alertamiento_tipo_SILBATO}}" data-choice-group="choice_alertamiento_tipo" data-choice-value="silbato"></span><span>Silbato</span></div></td>
+        <td><div class="choice-wrap centered"><span class="choice {{mark_choice_alertamiento_tipo_CAMPANA}}" data-choice-group="choice_alertamiento_tipo" data-choice-value="campana"></span><span>Campana</span></div></td>
+        <td><div class="choice-wrap centered"><span class="choice {{mark_choice_alertamiento_tipo_MEGAFONO}}" data-choice-group="choice_alertamiento_tipo" data-choice-value="megafono"></span><span>Megafono</span></div></td>
+        <td><div class="choice-wrap centered"><span class="choice {{mark_choice_alertamiento_tipo_VOCEO}}" data-choice-group="choice_alertamiento_tipo" data-choice-value="voceo"></span><span>Voceo</span></div></td>
+      </tr>
+    </table>
+  </section>
+
+  <section class="page page-break">
+    <table class="question-table">
+      <tr>
+        <td class="question-label" style="width:50%;">&iquest;Se instal&oacute; puesto de mando?</td>
+        <td class="yes-no" style="width:26%;">
+          <div class="inline">
+            <span class="choice {{mark_choice_puesto_mando_SI}}" data-choice-group="choice_puesto_mando" data-choice-value="si"></span><span class="yn-text">Si</span>
+            <span class="choice {{mark_choice_puesto_mando_NO}}" data-choice-group="choice_puesto_mando" data-choice-value="no"></span><span class="yn-text">No</span>
+          </div>
+        </td>
+        <td class="senalizados" style="width:24%;" rowspan="2">
+          <table>
+            <tr><th colspan="2">Se&ntilde;alizados</th></tr>
+            <tr>
+              <td class="doc-option"><div class="inner"><span class="choice square wide {{mark_choice_senalizados_SI}}" data-choice-group="choice_senalizados" data-choice-value="si"></span><span>Si</span></div></td>
+              <td class="doc-option"><div class="inner"><span class="choice square wide {{mark_choice_senalizados_NO}}" data-choice-group="choice_senalizados" data-choice-value="no"></span><span>No</span></div></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td class="question-label">&iquest;Se instal&oacute; puesto de primeros auxilios?</td>
+        <td class="yes-no">
+          <div class="inline">
+            <span class="choice {{mark_choice_puesto_primeros_auxilios_SI}}" data-choice-group="choice_puesto_primeros_auxilios" data-choice-value="si"></span><span class="yn-text">Si</span>
+            <span class="choice {{mark_choice_puesto_primeros_auxilios_NO}}" data-choice-group="choice_puesto_primeros_auxilios" data-choice-value="no"></span><span class="yn-text">No</span>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="question-label">&iquest;Se aplic&oacute; el plan de alertamiento?</td>
+        <td colspan="2" class="yes-no">
+          <div class="inline">
+            <span class="choice {{mark_choice_plan_alertamiento_SI}}" data-choice-group="choice_plan_alertamiento" data-choice-value="si"></span><span class="yn-text">Si</span>
+            <span class="choice {{mark_choice_plan_alertamiento_NO}}" data-choice-group="choice_plan_alertamiento" data-choice-value="no"></span><span class="yn-text">No</span>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="question-label">&iquest;Se aplic&oacute; el plan de emergencia?</td>
+        <td colspan="2" class="yes-no">
+          <div class="inline">
+            <span class="choice {{mark_choice_plan_emergencia_SI}}" data-choice-group="choice_plan_emergencia" data-choice-value="si"></span><span class="yn-text">Si</span>
+            <span class="choice {{mark_choice_plan_emergencia_NO}}" data-choice-group="choice_plan_emergencia" data-choice-value="no"></span><span class="yn-text">No</span>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="question-label">&iquest;Se aplic&oacute; el plan de evaluaci&oacute;n de da&ntilde;os?</td>
+        <td colspan="2" class="yes-no">
+          <div class="inline">
+            <span class="choice {{mark_choice_plan_evaluacion_danos_SI}}" data-choice-group="choice_plan_evaluacion_danos" data-choice-value="si"></span><span class="yn-text">Si</span>
+            <span class="choice {{mark_choice_plan_evaluacion_danos_NO}}" data-choice-group="choice_plan_evaluacion_danos" data-choice-value="no"></span><span class="yn-text">No</span>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="question-label">&iquest;Se aplic&oacute; el plan de vuelta a la normalidad?</td>
+        <td colspan="2" class="yes-no">
+          <div class="inline">
+            <span class="choice {{mark_choice_plan_vuelta_normalidad_SI}}" data-choice-group="choice_plan_vuelta_normalidad" data-choice-value="si"></span><span class="yn-text">Si</span>
+            <span class="choice {{mark_choice_plan_vuelta_normalidad_NO}}" data-choice-group="choice_plan_vuelta_normalidad" data-choice-value="no"></span><span class="yn-text">No</span>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="question-label">&iquest;Se llev&oacute; a cabo la verificaci&oacute;n del personal evacuado?</td>
+        <td colspan="2" class="yes-no">
+          <div class="inline">
+            <span class="choice {{mark_choice_verificacion_personal_SI}}" data-choice-group="choice_verificacion_personal" data-choice-value="si"></span><span class="yn-text">Si</span>
+            <span class="choice {{mark_choice_verificacion_personal_NO}}" data-choice-group="choice_verificacion_personal" data-choice-value="no"></span><span class="yn-text">No</span>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="question-label">&iquest;Se realiz&oacute; reuni&oacute;n de evaluaci&oacute;n?</td>
+        <td colspan="2" class="yes-no">
+          <div class="inline">
+            <span class="choice {{mark_choice_reunion_evaluacion_SI}}" data-choice-group="choice_reunion_evaluacion" data-choice-value="si"></span><span class="yn-text">Si</span>
+            <span class="choice {{mark_choice_reunion_evaluacion_NO}}" data-choice-group="choice_reunion_evaluacion" data-choice-value="no"></span><span class="yn-text">No</span>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <table class="list-block">
+      <tr><td colspan="3" class="head-cell">&iquest;Quienes participaron?</td></tr>
+      <tr>
+        <td><div class="list-choice"><span class="choice {{mark_choice_participantes_autoridades_SI}}" data-toggle-name="choice_participantes_autoridades"></span><span>Autoridades institucionales</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_participantes_brigadistas_SI}}" data-toggle-name="choice_participantes_brigadistas"></span><span>Brigadistas</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_participantes_otros_SI}}" data-toggle-name="choice_participantes_otros"></span><span>Otros</span></div></td>
+      </tr>
+      <tr class="bottom">
+        <td><div class="list-choice"><span class="choice {{mark_choice_participantes_observadores_SI}}" data-toggle-name="choice_participantes_observadores"></span><span>Observadores</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_participantes_instituciones_apoyo_SI}}" data-toggle-name="choice_participantes_instituciones_apoyo"></span><span>Instituciones de apoyo</span></div></td>
+        <td></td>
+      </tr>
+    </table>
+
+    <table class="list-block">
+      <tr><td colspan="3" class="head-cell">Brigadas internas que participaron:</td></tr>
+      <tr>
+        <td><div class="list-choice"><span class="choice {{mark_choice_brigadas_primeros_auxilios_SI}}" data-toggle-name="choice_brigadas_primeros_auxilios"></span><span>Primeros auxilios</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_brigadas_evacuacion_SI}}" data-toggle-name="choice_brigadas_evacuacion"></span><span>Evacuaci&oacute;n de inmuebles</span></div></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><div class="list-choice"><span class="choice {{mark_choice_brigadas_combate_incendios_SI}}" data-toggle-name="choice_brigadas_combate_incendios"></span><span>Combate de incendios</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_brigadas_busqueda_rescate_SI}}" data-toggle-name="choice_brigadas_busqueda_rescate"></span><span>B&uacute;squeda y rescate</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_brigadas_otra_SI}}" data-toggle-name="choice_brigadas_otra"></span><span>Otra</span></div></td>
+      </tr>
+      <tr class="bottom">
+        <td colspan="3">
+          <div style="display:flex; align-items:center; justify-content:center; gap:18px; min-height:26px; font-weight:700; text-transform:uppercase;">
+            <span>&iquest;Cuentan con equipo de identificaci&oacute;n?</span>
+            <span class="choice {{mark_choice_equipo_identificacion_SI}}" data-choice-group="choice_equipo_identificacion" data-choice-value="si"></span><span>Si</span>
+            <span class="choice {{mark_choice_equipo_identificacion_NO}}" data-choice-group="choice_equipo_identificacion" data-choice-value="no"></span><span>No</span>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <table class="equipment-table">
+      <tr><td colspan="3" class="head-cell">Equipo e instalaciones de emergencia utilizados:</td></tr>
+      <tr>
+        <td><div class="list-choice"><span class="choice {{mark_choice_equipo_hidrantes_SI}}" data-toggle-name="choice_equipo_hidrantes"></span><span>Hidrantes</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_equipo_extintores_SI}}" data-toggle-name="choice_equipo_extintores"></span><span>Extintores</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_equipo_botiquines_SI}}" data-toggle-name="choice_equipo_botiquines"></span><span>Botiquines</span></div></td>
+      </tr>
+      <tr>
+        <td><div class="list-choice"><span class="choice {{mark_choice_equipo_proteccion_personal_SI}}" data-toggle-name="choice_equipo_proteccion_personal"></span><span>Equipo de protecci&oacute;n personal</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_equipo_escaleras_emergencia_SI}}" data-toggle-name="choice_equipo_escaleras_emergencia"></span><span>Escaleras de emergencia</span></div></td>
+        <td></td>
+      </tr>
+      <tr class="bottom">
+        <td><div class="list-choice"><span class="choice {{mark_choice_equipo_ambulancia_SI}}" data-toggle-name="choice_equipo_ambulancia"></span><span>Ambulancia institucional</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_equipo_otros_SI}}" data-toggle-name="choice_equipo_otros"></span><span>Otros</span></div></td>
+        <td class="value left"><input class="inline-field left" data-inline-field="equipo_utilizado" value="{{equipo_utilizado}}" aria-label="Equipo utilizado"></td>
+      </tr>
+    </table>
+
+    <table class="support-table">
+      <tr><td colspan="4" class="head-cell">Instituciones de apoyo que se presentaron:</td></tr>
+      <tr>
+        <td><div class="list-choice"><span class="choice {{mark_choice_apoyo_seguridad_publica_SI}}" data-toggle-name="choice_apoyo_seguridad_publica"></span><span>Seguridad p&uacute;blica</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_apoyo_cruz_roja_SI}}" data-toggle-name="choice_apoyo_cruz_roja"></span><span>Cruz roja</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_apoyo_cruz_verde_SI}}" data-toggle-name="choice_apoyo_cruz_verde"></span><span>Cruz verde</span></div></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><div class="list-choice"><span class="choice {{mark_choice_apoyo_erum_SI}}" data-toggle-name="choice_apoyo_erum"></span><span>ERUM</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_apoyo_bomberos_SI}}" data-toggle-name="choice_apoyo_bomberos"></span><span>Bomberos</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_apoyo_proteccion_civil_SI}}" data-toggle-name="choice_apoyo_proteccion_civil"></span><span>Protecci&oacute;n civil</span></div></td>
+        <td><div class="list-choice"><span class="choice {{mark_choice_apoyo_otras_SI}}" data-toggle-name="choice_apoyo_otras"></span><span>Otras</span></div></td>
+      </tr>
+      <tr class="bottom">
+        <td colspan="4" class="report-note">Se reporto a CERI, C4, donde se informo que el simulacro era interno y que no se requeriria apoyo de instituciones de emergencia</td>
+      </tr>
+    </table>
+
+    <table>
+      <tr class="band"><th>Observaciones generales</th></tr>
+      <tr><td class="blank-large"><textarea class="inline-field left tall" data-inline-field="observaciones_generales" aria-label="Observaciones generales">{{observaciones_generales}}</textarea></td></tr>
+    </table>
+  </section>
+
+  <section class="page">
+    <table class="eval-table">
+      <tr class="band"><th colspan="4">Evaluaci&oacute;n</th></tr>
+      <tr>
+        <th style="width:59%;">Descripci&oacute;n</th>
+        <th style="width:17%;">Bien</th>
+        <th style="width:12%;">Regular</th>
+        <th style="width:12%;">Mal</th>
+      </tr>
+      <tr><td class="desc">Ubicaci&oacute;n de las zonas de menor riesgo internas</td><td class="mark"><div class="eval-fill {{mark_eval_zonas_menor_riesgo_BIEN}}" data-choice-group="eval_zonas_menor_riesgo" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_zonas_menor_riesgo_REGULAR}}" data-choice-group="eval_zonas_menor_riesgo" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_zonas_menor_riesgo_MAL}}" data-choice-group="eval_zonas_menor_riesgo" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Ubicaci&oacute;n del punto de reuni&oacute;n externo</td><td class="mark"><div class="eval-fill {{mark_eval_punto_reunion_BIEN}}" data-choice-group="eval_punto_reunion" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_punto_reunion_REGULAR}}" data-choice-group="eval_punto_reunion" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_punto_reunion_MAL}}" data-choice-group="eval_punto_reunion" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Condiciones del punto de reuni&oacute;n externo</td><td class="mark"><div class="eval-fill {{mark_eval_condiciones_punto_BIEN}}" data-choice-group="eval_condiciones_punto" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_condiciones_punto_REGULAR}}" data-choice-group="eval_condiciones_punto" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_condiciones_punto_MAL}}" data-choice-group="eval_condiciones_punto" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Condiciones de las rutas de evacuaci&oacute;n</td><td class="mark"><div class="eval-fill {{mark_eval_rutas_evacuacion_BIEN}}" data-choice-group="eval_rutas_evacuacion" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_rutas_evacuacion_REGULAR}}" data-choice-group="eval_rutas_evacuacion" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_rutas_evacuacion_MAL}}" data-choice-group="eval_rutas_evacuacion" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Localizaci&oacute;n de las salidas de emergencia</td><td class="mark"><div class="eval-fill {{mark_eval_localizacion_salidas_BIEN}}" data-choice-group="eval_localizacion_salidas" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_localizacion_salidas_REGULAR}}" data-choice-group="eval_localizacion_salidas" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_localizacion_salidas_MAL}}" data-choice-group="eval_localizacion_salidas" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Condiciones de las salidas de emergencia</td><td class="mark"><div class="eval-fill {{mark_eval_condiciones_salidas_BIEN}}" data-choice-group="eval_condiciones_salidas" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_condiciones_salidas_REGULAR}}" data-choice-group="eval_condiciones_salidas" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_condiciones_salidas_MAL}}" data-choice-group="eval_condiciones_salidas" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Procedimiento para el plan de alertamiento</td><td class="mark"><div class="eval-fill {{mark_eval_plan_alertamiento_BIEN}}" data-choice-group="eval_plan_alertamiento" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_plan_alertamiento_REGULAR}}" data-choice-group="eval_plan_alertamiento" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_plan_alertamiento_MAL}}" data-choice-group="eval_plan_alertamiento" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Procedimiento para la evacuaci&oacute;n del inmueble</td><td class="mark"><div class="eval-fill {{mark_eval_evacuacion_BIEN}}" data-choice-group="eval_evacuacion" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_evacuacion_REGULAR}}" data-choice-group="eval_evacuacion" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_evacuacion_MAL}}" data-choice-group="eval_evacuacion" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Tiempo de evacuaci&oacute;n del inmueble</td><td class="mark"><div class="eval-fill {{mark_eval_tiempo_evacuacion_BIEN}}" data-choice-group="eval_tiempo_evacuacion" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_tiempo_evacuacion_REGULAR}}" data-choice-group="eval_tiempo_evacuacion" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_tiempo_evacuacion_MAL}}" data-choice-group="eval_tiempo_evacuacion" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Procedimiento para el plan de emergencia</td><td class="mark"><div class="eval-fill {{mark_eval_plan_emergencia_BIEN}}" data-choice-group="eval_plan_emergencia" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_plan_emergencia_REGULAR}}" data-choice-group="eval_plan_emergencia" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_plan_emergencia_MAL}}" data-choice-group="eval_plan_emergencia" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Procedimiento para la evaluaci&oacute;n de da&ntilde;os</td><td class="mark"><div class="eval-fill {{mark_eval_danos_BIEN}}" data-choice-group="eval_danos" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_danos_REGULAR}}" data-choice-group="eval_danos" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_danos_MAL}}" data-choice-group="eval_danos" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Procedimiento para la vuelta a la normalidad</td><td class="mark"><div class="eval-fill {{mark_eval_vuelta_normalidad_BIEN}}" data-choice-group="eval_vuelta_normalidad" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_vuelta_normalidad_REGULAR}}" data-choice-group="eval_vuelta_normalidad" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_vuelta_normalidad_MAL}}" data-choice-group="eval_vuelta_normalidad" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Participaci&oacute;n de los mandos medios y superiores</td><td class="mark"><div class="eval-fill {{mark_eval_mandos_BIEN}}" data-choice-group="eval_mandos" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_mandos_REGULAR}}" data-choice-group="eval_mandos" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_mandos_MAL}}" data-choice-group="eval_mandos" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Actuaci&oacute;n de los jefes de piso</td><td class="mark"><div class="eval-fill {{mark_eval_jefes_piso_BIEN}}" data-choice-group="eval_jefes_piso" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_jefes_piso_REGULAR}}" data-choice-group="eval_jefes_piso" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_jefes_piso_MAL}}" data-choice-group="eval_jefes_piso" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Actuaci&oacute;n de los brigadistas</td><td class="mark"><div class="eval-fill {{mark_eval_brigadistas_BIEN}}" data-choice-group="eval_brigadistas" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_brigadistas_REGULAR}}" data-choice-group="eval_brigadistas" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_brigadistas_MAL}}" data-choice-group="eval_brigadistas" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Comportamiento de los empleados y visitantes</td><td class="mark"><div class="eval-fill {{mark_eval_comportamiento_BIEN}}" data-choice-group="eval_comportamiento" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_comportamiento_REGULAR}}" data-choice-group="eval_comportamiento" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_comportamiento_MAL}}" data-choice-group="eval_comportamiento" data-choice-value="mal"></div></td></tr>
+      <tr><td class="desc">Coordinaci&oacute;n con los grupos externos</td><td class="mark"><div class="eval-fill {{mark_eval_grupos_externos_BIEN}}" data-choice-group="eval_grupos_externos" data-choice-value="bien"></div></td><td class="mark"><div class="eval-fill {{mark_eval_grupos_externos_REGULAR}}" data-choice-group="eval_grupos_externos" data-choice-value="regular"></div></td><td class="mark"><div class="eval-fill {{mark_eval_grupos_externos_MAL}}" data-choice-group="eval_grupos_externos" data-choice-value="mal"></div></td></tr>
+    </table>
+
+    <table>
+      <tr class="band"><th>Deteccion de las desviaciones en las acciones planeadas</th></tr>
+      <tr><td class="blank-large"><textarea class="inline-field left tall" data-inline-field="desviaciones_detectadas" aria-label="Desviaciones detectadas">{{desviaciones_detectadas}}</textarea></td></tr>
+      <tr class="band"><th>Recomendaciones para actualizar el plan de atencion de incendios</th></tr>
+      <tr><td class="blank-large"><textarea class="inline-field left tall" data-inline-field="recomendaciones" aria-label="Recomendaciones">{{recomendaciones}}</textarea></td></tr>
+      <tr><td class="note-row">Concluido el ejercicio, firman al calce los presentes:</td></tr>
+      <tr class="band"><th>Representante de protecci&oacute;n civil</th></tr>
+      <tr><td class="signature-wide"><input class="inline-field left" data-inline-field="representante_pc" value="{{representante_pc}}" aria-label="Representante proteccion civil"></td></tr>
+      <tr><td class="foot-sign">Nombre, cargo y firma de los funcionarios, observadores.</td></tr>
+      <tr class="band"><th>Por el centro de trabajo</th></tr>
+    </table>
+
+    <table>
+      <tr>
+        <td class="signature-box" style="width:50%;"><input class="inline-field left" data-inline-field="responsable_inmueble" value="{{responsable_inmueble}}" aria-label="Responsable del inmueble"><div class="spacer-1"></div>Responsable del inmueble</td>
+        <td class="signature-box" style="width:50%;"><input class="inline-field left" data-inline-field="responsable_programa" value="{{responsable_programa}}" aria-label="Responsable del programa interno"><div class="spacer-1"></div>Responsable del programa interno</td>
+      </tr>
+      <tr><td colspan="2" class="foot-sign">Nombre, cargo y firma de los funcionarios, representantes.</td></tr>
+    </table>
+  </section>
+</body>
+</html>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 190">
+  <rect width="240" height="190" fill="#fff"/>
+  <path d="M120 12 228 176H12Z" fill="#f4a51c" stroke="#1c1c1c" stroke-width="6"/>
+  <path d="M120 38 202 164H38Z" fill="#fff" stroke="#1c1c1c" stroke-width="4"/>
+  <path d="M120 58 184 154H56Z" fill="#1f6fb2"/>
+  <path d="M120 76 169 148H71Z" fill="#fff"/>
+  <path d="M120 91 153 140H87Z" fill="#f4a51c"/>
+  <text x="120" y="179" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#1c1c1c">PROTECCION CIVIL</text>
+</svg>

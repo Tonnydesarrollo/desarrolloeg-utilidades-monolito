@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documentos de Sucursales | Desarrollo EG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;500;700;800&family=Montserrat:wght@500;700;800&family=Playfair+Display:ital,wght@1,600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-1: #f5f8fb;
+      --bg-2: #e6edf3;
+      --paper: rgba(255, 255, 255, 0.94);
+      --panel: rgba(255, 255, 255, 0.88);
+      --line: #d7e0e7;
+      --ink: #10202a;
+      --muted: #617381;
+      --teal: #0f766e;
+      --teal-soft: #d9f5f1;
+      --red-soft: #ffe3e0;
+      --gold: #b2873b;
+      --shadow: 0 24px 60px rgba(16, 32, 42, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Inter", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 24%),
+        radial-gradient(circle at top right, rgba(239, 68, 68, 0.1), transparent 20%),
+        linear-gradient(180deg, var(--bg-1) 0%, var(--bg-2) 100%);
+    }
+
+    .shell {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .hero-card,
+    .hero-aside,
+    .panel,
+    .preview-panel {
+      border: 1px solid rgba(215, 224, 231, 0.96);
+      border-radius: 30px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      overflow: hidden;
+    }
+
+    .hero-card {
+      padding: 30px 32px;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 252, 0.88)),
+        linear-gradient(135deg, rgba(15, 118, 110, 0.06), rgba(178, 135, 59, 0.08));
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--gold);
+      font-family: "Montserrat", sans-serif;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+
+    .hero-card h1 {
+      margin: 0;
+      font-family: "Cinzel", serif;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.02;
+      text-transform: uppercase;
+    }
+
+    .hero-card .accent {
+      display: block;
+      margin-top: 10px;
+      color: #475569;
+      font-family: "Playfair Display", serif;
+      font-size: 1.05rem;
+      font-style: italic;
+    }
+
+    .hero-card p {
+      margin: 18px 0 0;
+      max-width: 760px;
+      color: var(--muted);
+      line-height: 1.75;
+      font-size: 0.98rem;
+    }
+
+    .hero-aside {
+      padding: 26px 26px 22px;
+      background:
+        linear-gradient(140deg, rgba(11, 123, 113, 0.95), rgba(20, 184, 166, 0.82)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
+      color: #effdfb;
+    }
+
+    .hero-aside h2 {
+      margin: 0 0 14px;
+      font-family: "Montserrat", sans-serif;
+      font-size: 1.18rem;
+      line-height: 1.25;
+      text-transform: uppercase;
+    }
+
+    .hero-aside p {
+      margin: 0 0 16px;
+      line-height: 1.7;
+      color: rgba(239, 253, 251, 0.92);
+    }
+
+    .hero-aside ul {
+      margin: 0;
+      padding-left: 18px;
+      line-height: 1.7;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 520px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel-header,
+    .preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-family: "Montserrat", sans-serif;
+      font-size: 0.92rem;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .status,
+    .hint,
+    .footer-note {
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.65;
+    }
+
+    .status.error { color: #b91c1c; }
+
+    .panel-body {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .fields-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .field-span-2 {
+      grid-column: span 2;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-family: "Montserrat", sans-serif;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      border: 1px solid #ccd7df;
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: #ffffff;
+      color: var(--ink);
+      font: inherit;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .field textarea {
+      min-height: 88px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus {
+      border-color: #3dbcb0;
+      box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .field input[data-uppercase="true"],
+    .field textarea[data-uppercase="true"] {
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .selected-card {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .mini-card {
+      border-radius: 18px;
+      padding: 14px;
+      border: 1px solid #dae4ec;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 251, 0.92));
+    }
+
+    .mini-card span {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-family: "Montserrat", sans-serif;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .mini-card strong {
+      display: block;
+      min-height: 38px;
+      font-size: 0.95rem;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .button {
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-family: "Montserrat", sans-serif;
+      font-size: 0.9rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 24px rgba(16, 32, 42, 0.08);
+    }
+
+    .button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .button-primary {
+      background: linear-gradient(135deg, var(--teal), #19b7a6);
+      color: #ffffff;
+    }
+
+    .button-ghost {
+      background: #ffffff;
+      color: var(--ink);
+      border: 1px solid #d3dde5;
+    }
+
+    .button-alert {
+      background: linear-gradient(135deg, #fff1f2, var(--red-soft));
+      color: #b91c1c;
+      border: 1px solid #fecdd3;
+    }
+
+    .button-soft {
+      background: linear-gradient(135deg, #fcf8ee, #f8edd7);
+      color: #7a5720;
+      border: 1px solid #ead9b8;
+    }
+
+    .preview-header {
+      background:
+        linear-gradient(90deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.85) 28%, rgba(178, 135, 59, 0.08));
+    }
+
+    .preview-frame-wrap {
+      padding: 18px;
+      min-height: 860px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
+        #dbe4ea;
+    }
+
+    iframe {
+      width: 100%;
+      min-height: 820px;
+      border: 1px solid #b9c6d0;
+      border-radius: 20px;
+      background: #ffffff;
+      box-shadow: 0 16px 30px rgba(16, 32, 42, 0.14);
+    }
+
+    .footer-note {
+      padding: 0 22px 22px;
+    }
+
+    @media (max-width: 1280px) {
+      .hero,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .shell { padding: 16px; }
+      .hero-card,
+      .hero-aside,
+      .panel,
+      .preview-panel { border-radius: 24px; }
+      .fields-grid,
+      .actions,
+      .selected-card { grid-template-columns: 1fr; }
+      .field-span-2 { grid-column: span 1; }
+      iframe { min-height: 620px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <article class="hero-card">
+        <p class="eyebrow">Desarrollo EG</p>
+        <h1>Documentos de Sucursales</h1>
+        <span class="accent">Edicion guiada sobre SUCURSALES, firmantes y formatos de Proteccion Civil.</span>
+        <p>
+          Esta vista toma los datos de <strong>SUCURSALES</strong>, permite generar la carta municipal o la
+          cedula de simulacro, y te deja ajustar datos editables sin modificar AppSheet.
+        </p>
+      </article>
+
+      <aside class="hero-aside">
+        <p class="eyebrow" style="color:#dffbf7;">Base Visual</p>
+        <h2>Un solo selector de sucursal para generar los formatos necesarios.</h2>
+        <p>Los cambios que hagas aqui solo se usan para el documento y para su PDF.</p>
+        <ul>
+          <li>La carta conserva su membrete y firma editable.</li>
+          <li>La cedula usa el logo de la columna LOGO de la sucursal.</li>
+          <li>Los valores se pueden ajustar antes de previsualizar o descargar.</li>
+        </ul>
+      </aside>
+    </section>
+
+    <section class="layout">
+      <article class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Configuracion</h2>
+          <span class="status" id="loading-status">Cargando datos...</span>
+        </div>
+
+        <div class="panel-body">
+          <div class="field">
+            <label for="search">Buscar sucursal</label>
+            <input id="search" type="text" placeholder="Ejemplo: 1012, Cajeme, Culiacan">
+          </div>
+
+          <div class="field">
+            <label for="branch">Sucursal</label>
+            <select id="branch"></select>
+            <div class="hint">La carta se basa en la sucursal elegida y despues puedes ajustar sus datos solo para este documento.</div>
+          </div>
+
+          <div class="field">
+            <label for="document-type">Documento</label>
+            <select id="document-type">
+              <option value="carta-compromiso-municipal">Carta Compromiso Municipal</option>
+              <option value="carta-entrega-culiacan">Carta de Entrega Culiacan</option>
+              <option value="cedula-simulacro">Cedula de Simulacro</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="signer">Quien firma</label>
+            <select id="signer"></select>
+            <div class="hint">Al seleccionar un empleado se cargan su firma, nombre y puesto, pero sigues pudiendo editarlos.</div>
+          </div>
+
+          <div class="selected-card">
+            <div class="mini-card"><span>ID</span><strong id="meta-id">-</strong></div>
+            <div class="mini-card"><span>Tienda</span><strong id="meta-tienda">-</strong></div>
+            <div class="mini-card"><span>Label</span><strong id="meta-label">-</strong></div>
+          </div>
+
+          <div class="actions">
+            <button class="button button-primary" id="preview-btn">Previsualizar</button>
+            <button class="button button-ghost" id="open-btn">Abrir HTML</button>
+            <button class="button button-alert" id="pdf-btn">Descargar PDF</button>
+          </div>
+
+          <button class="button button-soft" id="reset-btn">Restaurar datos de AppSheet</button>
+        </div>
+      </article>
+
+      <article class="preview-panel">
+        <div class="preview-header">
+          <h2 class="panel-title">Vista Previa</h2>
+          <span class="status" id="preview-status">Esperando accion</span>
+        </div>
+        <div class="preview-frame-wrap">
+          <iframe id="preview-frame" title="Vista previa del documento"></iframe>
+        </div>
+        <div class="footer-note">
+          Si cambias textos, esos cambios solo viven aqui para esta carta. No se escriben de regreso en AppSheet.
+        </div>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    const state = {
+      rows: [],
+      filteredRows: [],
+      employees: [],
+      cartaInlineFields: {},
+      cedulaChoices: {},
+      cedulaInlineFields: {},
+      cedulaExtraFields: {},
+      busy: false,
+    };
+
+    const routeBase = window.location.pathname.replace(/\/$/, "");
+    const apiUrl = (path) => `${routeBase}/api/${path}`;
+
+    const els = {
+      search: document.getElementById("search"),
+      branch: document.getElementById("branch"),
+      documentType: document.getElementById("document-type"),
+      signer: document.getElementById("signer"),
+      metaId: document.getElementById("meta-id"),
+      metaTienda: document.getElementById("meta-tienda"),
+      metaLabel: document.getElementById("meta-label"),
+      loadingStatus: document.getElementById("loading-status"),
+      previewStatus: document.getElementById("preview-status"),
+      previewFrame: document.getElementById("preview-frame"),
+      previewBtn: document.getElementById("preview-btn"),
+      openBtn: document.getElementById("open-btn"),
+      pdfBtn: document.getElementById("pdf-btn"),
+      resetBtn: document.getElementById("reset-btn"),
+    };
+
+    function getTemplateId() {
+      return els.documentType.value || "carta-compromiso-municipal";
+    }
+
+    function getDocumentTitle(templateId) {
+      switch (templateId) {
+        case "cedula-simulacro":
+          return "Cedula de Simulacro";
+        case "carta-entrega-culiacan":
+          return "Carta de Entrega Culiacan";
+        default:
+          return "Carta Compromiso Municipal";
+      }
+    }
+
+    function updateDocumentMode() {
+      document.querySelectorAll(".doc-cedula").forEach((node) => {
+        node.hidden = true;
+      });
+    }
+
+    function setBusy(nextBusy, message) {
+      state.busy = nextBusy;
+      els.previewBtn.disabled = nextBusy;
+      els.openBtn.disabled = nextBusy;
+      els.pdfBtn.disabled = nextBusy;
+      els.resetBtn.disabled = nextBusy;
+
+      if (message) {
+        els.previewStatus.textContent = message;
+        els.previewStatus.classList.remove("error");
+      }
+    }
+
+    function setError(message) {
+      els.previewStatus.textContent = message;
+      els.previewStatus.classList.add("error");
+      setBusy(false);
+    }
+
+    function getSelectedRow() {
+      return state.rows.find((row) => row.id === els.branch.value) || null;
+    }
+
+    function getSelectedEmployee() {
+      return state.employees.find((employee) => employee.id === els.signer.value) || null;
+    }
+
+    function updateSelectedMeta() {
+      const row = getSelectedRow();
+      els.metaId.textContent = row ? row.id : "-";
+      els.metaTienda.textContent = row ? row.tienda : "-";
+      els.metaLabel.textContent = row ? row.label : "-";
+    }
+
+    function renderBranchOptions(rows) {
+      if (!rows.length) {
+        els.branch.innerHTML = '<option value="">Sin resultados</option>';
+        return;
+      }
+
+      els.branch.innerHTML = rows
+        .map((row) => `<option value="${row.id}">${row.tienda} | ${row.label}</option>`)
+        .join("");
+    }
+
+    function renderSignerOptions() {
+      const options = ['<option value="">Selecciona firmante</option>']
+        .concat(
+          state.employees.map((employee) => {
+            const role = employee.puesto ? ` | ${employee.puesto}` : "";
+            return `<option value="${employee.id}">${employee.nombre || employee.id}${role}</option>`;
+          })
+        );
+
+      els.signer.innerHTML = options.join("");
+    }
+
+    function filterRows() {
+      const query = els.search.value.trim().toLowerCase();
+      const currentId = els.branch.value;
+
+      state.filteredRows = !query
+        ? [...state.rows]
+        : state.rows.filter((row) => `${row.id} ${row.tienda} ${row.label}`.toLowerCase().includes(query));
+
+      renderBranchOptions(state.filteredRows);
+
+      if (state.filteredRows.some((row) => row.id === currentId)) {
+        els.branch.value = currentId;
+      } else if (state.filteredRows[0]) {
+        els.branch.value = state.filteredRows[0].id;
+      }
+
+      updateSelectedMeta();
+      els.loadingStatus.textContent = `${state.filteredRows.length} sucursales visibles`;
+    }
+
+    function applyFields(fields) {
+      state.cartaInlineFields = { ...(fields || {}) };
+    }
+
+    function applyCedulaFields(fields) {
+      state.cedulaInlineFields = {
+        ...(fields || {}),
+        fecha: fields.fecha || "",
+        dependencia: fields.dependencia || "",
+        telefono: fields.telefono || "",
+        direccion: fields.direccion || "",
+        entidad_federativa: fields.entidad_federativa || "",
+        tipo_inmueble: fields.tipo_inmueble || "",
+        niveles: fields.niveles || "",
+        sotanos: fields.sotanos || "",
+        superiores: fields.superiores || "",
+        capacidad_estacionamiento: fields.capacidad_estacionamiento || "",
+        poblacion_fija: fields.poblacion_fija || "",
+        poblacion_flotante: fields.poblacion_flotante || "",
+        brigadistas_matutino: fields.brigadistas_matutino || "",
+        hipotesis: fields.hipotesis || "",
+        hora_inicio: fields.hora_inicio || "",
+        hora_termino: fields.hora_termino || "",
+        tiempo_evacuacion: fields.tiempo_evacuacion || "",
+        duracion_total: fields.duracion_total || "",
+        empleados_evacuados: fields.empleados_evacuados || "",
+        visitantes_evacuados: fields.visitantes_evacuados || "",
+        observaciones_generales: fields.observaciones_generales || "",
+        desviaciones_detectadas: fields.desviaciones_detectadas || "",
+        recomendaciones: fields.recomendaciones || "",
+        equipo_utilizado: fields.equipo_utilizado || "",
+        representante_pc: fields.representante_pc || "",
+        responsable_inmueble: fields.responsable_inmueble || "",
+        responsable_programa: fields.responsable_programa || "",
+      };
+    }
+
+    function collectFields() {
+      if (getTemplateId() === "cedula-simulacro") {
+        return {
+          ...state.cedulaInlineFields,
+          tiempo_evacuacion_eval: state.cedulaInlineFields.tiempo_evacuacion || "",
+          ...state.cedulaExtraFields,
+          ...state.cedulaChoices,
+        };
+      }
+
+      return {
+        ...state.cartaInlineFields,
+        signer_id: els.signer.value.trim(),
+      };
+    }
+
+    function getPayload() {
+      const templateId = getTemplateId();
+      return {
+        id: els.branch.value,
+        templateId,
+        title: getDocumentTitle(templateId),
+        subtitle: "",
+        fields: collectFields(),
+      };
+    }
+
+    async function fetchJson(url) {
+      const res = await fetch(url);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Error ${res.status}`);
+      }
+      return res.json();
+    }
+
+    function fillSignerFields(employee) {
+      if (!employee) return;
+      state.cartaInlineFields = {
+        ...state.cartaInlineFields,
+        signer_id: employee.id || "",
+        firma_url: employee.firma || "",
+        nombre_firma: employee.nombre || "",
+        puesto_firma: employee.puesto || "",
+      };
+    }
+
+    function getAutoCedulaChoices() {
+      const goodEvaluations = [
+        "eval_zonas_menor_riesgo",
+        "eval_punto_reunion",
+        "eval_condiciones_punto",
+        "eval_rutas_evacuacion",
+        "eval_localizacion_salidas",
+        "eval_condiciones_salidas",
+        "eval_plan_alertamiento",
+        "eval_evacuacion",
+        "eval_plan_emergencia",
+        "eval_danos",
+        "eval_vuelta_normalidad",
+        "eval_mandos",
+        "eval_jefes_piso",
+        "eval_brigadistas",
+        "eval_comportamiento",
+        "eval_grupos_externos",
+      ];
+
+      return {
+        choice_elevadores: "",
+        choice_escaleras_emergencia: "",
+        choice_helipuerto: "",
+        choice_estacionamiento: "",
+        choice_estacionamiento_abierto: "",
+        choice_estacionamiento_acomodo: "",
+        choice_hipotesis: "incendio",
+        choice_tipo_simulacro: "integral",
+        choice_modalidad_evacuacion: "evacuacion_total",
+        choice_aviso: "con_previo_aviso",
+        choice_difusion: "si",
+        choice_difusion_personal_interno: "si",
+        choice_puesto_mando: "si",
+        choice_senalizados: "no",
+        choice_puesto_primeros_auxilios: "si",
+        choice_alertamiento_tipo: "voceo",
+        choice_plan_alertamiento: "si",
+        choice_plan_emergencia: "si",
+        choice_plan_evaluacion_danos: "si",
+        choice_plan_vuelta_normalidad: "si",
+        choice_verificacion_personal: "si",
+        choice_reunion_evaluacion: "si",
+        choice_participantes_brigadistas: "si",
+        choice_participantes_observadores: "si",
+        choice_brigadas_primeros_auxilios: "si",
+        choice_brigadas_evacuacion: "si",
+        choice_brigadas_combate_incendios: "si",
+        choice_equipo_identificacion: "si",
+        choice_equipo_extintores: "si",
+        choice_equipo_botiquines: "si",
+        choice_apoyo_otras: "si",
+        ...Object.fromEntries(goodEvaluations.map((key) => [key, "bien"])),
+      };
+    }
+
+    async function previewDocument(openInNewTab) {
+      try {
+        setBusy(true, "Renderizando documento...");
+        const res = await fetch(apiUrl("preview"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(getPayload()),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Error ${res.status}`);
+        }
+
+        const html = await res.text();
+        els.previewFrame.srcdoc = html;
+        els.previewStatus.textContent = "Vista previa actualizada";
+        els.previewStatus.classList.remove("error");
+
+        if (openInNewTab) {
+          const win = window.open("", "_blank");
+          if (win) {
+            win.document.open();
+            win.document.write(html);
+            win.document.close();
+          }
+        }
+      } catch (error) {
+        setError(error.message || "No se pudo renderizar.");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function downloadPdf() {
+      try {
+        setBusy(true, "Generando PDF...");
+        const res = await fetch(apiUrl("pdf"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(getPayload()),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Error ${res.status}`);
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const header = res.headers.get("Content-Disposition") || "";
+        const match = header.match(/filename\\*=UTF-8''([^;]+)/);
+        const fallback = header.match(/filename=\"([^\"]+)\"/);
+        const fileName = match ? decodeURIComponent(match[1]) : (fallback ? fallback[1] : "documento.pdf");
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        els.previewStatus.textContent = "PDF generado correctamente";
+        els.previewStatus.classList.remove("error");
+      } catch (error) {
+        setError(error.message || "No se pudo generar el PDF.");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadRows() {
+      state.rows = await fetchJson(apiUrl("sucursales"));
+      state.filteredRows = [...state.rows];
+      renderBranchOptions(state.filteredRows);
+      if (state.rows.length) {
+        els.branch.value = state.rows[0].id;
+      }
+      updateSelectedMeta();
+    }
+
+    async function loadEmployees() {
+      state.employees = await fetchJson(apiUrl("empleados"));
+      renderSignerOptions();
+    }
+
+    async function loadPreset() {
+      if (!els.branch.value) return;
+
+      const currentSigner = els.signer.value;
+      const templateId = getTemplateId();
+      const preset = await fetchJson(apiUrl(`presets/${templateId}?id=${encodeURIComponent(els.branch.value)}`));
+
+      if (templateId === "cedula-simulacro") {
+        applyCedulaFields(preset.fields || {});
+        state.cedulaChoices = {};
+        state.cedulaExtraFields = {};
+        return;
+      }
+
+      applyFields(preset.fields || {});
+
+      if (currentSigner && state.employees.some((employee) => employee.id === currentSigner)) {
+        els.signer.value = currentSigner;
+        fillSignerFields(getSelectedEmployee());
+      } else {
+        state.cartaInlineFields = {
+          ...state.cartaInlineFields,
+          signer_id: els.signer.value.trim(),
+        };
+      }
+    }
+
+    async function restoreDefaults() {
+      await loadPreset();
+      els.previewStatus.textContent = "Datos restaurados desde AppSheet";
+      els.previewStatus.classList.remove("error");
+    }
+
+    async function bootstrap() {
+      try {
+        await Promise.all([loadRows(), loadEmployees()]);
+        els.loadingStatus.textContent = `${state.rows.length} sucursales y ${state.employees.length} firmantes listos`;
+        await loadPreset();
+        await previewDocument(false);
+      } catch (error) {
+        setError(error.message || "No se pudo iniciar la herramienta.");
+      }
+    }
+
+    els.search.addEventListener("input", filterRows);
+    els.documentType.addEventListener("change", async () => {
+      updateDocumentMode();
+      await loadPreset();
+      await previewDocument(false);
+    });
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "carta-inline-field") {
+        const name = String(event.data.name || "");
+        if (!name) return;
+        const value = String(event.data.value || "");
+        state.cartaInlineFields[name] = value;
+        return;
+      }
+      if (event.data?.type === "cedula-choice") {
+        const name = String(event.data.name || "");
+        if (!name) return;
+        const value = String(event.data.value || "");
+        if (value) {
+          state.cedulaChoices[name] = value;
+        } else {
+          delete state.cedulaChoices[name];
+        }
+        return;
+      }
+      if (event.data?.type === "cedula-inline-field") {
+        const name = String(event.data.name || "");
+        if (!name) return;
+        const value = String(event.data.value || "");
+        state.cedulaInlineFields[name] = value;
+      }
+    });
+    els.branch.addEventListener("change", async () => {
+      updateSelectedMeta();
+      await loadPreset();
+      await previewDocument(false);
+    });
+    els.signer.addEventListener("change", async () => {
+      fillSignerFields(getSelectedEmployee());
+      await previewDocument(false);
+    });
+    els.previewBtn.addEventListener("click", () => previewDocument(false));
+    els.openBtn.addEventListener("click", () => previewDocument(true));
+    els.pdfBtn.addEventListener("click", downloadPdf);
+    els.resetBtn.addEventListener("click", async () => {
+      try {
+        await restoreDefaults();
+        await previewDocument(false);
+      } catch (error) {
+        setError(error.message || "No se pudo restaurar la carta.");
+      }
+    });
+
+    bootstrap();
+  </script>
+</body>
+</html>
