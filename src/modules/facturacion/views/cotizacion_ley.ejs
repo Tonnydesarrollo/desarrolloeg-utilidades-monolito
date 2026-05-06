@@ -632,12 +632,8 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
               </div>
             </div>
         </div>
-          
+        
         </div>
-
-        <div class="desglose-preview" id="desglosePreview"></div>
-
-              <div class="info-section">
 
   <% if(data.cotizacion && data.cotizacion.proveedor){ %>
   <div class="info-box">
@@ -647,6 +643,10 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
     <p><strong>Cuenta:</strong> <%= data.cotizacion.proveedor.cuenta %></p>
   </div>
   <% } %>
+
+        <div class="desglose-preview" id="desglosePreview"></div>
+
+              <div class="info-section">
   <div class="info-box">
     <h3>GarantÃ­as</h3>
     <ul>

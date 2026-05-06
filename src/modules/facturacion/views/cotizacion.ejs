@@ -726,12 +726,8 @@ for (var i = 0; i < (data.centros || []).length; i++) {
               </div>
             </div>
         </div>
-          
+        
         </div>
-
-        <div class="desglose-preview" id="desglosePreview"></div>
-
-              <div class="info-section">
 
   <% if(data.cotizacion && data.cotizacion.proveedor){ %>
   <div class="info-box">
@@ -741,6 +737,10 @@ for (var i = 0; i < (data.centros || []).length; i++) {
     <p><strong>Cuenta:</strong> <%= data.cotizacion.proveedor.cuenta %></p>
   </div>
   <% } %>
+
+        <div class="desglose-preview" id="desglosePreview"></div>
+
+              <div class="info-section">
  <% 
 var hasEstatal   = Object.keys(pagoDerechos.estatal).length > 0;
 var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
@@ -779,7 +779,7 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
   <% } %>
 
 </div>
-<% } %>
+  <% } %>
 
 
   <div class="info-box">
