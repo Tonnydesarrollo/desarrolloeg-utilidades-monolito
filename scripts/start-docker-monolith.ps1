@@ -163,6 +163,10 @@ try {
     Invoke-Pm2 -Arguments @("stop", "desarrolloeg-monolito") 2>$null | Out-Null
   }
 
+  Write-Log "Limpiando contenedores previos con docker compose down --remove-orphans"
+  $downCommand = "`"$dockerExe`" --config `"$dockerConfigDir`" compose down --remove-orphans >> `"$logPath`" 2>&1"
+  cmd.exe /d /c $downCommand
+
   Write-Log "Ejecutando docker compose up -d --build"
   $composeCommand = "`"$dockerExe`" --config `"$dockerConfigDir`" compose up -d --build >> `"$logPath`" 2>&1"
   cmd.exe /d /c $composeCommand
