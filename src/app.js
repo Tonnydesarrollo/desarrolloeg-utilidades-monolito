@@ -96,6 +96,8 @@ export function createApp() {
   app.use("/contabilidad", contabilidadRouter);
   app.use("/facturacion", facturacionRouter);
   app.use("/Planeacion-ley", planeacionRouter);
+  app.use("/FALTANTES-LEY", planeacionRouter);
+  app.use("/faltantes-ley", planeacionRouter);
   app.use("/api", planeacionApiRouter);
   app.use("/jobs", jobsRouter);
   app.use("/clubfactura", clubfacturaDownloadProxyRouter);
