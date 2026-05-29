@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
     ca-certificates \
+    libvips42 \
     tini \
   && rm -rf /var/lib/apt/lists/*
 
@@ -17,6 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY src ./src
+COPY standalone/sucursales-docs ./standalone/sucursales-docs
 COPY README.md ./
 COPY .env.example ./
 

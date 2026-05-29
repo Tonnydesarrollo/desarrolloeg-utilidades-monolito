@@ -66,6 +66,22 @@ const monolithServices = [
     probeUrl: "https://apps.desarrolloeg.com/jobs",
     href: "https://apps.desarrolloeg.com/jobs",
   },
+  {
+    id: "separar-pipc",
+    name: "Separar PIPC",
+    description: "Herramienta para dividir un PIPC usando el indice del documento y sus pies de pagina.",
+    path: "/SEPARAR-PIPC/health",
+    probeUrl: "https://apps.desarrolloeg.com/SEPARAR-PIPC/health",
+    href: "https://apps.desarrolloeg.com/SEPARAR-PIPC/",
+  },
+  {
+    id: "solventaciones",
+    name: "Solventaciones",
+    description: "Reporte de visitas y solventaciones por tienda, razon social y municipio.",
+    path: "/SOLVENTACIONES/health",
+    probeUrl: "https://apps.desarrolloeg.com/SOLVENTACIONES/health",
+    href: "https://apps.desarrolloeg.com/SOLVENTACIONES/html",
+  },
 ];
 
 function escapeHtml(value = "") {

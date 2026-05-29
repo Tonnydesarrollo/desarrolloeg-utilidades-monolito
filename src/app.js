@@ -8,7 +8,11 @@ import { constanciasV2Router } from "./modules/constancias-v2/constanciasV2.rout
 import { planeacionRouter, planeacionApiRouter } from "./modules/planeacion/planeacion.router.js";
 import { jobsRouter } from "./modules/jobs/jobs.router.js";
 import { clubfacturaDownloadProxyRouter } from "./modules/jobs/native/facturas/downloadProxy.router.js";
+import { faltantesLeyRouter } from "./modules/faltantes-ley/faltantesLey.router.js";
+import { separarPipcRouter } from "./modules/separar-pipc/separarPipc.router.js";
 import { whatsappCapacitadoresRouter } from "./modules/whatsapp-capacitadores/whatsappCapacitadores.router.js";
+import { solventacionesRouter } from "./modules/solventaciones/solventaciones.router.js";
+import { sucursalesDocsRouter } from "./modules/sucursales-docs/sucursalesDocs.router.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
 import { getClusterCoordinatorStatus } from "./services/clusterCoordinator.js";
 
@@ -76,7 +80,8 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
   app.set("view engine", "ejs");
   app.set("views", [
-    path.join(__dirname, "modules", "facturacion", "views")
+    path.join(__dirname, "modules", "facturacion", "views"),
+    path.join(__dirname, "modules", "solventaciones", "views")
   ]);
 
   const publicImgPath = process.env.PUBLICIMG_PATH;
@@ -96,10 +101,18 @@ export function createApp() {
   app.use("/contabilidad", contabilidadRouter);
   app.use("/facturacion", facturacionRouter);
   app.use("/Planeacion-ley", planeacionRouter);
+  app.use("/FALTANTES-LEY", faltantesLeyRouter);
+  app.use("/faltantes-ley", faltantesLeyRouter);
   app.use("/api", planeacionApiRouter);
   app.use("/jobs", jobsRouter);
   app.use("/clubfactura", clubfacturaDownloadProxyRouter);
+  app.use("/SEPARAR-PIPC", separarPipcRouter);
+  app.use("/separar-pipc", separarPipcRouter);
   app.use("/whatsapp-capacitadores", whatsappCapacitadoresRouter);
+  app.use("/SOLVENTACIONES", solventacionesRouter);
+  app.use("/solventaciones", solventacionesRouter);
+  app.use("/SUCURSALES-DOCS", sucursalesDocsRouter);
+  app.use("/sucursales-docs", sucursalesDocsRouter);
 
   app.get("/health", (_req, res) => {
     res.json({

@@ -1,0 +1,699 @@
+﻿<%
+  function esc(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function clampText(value, max) {
+    const text = String(value ?? "").trim();
+    if (!text) return "";
+    return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+  }
+
+  function getStatusLabel(value) {
+    const status = String(value ?? "").trim();
+    if (status === "0") return "Pendiente";
+    if (status === "1") return "Subido";
+    if (status === "2") return "Rechazado";
+    if (status === "3") return "Subsanado";
+    return "Sin clasificar";
+  }
+
+  function getStatusTone(value) {
+    const status = String(value ?? "").trim();
+    if (status === "0") return "tone-gray";
+    if (status === "1") return "tone-blue";
+    if (status === "2") return "tone-red";
+    if (status === "3") return "tone-green";
+    return "tone-slate";
+  }
+
+  const grupos = Array.isArray(reporte?.grupos) ? reporte.grupos : [];
+  const resumen = reporte?.resumen || {};
+  const resumenAvanzado = reporte?.resumenAvanzado || {};
+  const filtros = reporte?.filtros || {};
+  const company = reporte?.company || {};
+  const breakdown = resumenAvanzado.statusBreakdown || {};
+  const baseUrlValue = String(typeof baseUrl !== "undefined" ? baseUrl : "").trim() || "https://apps.desarrolloeg.com";
+
+  const companyName = company.companyName || "DESARROLLO EG";
+  const companySubtitle = company.companySubtitle || "Soluciones, consultoria y reporte profesional";
+  const logoSource = company.logoDataUri || company.logoUrl || "https://drive.google.com/thumbnail?id=15YmFa3PwCXcZCdgzrtlFGcdIGXXF0XvL&sz=w400";
+  const logoProxy = String(logoSource).startsWith("data:")
+    ? logoSource
+    : `${baseUrlValue}/facturacion/img-proxy?url=${encodeURIComponent(logoSource)}`;
+
+  const tituloBase = filtros.tienda
+    ? `TIENDA ${filtros.tienda}`
+    : filtros.razonSocial && filtros.municipio
+      ? `${filtros.razonSocial} - ${filtros.municipio}`
+      : filtros.razonSocial
+        ? filtros.razonSocial
+        : filtros.municipio
+          ? filtros.municipio
+          : "GENERAL";
+
+  const fechaHoy = new Intl.DateTimeFormat("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "America/Mexico_City",
+  }).format(new Date());
+
+  const statusCards = [
+    { label: "Pendientes", value: breakdown.pendiente || 0, tone: "tone-gray" },
+    { label: "Subidos", value: breakdown.subido || 0, tone: "tone-blue" },
+    { label: "Rechazados", value: breakdown.rechazado || 0, tone: "tone-red" },
+    { label: "Subsanados", value: breakdown.subsanado || 0, tone: "tone-green" },
+  ];
+
+  const footerLeft = Array.isArray(company.footerLeftLines) && company.footerLeftLines.length
+    ? company.footerLeftLines
+    : ["Rio Tehuantepec 1704-1, Morelos,", "Los Pinos, 80170 Culiacan Rosales,", "Sin."];
+  const footerRight = Array.isArray(company.footerRightLines) && company.footerRightLines.length
+    ? company.footerRightLines
+    : ["WhatsApp: (667) 305 9813", "Cel: (667) 1766584 y (667) 4950697", "Oficina: (667) 690 2218"];
+%>
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <title><%= esc(`REPORTE DE SOLVENTACIONES - ${tituloBase}`) %></title>
+    <base href="<%= esc(baseUrlValue) %>/">
+    <style>
+      * { box-sizing: border-box; }
+      @page { size: Letter; margin: 0.12in; }
+      :root {
+        --red: #b3202a;
+        --red-dark: #8f1d25;
+        --blue: #1f4e79;
+        --green: #1f7a4d;
+        --slate: #334155;
+        --ink: #273244;
+        --muted: #64748b;
+        --line: #dce5ef;
+        --soft: #f7fafc;
+      }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        color: var(--ink);
+        background: #eef3f8;
+      }
+      .sheet {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .hero {
+        padding: 5px 12px 4px;
+        background:
+          radial-gradient(circle at top left, rgba(179, 32, 42, 0.08), transparent 28%),
+          linear-gradient(135deg, #ffffff, #f8fbff);
+        border-bottom: 2px solid rgba(179, 32, 42, 0.14);
+      }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 0.95fr 1.3fr 0.95fr;
+        gap: 8px;
+        align-items: center;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .brand-logo,
+      .brand-fallback {
+        width: 52px;
+        height: 52px;
+        flex: 0 0 auto;
+      }
+      .brand-logo { object-fit: contain; display: block; }
+      .brand-fallback {
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--red), var(--red-dark));
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+      }
+      .brand h1 {
+        margin: 0;
+        font-size: 0.92rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .brand p {
+        margin: 2px 0 0;
+        font-size: 0.68rem;
+        color: var(--muted);
+      }
+      .center { text-align: center; }
+      .center .label {
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 0.62rem;
+        font-weight: 800;
+        color: var(--red);
+      }
+      .center .title {
+        margin-top: 2px;
+        font-size: 0.86rem;
+        font-weight: 800;
+        color: var(--slate);
+      }
+      .center .sub {
+        margin-top: 2px;
+        font-size: 0.66rem;
+        color: var(--muted);
+        line-height: 1.25;
+      }
+      .folio { text-align: right; }
+      .folio .chip {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: var(--red);
+        color: #fff;
+        font-size: 0.62rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .folio .value {
+        margin-top: 5px;
+        font-size: 0.68rem;
+        color: var(--muted);
+        line-height: 1.25;
+      }
+      .summary {
+        padding: 1px 12px 0;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+      }
+      .summary-box {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #f8fbff;
+        padding: 7px 9px 6px;
+        min-height: 50px;
+        position: relative;
+        overflow: hidden;
+      }
+      .summary-box::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 4px;
+        background: var(--blue);
+      }
+      .summary-visitas::before { background: var(--blue); }
+      .summary-incidencias::before { background: var(--red); }
+      .summary-evidencias::before { background: var(--green); }
+      .summary-box.summary-visitas .value { color: var(--blue); }
+      .summary-box.summary-incidencias .value { color: var(--red); }
+      .summary-box.summary-evidencias .value { color: var(--green); }
+      .summary-box .label {
+        font-size: 0.55rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #6b7280;
+        font-weight: 800;
+      }
+      .summary-box .value {
+        margin-top: 3px;
+        font-size: 1rem;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .summary-box .hint {
+        margin-top: 3px;
+        font-size: 0.6rem;
+        color: #64748b;
+      }
+      .status-strip {
+        padding: 1px 12px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 7px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: #fff;
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 800;
+        color: var(--slate);
+      }
+      .status-pill .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #94a3b8;
+      }
+      .tone-red { border-color: rgba(179, 32, 42, 0.25); color: var(--red); }
+      .tone-red .dot { background: var(--red); }
+      .tone-blue { border-color: rgba(31, 78, 121, 0.25); color: var(--blue); }
+      .tone-blue .dot { background: var(--blue); }
+      .tone-gray { border-color: rgba(100, 116, 139, 0.22); color: #475569; }
+      .tone-gray .dot { background: #64748b; }
+      .tone-green { border-color: rgba(31, 122, 77, 0.25); color: var(--green); }
+      .tone-green .dot { background: var(--green); }
+      .tone-slate { border-color: rgba(51, 65, 85, 0.20); color: var(--slate); }
+      .tone-slate .dot { background: var(--slate); }
+      .content { padding: 0 12px 8px; }
+      .content { padding-top: 0; }
+      .group {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--blue);
+        border-radius: 11px;
+        padding: 8px 8px 6px;
+        margin-bottom: 7px;
+        break-inside: auto;
+        page-break-inside: auto;
+      }
+      .group-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: flex-start;
+        margin-bottom: 4px;
+      }
+      .group-title {
+        margin: 0;
+        font-size: 0.84rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--blue);
+      }
+      .group-subtitle {
+        margin-top: 2px;
+        font-size: 0.66rem;
+        color: var(--muted);
+        line-height: 1.25;
+      }
+      .group-count {
+        display: inline-block;
+        white-space: nowrap;
+        background: #edf4fb;
+        border: 1px solid #d5e1ef;
+        color: var(--blue);
+        border-radius: 999px;
+        padding: 3px 7px;
+        font-size: 0.6rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .visit {
+        border-top: 1px solid #e8eef5;
+        padding-top: 6px;
+        margin-top: 6px;
+      }
+      .visit:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+      .visit-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: flex-start;
+        margin-bottom: 5px;
+      }
+      .visit-title {
+        margin: 0;
+        font-size: 0.78rem;
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .visit-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+      }
+      .tag {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 999px;
+        font-size: 0.6rem;
+        border: 1px solid #d8e3f2;
+        background: #f6f9fe;
+        color: var(--blue);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 800;
+      }
+      .visit-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px 8px;
+        font-size: 0.62rem;
+        color: var(--muted);
+      }
+      .visit-stats {
+        margin-top: 6px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .mini-stat {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #f8fbff;
+        border: 1px solid #dde7f2;
+        color: #35506f;
+        font-size: 0.6rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .incidencias { margin-top: 8px; }
+      .incidencia {
+        border: 1px solid #dde5ef;
+        border-left: 4px solid var(--red);
+        border-radius: 10px;
+        background: #fbfcff;
+        padding: 8px 8px 7px;
+        margin-bottom: 7px;
+        page-break-inside: avoid;
+      }
+      .incidencia-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .incidencia-title {
+        margin: 0;
+        font-size: 0.76rem;
+        font-weight: 800;
+        color: #263244;
+      }
+      .incidencia-info {
+        margin-top: 2px;
+        color: #67758a;
+        font-size: 0.62rem;
+        line-height: 1.25;
+      }
+      .incidencia-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 5px;
+      }
+      .incidencia-desc {
+        margin-top: 5px;
+        font-size: 0.66rem;
+        line-height: 1.35;
+        color: #334155;
+        white-space: pre-wrap;
+      }
+      .image-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 5px;
+        margin-top: 6px;
+      }
+      .image-card {
+        display: block;
+        border: 1px solid #dde5ef;
+        border-radius: 9px;
+        overflow: hidden;
+        background: #fff;
+        text-decoration: none;
+        position: relative;
+      }
+      .image-card img {
+        display: block;
+        width: 100%;
+        height: 140px;
+        object-fit: contain;
+        background: #f8fbff;
+      }
+      .image-fallback {
+        height: 140px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        font-size: 0.62rem;
+        background: #f8fbff;
+      }
+      .image-caption {
+        position: absolute;
+        left: 5px;
+        bottom: 5px;
+        background: rgba(31, 78, 121, 0.88);
+        color: #fff;
+        border-radius: 999px;
+        padding: 2px 5px;
+        font-size: 0.56rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .empty {
+        border: 1px dashed #d6e0eb;
+        background: #f8fbff;
+        border-radius: 10px;
+        padding: 10px;
+        color: #64748b;
+        font-size: 0.68rem;
+      }
+      .footer {
+        margin-top: 4px;
+        padding: 8px 12px 10px;
+        border-top: 1px solid #e8eef5;
+        display: grid;
+        grid-template-columns: 1.15fr 0.7fr 1.15fr;
+        gap: 8px;
+        align-items: center;
+        color: #475569;
+      }
+      .footer-block {
+        font-size: 0.62rem;
+        line-height: 1.25;
+        white-space: pre-line;
+      }
+      .footer-center {
+        text-align: center;
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #94a3b8;
+        font-weight: 800;
+      }
+      .page-break { break-after: page; page-break-after: always; }
+      @media print { body { background: #fff; } }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="hero">
+        <div class="hero-grid">
+          <div class="brand">
+            <% if (logoProxy) { %>
+              <img class="brand-logo" src="<%= esc(logoProxy) %>" alt="<%= esc(companyName) %>">
+            <% } else { %>
+              <div class="brand-fallback">EG</div>
+            <% } %>
+            <div>
+              <h1><%= esc(companyName) %></h1>
+              <p><%= esc(companySubtitle) %></p>
+            </div>
+          </div>
+
+          <div class="center">
+            <div class="label"><%= esc(reporte.tableName || "STATUS SISTEMA PC") %></div>
+            <div class="title">Reporte de solventaciones</div>
+            <div class="sub">Prioridad, evidencia y seguimiento visual</div>
+          </div>
+
+          <div class="folio">
+            <div class="chip">Generado</div>
+            <div class="value"><%= esc(fechaHoy) %></div>
+            <div class="value"><%= esc(tituloBase) %></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="summary-box summary-visitas">
+          <div class="label">Visitas</div>
+          <div class="value"><%= resumen.totalRegistros || 0 %></div>
+          <div class="hint">Filtradas</div>
+        </div>
+        <div class="summary-box summary-incidencias">
+          <div class="label">Incidencias</div>
+          <div class="value"><%= resumenAvanzado.totalIncidencias || 0 %></div>
+          <div class="hint">Motivos</div>
+        </div>
+        <div class="summary-box summary-evidencias">
+          <div class="label">Evidencias</div>
+          <div class="value"><%= resumenAvanzado.totalEvidencias || 0 %></div>
+          <div class="hint">Fotos</div>
+        </div>
+      </div>
+
+      <div class="status-strip">
+        <% statusCards.forEach(function (card) { %>
+          <div class="status-pill <%= card.tone %>">
+            <span class="dot"></span>
+            <span><%= esc(card.label) %>:</span>
+            <span><%= esc(String(card.value || 0)) %></span>
+          </div>
+        <% }); %>
+      </div>
+
+      <div class="content">
+        <% if (!grupos.length) { %>
+          <div class="empty">No hubo registros VISITADA para los filtros seleccionados.</div>
+        <% } %>
+
+        <% grupos.forEach(function (grupo, idx) { %>
+          <article class="group <%= idx > 0 ? 'page-break' : '' %>">
+            <div class="group-head">
+              <div>
+                <h2 class="group-title"><%= esc(grupo.titulo) %></h2>
+                <div class="group-subtitle">
+                  <% if (grupo.subtitulo && grupo.subtitulo.length) { %>
+                    <%= esc(grupo.subtitulo.join(" - ")) %>
+                  <% } else { %>
+                    Generado desde Sistema PC
+                  <% } %>
+                </div>
+              </div>
+              <div class="group-count"><%= grupo.items.length %> visita(s)</div>
+            </div>
+
+            <% grupo.items.forEach(function (item) {
+              const itemIncidencias = Array.isArray(item.incidencias) ? item.incidencias : [];
+              const itemImagenes = Array.isArray(item.imagenes) ? item.imagenes : [];
+              const previewVisit = [
+                `Incidencias ${itemIncidencias.length}`,
+                `Fotos ${itemImagenes.length}`,
+                `Con foto ${itemIncidencias.filter(function (inc) { return Array.isArray(inc.imagenes) && inc.imagenes.length > 0; }).length}`
+              ];
+            %>
+              <div class="visit">
+                <div class="visit-head">
+                  <div>
+                    <h3 class="visit-title"><%= esc(item.sucursalNombre || item.razonSocial || item.tienda || "Sin nombre") %></h3>
+                    <div class="visit-tags">
+                      <% if (item.tienda) { %><span class="tag">Tienda <%= esc(item.tienda) %></span><% } %>
+                      <% if (item.razonSocial) { %><span class="tag"><%= esc(item.razonSocial) %></span><% } %>
+                      <% if (item.municipioNombre) { %><span class="tag"><%= esc(item.municipioNombre) %></span><% } %>
+                      <% if (item.estatus) { %><span class="tag"><%= esc(item.estatus) %></span><% } %>
+                    </div>
+                  </div>
+                  <div class="group-count">Solicitud <%= esc(item.solicitudId || "N/D") %></div>
+                </div>
+
+                <div class="visit-meta">
+                  <% if (item.sucursalId) { %><span>Sucursal ID: <strong><%= esc(item.sucursalId) %></strong></span><% } %>
+                  <% if (item.estadoNombre) { %><span>Estado: <strong><%= esc(item.estadoNombre) %></strong></span><% } %>
+                  <% if (item.registroFecha) { %><span>Registro: <strong><%= esc(item.registroFecha) %></strong></span><% } %>
+                  <% if (item.vigenciaFecha) { %><span>Vigencia: <strong><%= esc(item.vigenciaFecha) %></strong></span><% } %>
+                </div>
+
+                <div class="visit-stats">
+                  <% previewVisit.forEach(function (stat) { %>
+                    <span class="mini-stat"><%= esc(stat) %></span>
+                  <% }); %>
+                </div>
+
+                <% if (item.errorIncidencias) { %>
+                  <div class="empty" style="margin-top:8px;"><strong>Advertencia:</strong> <%= esc(item.errorIncidencias) %></div>
+                <% } %>
+
+                <div class="incidencias">
+                  <% if (itemIncidencias.length) { %>
+                    <% itemIncidencias.forEach(function (inc) {
+                      const totalImagenes = Array.isArray(inc.imagenes) ? inc.imagenes.length : 0;
+                      const previewImagenes = Array.isArray(inc.imagenes) ? inc.imagenes : [];
+                      const statusValue = inc.estatus !== undefined && inc.estatus !== null ? String(inc.estatus) : (inc.status !== undefined && inc.status !== null ? String(inc.status) : "");
+                    %>
+                      <div class="incidencia">
+                        <div class="incidencia-head">
+                          <div>
+                            <h4 class="incidencia-title"><%= esc(inc.titulo || "Sin titulo") %></h4>
+                            <div class="incidencia-info">
+                              <% if (inc.incidencia_id) { %><span>Incidencia #<%= esc(inc.incidencia_id) %></span><% } %>
+                              <% if (statusValue) { %><span> - Estatus <%= esc(getStatusLabel(statusValue)) %></span><% } %>
+                              <% if (inc.registro_fecha) { %><span> - <%= esc(inc.registro_fecha) %></span><% } %>
+                            </div>
+                          </div>
+                          <div class="group-count">Fotos <%= esc(String(totalImagenes)) %></div>
+                        </div>
+
+                        <div class="incidencia-meta">
+                          <span class="status-pill <%= getStatusTone(statusValue) %>">
+                            <span class="dot"></span>
+                            <%= esc(getStatusLabel(statusValue)) %>
+                          </span>
+                        </div>
+
+                        <% if (inc.descripcion) { %>
+                          <div class="incidencia-desc"><%= esc(inc.descripcion) %></div>
+                        <% } %>
+
+                        <% if (previewImagenes.length) { %>
+                          <div class="image-grid">
+                            <% previewImagenes.forEach(function (img, index) {
+                              const thumbSrc = img.pdfPreviewUrl || img.previewUrl || img.thumbnailUrl || img.url_imagen || img.url || "";
+                              const fullSrc = img.url_imagen || img.url || thumbSrc;
+                              const caption = clampText(img.filename || img.sysfilename || `Foto ${index + 1}`, 28);
+                            %>
+                              <a class="image-card" href="<%= esc(fullSrc) %>" target="_blank" rel="noreferrer" title="<%= esc(caption) %>">
+                                <% if (thumbSrc) { %>
+                                  <img src="<%= esc(thumbSrc) %>" alt="<%= esc(caption || 'Imagen') %>">
+                                <% } else { %>
+                                  <div class="image-fallback">Sin miniatura</div>
+                                <% } %>
+                                <% if (caption) { %>
+                                  <span class="image-caption"><%= esc(caption) %></span>
+                                <% } %>
+                              </a>
+                            <% }); %>
+                          </div>
+                        <% } else { %>
+                          <div class="empty" style="margin-top:6px;">Sin evidencia adjunta para este motivo.</div>
+                        <% } %>
+                      </div>
+                    <% }); %>
+                  <% } else { %>
+                    <div class="empty">Sin incidencias asociadas.</div>
+                  <% } %>
+                </div>
+              </div>
+            <% }); %>
+          </article>
+        <% }); %>
+      </div>
+
+      <div class="footer">
+        <div class="footer-block"><%= esc(footerLeft.join("\n")) %></div>
+        <div class="footer-center">Reporte profesional - Desarrollo EG</div>
+        <div class="footer-block" style="text-align:right;"><%= esc(footerRight.join("\n")) %></div>
+      </div>
+    </div>
+  </body>
+</html>
+

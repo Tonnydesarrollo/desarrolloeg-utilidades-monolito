@@ -20,7 +20,8 @@ const ALLOWED_PROXY_HOSTS = [
   /(^|\.)drive\.google\.com$/i,
   /(^|\.)google\.com$/i,
   /(^|\.)googleusercontent\.com$/i,
-  /(^|\.)appsheet\.com$/i
+  /(^|\.)appsheet\.com$/i,
+  /(^|\.)pcsinaloa\.gob\.mx$/i
 ];
 
 const isAllowedProxyHost = (hostname) => {
