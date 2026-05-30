@@ -5,6 +5,7 @@ const cache = {
   rows: [],
   sucursalesById: new Map(),
   municipiosById: new Map(),
+  documentacionIds: [],
 };
 
 const DOCUMENTO_CATALOGO = [
@@ -60,6 +61,43 @@ function getConfig() {
     estatalesTable: readEnv(["FALTANTES_LEY_TABLE_ESTATALES", "APPSHEET_TABLE_ESTATALES"], "ESTATALES"),
     sucursalesTable: readEnv(["FALTANTES_LEY_TABLE_SUCURSALES", "APPSHEET_TABLE_SUCURSALES"], "SUCURSALES"),
     municipiosTable: readEnv(["FALTANTES_LEY_TABLE_MUNICIPIOS", "APPSHEET_TABLE_MUNICIPIOS"], "MUNICIPIOS"),
+    capacitadoresAppId: readEnv(
+      [
+        "FALTANTES_LEY_CAPACITADORES_APPSHEET_APP_ID",
+        "WHATSAPP_CAP_APPSHEET_APP_ID",
+        "CONSTANCIAS_APPSHEET_APP_ID",
+        "PLANEACION_APPSHEET_APP_ID",
+        "APPSHEET_APP_ID",
+      ],
+      ""
+    ),
+    capacitadoresAccessKey: readEnv(
+      [
+        "FALTANTES_LEY_CAPACITADORES_APPSHEET_API_KEY",
+        "FALTANTES_LEY_CAPACITADORES_APPSHEET_ACCESS_KEY",
+        "WHATSAPP_CAP_APPSHEET_ACCESS_KEY",
+        "CONSTANCIAS_APPSHEET_API_KEY",
+        "PLANEACION_APPSHEET_API_KEY",
+        "APPSHEET_API_KEY",
+      ],
+      ""
+    ),
+    capacitadoresRegion: readEnv(
+      ["FALTANTES_LEY_CAPACITADORES_APPSHEET_REGION", "WHATSAPP_CAP_APPSHEET_REGION", "APPSHEET_REGION"],
+      "www.appsheet.com"
+    ),
+    capacitadoresLocale: readEnv(
+      ["FALTANTES_LEY_CAPACITADORES_APPSHEET_LOCALE", "WHATSAPP_CAP_APPSHEET_LOCALE", "APPSHEET_LOCALE"],
+      "es-MX"
+    ),
+    capacitadoresTimezone: readEnv(
+      [
+        "FALTANTES_LEY_CAPACITADORES_APPSHEET_TIMEZONE",
+        "WHATSAPP_CAP_APPSHEET_TIMEZONE",
+        "APPSHEET_TIMEZONE",
+      ],
+      "America/Mexico_City"
+    ),
   };
 }
 
@@ -241,6 +279,69 @@ function splitDocumentacionIds(text) {
     .filter(Boolean);
 }
 
+function getDocumentacionIdsFromRow(row) {
+  const raw = getFirstFlexible(row, ["DOCUMENTACION", "Documentacion"]);
+  return splitDocumentacionIds(raw);
+}
+
+function buildDocumentacionCatalogIds(rows) {
+  const catalogSource = [...rows]
+    .map((row) => getDocumentacionIdsFromRow(row))
+    .filter((ids) => ids.length >= DOCUMENTO_CATALOGO.length)
+    .sort((a, b) => b.length - a.length)[0];
+
+  return Array.isArray(catalogSource) && catalogSource.length >= DOCUMENTO_CATALOGO.length
+    ? catalogSource.slice(0, DOCUMENTO_CATALOGO.length)
+    : [];
+}
+
+function derivePendientesFromDocumentacion(documentacionIds, catalogDocumentacionIds) {
+  const present = new Set((documentacionIds || []).map((value) => String(value || "").trim()).filter(Boolean));
+  if (!Array.isArray(catalogDocumentacionIds) || !catalogDocumentacionIds.length) return [];
+
+  return catalogDocumentacionIds
+    .map((documentoId, index) => ({ documentoId, nombre: DOCUMENTO_CATALOGO[index] }))
+    .filter(({ documentoId }) => !present.has(documentoId))
+    .map(({ nombre }) => nombre)
+    .filter(Boolean);
+}
+
+function isBitacoraPendiente(value) {
+  return normalizeText(value).startsWith("BITACORA");
+}
+
+function stripBitacoraPrefix(value) {
+  return String(value || "")
+    .replace(/^BITACORA\s+/i, "")
+    .replace(/^BITACORA\s+/i, "")
+    .trim();
+}
+
+function groupBitacorasForDisplay(pendientes = []) {
+  const list = Array.isArray(pendientes) ? pendientes.map((value) => String(value || "").trim()).filter(Boolean) : [];
+  const bitacoras = list.filter(isBitacoraPendiente);
+  const otherPendientes = list.filter((value) => !isBitacoraPendiente(value));
+
+  if (!bitacoras.length) return list;
+
+  const bitacorasLimpias = bitacoras.map(stripBitacoraPrefix).filter(Boolean);
+  if (bitacorasLimpias.length === bitacoras.length && otherPendientes.length === 0) {
+    return ["TODAS LAS BITACORAS"];
+  }
+
+  return [
+    ...otherPendientes,
+    `BITACORAS: ${bitacorasLimpias.join(", ")}`,
+  ];
+}
+
+function splitEnumList(text) {
+  return String(text || "")
+    .split(",")
+    .map(cleanPiece)
+    .filter(Boolean);
+}
+
 function pickSucursalLabel(row) {
   const tienda = firstNonEmpty(
     getFirstFlexible(row, ["TIENDA", "Tienda"]),
@@ -281,20 +382,28 @@ function pickMunicipioLabel(row, fallbackRows = []) {
 }
 
 function buildExportRows(rows) {
-  const maxPendientes = rows.reduce((max, row) => Math.max(max, row.pendientes.length), 0);
-  const headers = ["SUCURSAL", "MUNICIPIO"];
+  const displayPendientesRows = rows.map((row) => ({
+    ...row,
+    pendientesDisplay: groupBitacorasForDisplay(row.pendientes || []),
+  }));
+  const headers = ["SUCURSAL", "MUNICIPIO", "ESTADO", "CAPACITADORES", "PENDIENTES"];
+  const maxPendientes = displayPendientesRows.reduce((max, row) => Math.max(max, row.pendientesDisplay.length), 0);
   for (let i = 1; i <= maxPendientes; i += 1) {
     headers.push(`Pendiente ${i}`);
   }
 
-  const exportRows = rows.map((row) => {
+  const exportRows = displayPendientesRows.map((row) => {
     const output = {
       SUCURSAL: row.sucursal,
       MUNICIPIO: row.municipio,
+      ESTADO: row.estadoFaltantes,
+      PENDIENTES: row.pendientesDisplay.join(", "),
+      PENDIENTES_DETALLE: (row.pendientes || []).join(", "),
+      CAPACITADORES: (row.capacitadores || []).join(", "),
     };
 
     for (let i = 1; i <= maxPendientes; i += 1) {
-      output[`Pendiente ${i}`] = row.pendientes[i - 1] || "";
+      output[`Pendiente ${i}`] = row.pendientesDisplay[i - 1] || "";
     }
 
     return output;
@@ -322,8 +431,29 @@ async function loadFaltantesLeyData() {
     fetchTable(config, config.municipiosTable),
   ]);
 
+  let capacitadoresSucursales = [];
+  if (config.capacitadoresAppId && config.capacitadoresAccessKey) {
+    try {
+      capacitadoresSucursales = await fetchTable(
+        {
+          ...config,
+          appsheetAppId: config.capacitadoresAppId,
+          appsheetAccessKey: config.capacitadoresAccessKey,
+          appsheetRegion: config.capacitadoresRegion,
+          appsheetLocale: config.capacitadoresLocale,
+          appsheetTimezone: config.capacitadoresTimezone,
+        },
+        config.sucursalesTable
+      );
+    } catch (_error) {
+      capacitadoresSucursales = [];
+    }
+  }
+
   const sucursalesById = makeMap(sucursales, ["Row ID", "ROW ID", "ID", "Id", "id"]);
   const municipiosById = makeMap(municipios, ["Row ID", "ROW ID", "ID", "Id", "id"]);
+  const capacitadoresSucursalesById = makeMap(capacitadoresSucursales, ["Row ID", "ROW ID", "ID", "Id", "id"]);
+  const documentacionIds = buildDocumentacionCatalogIds(estatales);
 
   const rows = estatales
     .map((row) => {
@@ -351,11 +481,21 @@ async function loadFaltantesLeyData() {
       const municipio = pickMunicipioLabel(municipioRow, [sucursalRow, row]);
       const faltantesTexto = getFirstFlexible(row, ["FALTANTES_TEXTO", "FALTANTES TEXTO"]);
       const documentacionRaw = getFirstFlexible(row, ["DOCUMENTACION", "Documentacion"]);
-      const documentacionIds = splitDocumentacionIds(documentacionRaw);
+      const documentacionIdsRow = splitDocumentacionIds(documentacionRaw);
+      const capacitadoresSucursalRow = resolveByCandidates(
+        getFirstFlexible(row, ["sucursal", "SUCURSAL", "Sucursal"]),
+        capacitadoresSucursalesById
+      );
+      const capacitadoresRaw = firstNonEmpty(
+        getFirstFlexible(capacitadoresSucursalRow, ["CAPACITADORES", "Capacitadores", "CAPACITADOR", "Capacitador"]),
+        getFirstFlexible(sucursalRow, ["CAPACITADORES", "Capacitadores", "CAPACITADOR", "Capacitador"]),
+        getFirstFlexible(row, ["CAPACITADORES", "Capacitadores", "CAPACITADOR", "Capacitador"])
+      );
+      const capacitadores = splitEnumList(capacitadoresRaw);
       const pendientes = splitPendientes(faltantesTexto || "");
       const derivedPendientes = pendientes.length
         ? pendientes.filter((pendiente) => !isNoPendientesMarker(pendiente))
-        : DOCUMENTO_CATALOGO.slice(Math.min(documentacionIds.length, DOCUMENTO_CATALOGO.length));
+        : derivePendientesFromDocumentacion(documentacionIdsRow, documentacionIds);
       if (!sucursal) return null;
       const estadoFaltantes = inferEstadoFaltantes(derivedPendientes, faltantesTexto);
 
@@ -364,6 +504,7 @@ async function loadFaltantesLeyData() {
         sucursal,
         municipio,
         pendientes: derivedPendientes,
+        capacitadores,
         estadoFaltantes,
       };
     })
@@ -378,6 +519,7 @@ async function loadFaltantesLeyData() {
   cache.rows = rows;
   cache.sucursalesById = sucursalesById;
   cache.municipiosById = municipiosById;
+  cache.documentacionIds = documentacionIds;
 
   return { config, rows, sucursalesById, municipiosById };
 }
@@ -398,16 +540,114 @@ function filterRowsByEstado(rows, estado) {
   return rows.filter((row) => row.estadoFaltantes === "SIN FALTANTES");
 }
 
-export async function getFaltantesLeyData(query = "", estado = "todas") {
+function normalizeSelectionList(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap(normalizeSelectionList);
+  }
+
+  return String(value || "")
+    .split(",")
+    .map(cleanPiece)
+    .map(normalizeText)
+    .filter(Boolean);
+}
+
+function rowMatchesAnySelections(rowValues, selectedValues) {
+  if (!selectedValues.length) return true;
+  const rowSet = new Set((rowValues || []).map((value) => normalizeText(value)));
+  return selectedValues.some((selectedValue) => {
+    for (const rowValue of rowSet) {
+      if (rowValue === selectedValue || rowValue.includes(selectedValue) || selectedValue.includes(rowValue)) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+function rowMatchesAllSelections(rowValues, selectedValues) {
+  if (!selectedValues.length) return true;
+  const rowSet = new Set((rowValues || []).map((value) => normalizeText(value)));
+  return selectedValues.every((selectedValue) => {
+    for (const rowValue of rowSet) {
+      if (rowValue === selectedValue || rowValue.includes(selectedValue) || selectedValue.includes(rowValue)) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+function getSortValue(row, key) {
+  const column = String(key || "").trim();
+  if (!column) return "";
+  if (column === "SUCURSAL") return row.sucursal || "";
+  if (column === "MUNICIPIO") return row.municipio || "";
+  if (column === "ESTADO") return row.estadoFaltantes || "";
+  if (column === "CAPACITADORES") return (row.capacitadores || []).join(", ");
+  if (column.startsWith("Pendiente ")) {
+    const index = Number(column.split(" ")[1] || 0) - 1;
+    return row.pendientes[index] || "";
+  }
+  return row[column] || "";
+}
+
+function sortRows(rows, sortBy = "", sortDir = "asc") {
+  const key = String(sortBy || "").trim();
+  if (!key) return rows;
+  const direction = String(sortDir || "asc").toLowerCase() === "desc" ? -1 : 1;
+
+  return [...rows].sort((a, b) => {
+    const aValue = String(getSortValue(a, key) || "");
+    const bValue = String(getSortValue(b, key) || "");
+    if (!aValue && !bValue) return 0;
+    if (!aValue) return 1;
+    if (!bValue) return -1;
+    return aValue.localeCompare(bValue, "es-MX", { numeric: true, sensitivity: "base" }) * direction;
+  });
+}
+
+function applyAdvancedFilters(rows, filters = {}) {
+  const municipio = normalizeText(filters.municipio || "");
+  const selectedCapacitadores = normalizeSelectionList(filters.capacitador || filters.capacitadores);
+  const selectedPendientes = normalizeSelectionList(filters.pendiente || filters.pendientes);
+
+  return rows.filter((row) => {
+    if (municipio && normalizeText(row.municipio || "") !== municipio) {
+      return false;
+    }
+
+    if (!rowMatchesAnySelections(row.capacitadores || [], selectedCapacitadores)) {
+      return false;
+    }
+
+    if (!rowMatchesAllSelections(row.pendientes || [], selectedPendientes)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+export async function getFaltantesLeyData(query = "", estado = "todas", filters = {}) {
   const { rows } = await loadFaltantesLeyData();
   const rowsByEstado = filterRowsByEstado(rows, estado);
   const normalizedQuery = normalizeText(query);
-  const filtered = !normalizedQuery
+  let filtered = !normalizedQuery
     ? rowsByEstado
     : rowsByEstado.filter((row) => {
-        const haystack = normalizeText([row.sucursal, row.municipio, ...row.pendientes].join(" "));
+        const haystack = normalizeText([
+          row.sucursal,
+          row.municipio,
+          row.estadoFaltantes,
+          ...(row.capacitadores || []),
+          ...(row.pendientes || []),
+        ].join(" "));
         return haystack.includes(normalizedQuery);
       });
+
+  filtered = applyAdvancedFilters(filtered, filters);
+  filtered = sortRows(filtered, filters.sortBy, filters.sortDir);
 
   const { headers, exportRows } = buildExportRows(filtered);
   return {
@@ -417,8 +657,8 @@ export async function getFaltantesLeyData(query = "", estado = "todas") {
   };
 }
 
-export async function getFaltantesLeyWorkbookBuffer(query = "", estado = "todas") {
-  const { columns, rows } = await getFaltantesLeyData(query, estado);
+export async function getFaltantesLeyWorkbookBuffer(query = "", estado = "todas", filters = {}) {
+  const { columns, rows } = await getFaltantesLeyData(query, estado, filters);
   const worksheet = XLSX.utils.json_to_sheet(rows, { header: columns });
   worksheet["!cols"] = columns.map((column, index) => ({
     wch: Math.max(column.length + 2, index < 2 ? 24 : 28),

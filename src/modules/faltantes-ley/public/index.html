@@ -1,244 +1,871 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
   <title>Faltantes Ley | Desarrollo EG</title>
   <style>
     :root {
-      --bg: #0f172a;
-      --bg-soft: #111827;
-      --panel: rgba(255,255,255,0.96);
-      --line: #d9e1ea;
+      --bg-a: #07111f;
+      --bg-b: #0f1f35;
+      --panel: rgba(255, 255, 255, 0.94);
+      --panel-strong: rgba(255, 255, 255, 0.98);
+      --line: rgba(148, 163, 184, 0.26);
       --ink: #0f172a;
+      --ink-soft: #475569;
       --muted: #64748b;
       --accent: #0f766e;
       --accent-2: #1d4ed8;
-      --shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
+      --warn: #c2410c;
+      --ok: #047857;
+      --shadow: 0 26px 70px rgba(15, 23, 42, 0.15);
+      --shadow-soft: 0 12px 24px rgba(15, 23, 42, 0.08);
+      --r-xl: 24px;
+      --r-lg: 18px;
+      --r-md: 14px;
     }
+
     * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+
     body {
       margin: 0;
-      min-height: 100vh;
-      font-family: Inter, system-ui, sans-serif;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at top left, rgba(13, 148, 136, 0.22), transparent 22%),
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.2), transparent 18%),
         radial-gradient(circle at top right, rgba(29, 78, 216, 0.18), transparent 20%),
-        linear-gradient(180deg, #eaf1f8 0%, #dce7f1 100%);
+        linear-gradient(180deg, #f7fbff 0%, #edf3f8 100%);
     }
+
     .shell {
-      max-width: 1600px;
+      position: relative;
+      max-width: 1660px;
       margin: 0 auto;
-      padding: 28px;
+      padding: 24px;
     }
-    .hero, .panel {
-      border-radius: 28px;
-      box-shadow: var(--shadow);
-      border: 1px solid rgba(217, 225, 234, 0.95);
+
+    .shell::before,
+    .shell::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      pointer-events: none;
+      opacity: .24;
+      z-index: 0;
+    }
+
+    .shell::before {
+      width: 280px;
+      height: 280px;
+      right: -110px;
+      top: -100px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, 0.38);
+      filter: blur(6px);
+    }
+
+    .shell::after {
+      width: 320px;
+      height: 320px;
+      left: -120px;
+      bottom: 80px;
+      border-radius: 999px;
+      background: rgba(29, 78, 216, 0.22);
+      filter: blur(6px);
+    }
+
+    .topbar,
+    .panel {
+      position: relative;
+      z-index: 1;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 22px;
+      margin-bottom: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-xl);
       background: var(--panel);
-      overflow: hidden;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
     }
-    .hero {
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 20px;
-      margin-bottom: 18px;
-      background:
-        linear-gradient(145deg, rgba(255,255,255,0.98), rgba(245,248,252,0.92));
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
     }
-    .hero-main, .hero-side {
-      padding: 28px;
+
+    .brand-logo {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      border-radius: 16px;
+      background: #fff;
+      border: 1px solid rgba(203, 213, 225, 0.8);
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+      padding: 6px;
     }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
     .eyebrow {
-      margin: 0 0 10px;
-      text-transform: uppercase;
-      letter-spacing: .2em;
-      font-size: .75rem;
-      font-weight: 900;
+      margin: 0 0 4px;
       color: var(--accent);
-    }
-    h1 {
-      margin: 0;
-      font-size: clamp(1.8rem, 4vw, 3rem);
-      line-height: 1;
+      font-size: .72rem;
+      font-weight: 900;
+      letter-spacing: .18em;
       text-transform: uppercase;
     }
-    .subtitle {
-      margin-top: 10px;
-      color: var(--muted);
-      line-height: 1.7;
-      max-width: 860px;
+
+    .title {
+      margin: 0;
+      color: var(--ink);
+      font-size: clamp(1.35rem, 2vw, 2rem);
+      line-height: 1;
+      letter-spacing: -.04em;
+      text-transform: uppercase;
     }
-    .hero-side {
-      color: #fff;
-      background: linear-gradient(140deg, #0f766e, #1d4ed8);
+
+    .title-sub {
+      margin: 7px 0 0;
+      color: var(--ink-soft);
+      font-size: .95rem;
+      line-height: 1.5;
     }
-    .hero-side ul {
-      margin: 14px 0 0;
-      padding-left: 18px;
-      line-height: 1.8;
-    }
-    .toolbar {
+
+    .topbar-badges {
       display: flex;
       flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(203, 213, 225, 0.9);
+      background: rgba(255,255,255,0.9);
+      color: var(--ink);
+      font-size: .84rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .panel {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--r-xl);
+      background: var(--panel-strong);
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(280px, 1fr) auto auto auto;
       gap: 12px;
       align-items: center;
-      padding: 18px 20px;
+      padding: 18px;
       border-bottom: 1px solid var(--line);
-      background: rgba(255,255,255,0.84);
+      background: linear-gradient(180deg, rgba(248,250,252,0.98), rgba(255,255,255,0.98));
     }
-    .toolbar input, .toolbar select {
-      flex: 1 1 240px;
-      border: 1px solid #cbd5e1;
-      border-radius: 16px;
-      padding: 14px 16px;
-      font: inherit;
-      outline: none;
+
+    .filters-panel {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfdff;
+    }
+
+    .filter-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid rgba(203, 213, 225, 0.9);
+      border-radius: 18px;
       background: #fff;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
     }
-    .toolbar input:focus, .toolbar select:focus {
-      border-color: var(--accent);
+
+    .filter-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .filter-label {
+      color: var(--muted);
+      font-size: .73rem;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .filter-help {
+      color: var(--ink-soft);
+      font-size: .8rem;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .filter-card.is-empty {
+      display: none;
+    }
+
+    .filter-summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      min-height: 48px;
+      padding: 0 15px;
+      border: 1px solid #d8e0ea;
+      border-radius: var(--r-md);
+      background: #fff;
+      color: var(--ink);
+      font-weight: 800;
+    }
+
+    .filter-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .filter-summary-count {
+      color: var(--muted);
+      font-size: .8rem;
+      font-weight: 800;
+      margin-left: auto;
+    }
+
+    .filter-panel {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid #d8e0ea;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: var(--shadow-soft);
+      max-height: 220px;
+      overflow: auto;
+    }
+
+    .filter-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    .filter-option:hover {
+      background: #f8fbff;
+    }
+
+    .filter-option input {
+      margin-top: 3px;
+      flex: 0 0 auto;
+    }
+
+    .filter-option span {
+      color: var(--ink);
+      font-size: .9rem;
+      line-height: 1.35;
+    }
+
+    .field,
+    .button {
+      min-height: 48px;
+      border-radius: var(--r-md);
+      font: inherit;
+    }
+
+    .field {
+      width: 100%;
+      border: 1px solid #d8e0ea;
+      background: #fff;
+      color: var(--ink);
+      padding: 0 15px;
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+
+    .field:focus {
+      border-color: rgba(15, 118, 110, 0.8);
       box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
     }
+
+    .search-wrap {
+      position: relative;
+    }
+
+    .search-wrap::before {
+      content: "Buscar";
+      position: absolute;
+      left: 15px;
+      top: -9px;
+      padding: 0 8px;
+      background: linear-gradient(180deg, rgba(248,250,252,0.98), rgba(255,255,255,0.98));
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    .field-search {
+      padding-left: 15px;
+    }
+
+    .field-select {
+      appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, #64748b 50%),
+        linear-gradient(135deg, #64748b 50%, transparent 50%);
+      background-position:
+        calc(100% - 22px) 20px,
+        calc(100% - 16px) 20px;
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+      padding-right: 44px;
+    }
+
     .button {
       border: 0;
-      border-radius: 16px;
-      padding: 14px 16px;
-      font: inherit;
-      font-weight: 800;
+      padding: 0 16px;
       cursor: pointer;
+      font-weight: 800;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
       transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
     }
-    .button:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(15, 23, 42, .1); }
-    .button-primary { background: linear-gradient(135deg, var(--accent), #14b8a6); color: #fff; }
-    .button-ghost { background: #fff; color: var(--ink); border: 1px solid #d8e0ea; }
+
+    .button:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .button-ghost {
+      border: 1px solid #d8e0ea;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .button-secondary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent-2), #60a5fa);
+      box-shadow: 0 14px 26px rgba(29, 78, 216, 0.22);
+    }
+
+    .button-primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), #14b8a6);
+      box-shadow: 0 14px 26px rgba(15, 118, 110, 0.22);
+    }
+
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .summary-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(203, 213, 225, 0.9);
+      background: #fff;
+      color: var(--ink);
+      font-size: .84rem;
+      font-weight: 800;
+    }
+
+    .chip strong {
+      color: var(--ink);
+      font-weight: 900;
+    }
+
+    .chip-ok {
+      background: #ecfdf5;
+      color: var(--ok);
+      border-color: rgba(16, 185, 129, 0.18);
+    }
+
+    .chip-warn {
+      background: #fff7ed;
+      color: var(--warn);
+      border-color: rgba(249, 115, 22, 0.18);
+    }
+
     .meta {
       color: var(--muted);
       font-size: .9rem;
       font-weight: 600;
     }
-    .table-wrap {
-      overflow: auto;
-      max-height: calc(100vh - 280px);
-      background: #fff;
+
+    .meta.error {
+      color: #b91c1c;
+      font-weight: 800;
     }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      flex-wrap: wrap;
+    }
+
+    .pager-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pager-info {
+      color: var(--ink-soft);
+      font-size: .9rem;
+      font-weight: 700;
+    }
+
+    .pager .field {
+      min-height: 40px;
+      border-radius: 12px;
+    }
+
+    .pager .button {
+      min-height: 40px;
+      border-radius: 12px;
+      padding-inline: 14px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: #fff;
+      max-width: 100%;
+      -webkit-overflow-scrolling: touch;
+    }
+
     table {
+      width: max-content;
+      min-width: 100%;
+      min-width: 860px;
       border-collapse: separate;
       border-spacing: 0;
-      width: 100%;
-      min-width: 900px;
+      table-layout: fixed;
     }
+
     thead th {
       position: sticky;
       top: 0;
       z-index: 2;
-      background: #0f172a;
+      background: linear-gradient(180deg, #0f172a, #111827);
       color: #fff;
       text-align: left;
-      padding: 14px 16px;
-      font-size: .78rem;
+      padding: 15px 16px;
+      font-size: .77rem;
       text-transform: uppercase;
-      letter-spacing: .12em;
+      letter-spacing: .13em;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
     }
+
+    .th-button {
+      width: 100%;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      font: inherit;
+      font-weight: 900;
+      letter-spacing: inherit;
+      text-transform: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .th-indicator {
+      color: rgba(255, 255, 255, 0.72);
+      font-size: .92rem;
+      letter-spacing: 0;
+      flex: 0 0 auto;
+    }
+
+    .th-indicator.active {
+      color: #fff;
+    }
+
+    thead th:first-child { border-top-left-radius: 14px; }
+    thead th:last-child { border-top-right-radius: 14px; }
+
+    thead th.pending-group-head {
+      text-align: center;
+      letter-spacing: .2em;
+      font-size: .82rem;
+      border-bottom: 0;
+      border-left: 1px solid rgba(255,255,255,0.08);
+      border-right: 1px solid rgba(255,255,255,0.08);
+    }
+
+    thead tr:nth-child(2) th {
+      width: 92px;
+      font-size: .72rem;
+      padding-top: 12px;
+      padding-bottom: 12px;
+      border-top: 0;
+    }
+
     tbody td {
-      border-bottom: 1px solid #eef2f7;
-      padding: 12px 16px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      padding: 10px 12px;
       vertical-align: top;
+      line-height: 1.4;
+      min-width: 0;
+      overflow: hidden;
     }
-    tbody tr:nth-child(even) { background: #f8fbff; }
+
+    tbody tr:nth-child(even) td { background: #fbfdff; }
+    tbody tr:hover td { background: #eef7ff; }
+
+    tbody td.pending-cell-filled {
+      background: #fff;
+    }
+
+    tbody tr td.pending-cell-empty {
+      background: linear-gradient(180deg, #dcfce7, #bbf7d0);
+      border-color: rgba(16, 185, 129, 0.18);
+      padding: 0;
+    }
+
+    tbody tr:nth-child(even) td.pending-cell-empty {
+      background: linear-gradient(180deg, #dcfce7, #bbf7d0);
+    }
+
+    tbody tr:hover td.pending-cell-empty {
+      background: linear-gradient(180deg, #bbf7d0, #86efac);
+    }
+
+    thead th:nth-child(1),
+    tbody td:nth-child(1) { width: 180px; }
+
+    thead th:nth-child(2),
+    tbody td:nth-child(2) { width: 110px; }
+
+    thead th:nth-child(3),
+    tbody td:nth-child(3) { width: 95px; }
+
+    thead th:nth-child(4),
+    tbody td:nth-child(4) { width: 160px; }
+
+    thead th:nth-child(n + 5),
+    tbody td:nth-child(n + 5) { width: 92px; }
+
+    .table-sucursal { font-weight: 800; }
+    .table-municipio { color: var(--ink-soft); }
+
+    .pending-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .pending-list.compact .pill {
+      max-width: 100%;
+      white-space: normal;
+      text-align: left;
+    }
+
+    .capacitador-list .pill {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: rgba(59, 130, 246, 0.18);
+    }
+
+    .record-details .pending-list {
+      margin-top: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #1e3a8a;
+      border: 1px solid rgba(37, 99, 235, 0.14);
+      font-size: .82rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .pill-success {
+      background: #ecfdf5;
+      color: #047857;
+      border-color: rgba(16, 185, 129, 0.18);
+    }
+
+    .pill-warning {
+      background: #fff7ed;
+      color: #c2410c;
+      border-color: rgba(249, 115, 22, 0.18);
+    }
+
     .empty {
-      padding: 32px;
+      padding: 52px 24px;
       color: var(--muted);
       text-align: center;
     }
-    .error {
-      color: #b91c1c;
-      font-weight: 700;
+
+    .empty h2 {
+      margin: 0 0 8px;
+      color: var(--ink);
+      font-size: 1.1rem;
     }
-    @media (max-width: 1100px) {
-      .hero { grid-template-columns: 1fr; }
+
+    .empty p {
+      margin: 0;
+      line-height: 1.6;
     }
-    @media (max-width: 700px) {
-      .shell { padding: 16px; }
-      .hero-main, .hero-side { padding: 20px; }
+
+    @media (max-width: 1240px) {
+      .toolbar { grid-template-columns: 1fr 1fr auto auto; }
+      .filters-panel { grid-template-columns: 1fr; }
+      .summary { align-items: flex-start; }
+    }
+
+    @media (max-width: 800px) {
+      .shell { padding: 14px; }
+      .topbar { flex-direction: column; align-items: flex-start; }
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+      .filters-panel {
+        grid-template-columns: 1fr;
+      }
+      .toolbar .button,
+      .toolbar .field {
+        width: 100%;
+      }
+      table {
+        min-width: 0;
+      }
     }
   </style>
 </head>
 <body>
   <div class="shell">
-    <section class="hero">
-      <div class="hero-main">
-        <p class="eyebrow">Desarrollo EG</p>
-        <h1>Faltantes Ley</h1>
-        <p class="subtitle">
-          Tabla de sucursales pendientes leída desde AppSheet.
-          Se filtra la tabla <strong>ESTATALES</strong> con <strong>PIPC = PENDIENTE</strong>,
-          <strong>sucursal.empresa = 1</strong> y se separa <strong>FALTANTES_TEXTO</strong> en columnas.
-        </p>
+    <header class="topbar">
+      <div class="brand">
+        <img id="brand-logo" class="brand-logo" alt="Logo Desarrollo EG">
+        <div class="brand-copy">
+          <p class="eyebrow">Desarrollo EG</p>
+          <h1 class="title">Faltantes Ley</h1>
+          <p class="title-sub">Consulta y exporta las sucursales con documentación pendiente.</p>
+        </div>
       </div>
-      <aside class="hero-side">
-        <p class="eyebrow" style="color:#d6fff9;">Salida</p>
-        <strong>Formato tabla + Excel</strong>
-        <ul>
-          <li>SUCURSAL</li>
-          <li>MUNICIPIO</li>
-          <li>Pendiente 1, Pendiente 2, Pendiente 3...</li>
-          <li>Exportación a .xlsx</li>
-        </ul>
-      </aside>
-    </section>
+      <div class="topbar-badges">
+        <span class="badge">AppSheet</span>
+        <span class="badge">Exportación Excel</span>
+        <span class="badge">Monolito</span>
+      </div>
+    </header>
 
     <section class="panel">
       <div class="toolbar">
-        <select id="estado">
-          <option value="todas">Todas</option>
+        <select id="estado" class="field field-select" aria-label="Filtrar por estado">
+          <option value="todas">Todas las sucursales</option>
           <option value="sin faltantes">Sin faltantes</option>
-          <option value="faltantes">Faltantes</option>
+          <option value="faltantes">Solo faltantes</option>
         </select>
-        <input id="search" type="search" placeholder="Buscar sucursal, municipio o pendiente">
-        <button class="button button-ghost" id="refresh">Actualizar</button>
-        <a class="button button-primary" id="export" href="#" target="_blank" rel="noreferrer">Exportar Excel</a>
+
+        <div class="search-wrap">
+          <input id="search" class="field field-search" type="search" placeholder="Buscar sucursal, municipio o pendiente">
+        </div>
+
+        <button class="button button-ghost" id="refresh" type="button">Actualizar</button>
+        <a class="button button-secondary" id="export" href="#" target="_blank" rel="noreferrer">Exportar Excel</a>
+        <button class="button button-primary" id="clear" type="button">Limpiar</button>
+      </div>
+
+      <div class="filters-panel" aria-label="Filtros avanzados">
+        <div class="filter-card">
+          <label class="filter-label" for="municipio">Municipio</label>
+          <select id="municipio" class="field field-select">
+            <option value="">Todos los municipios</option>
+          </select>
+          <span class="filter-help">Filtra por un solo municipio.</span>
+        </div>
+
+        <details class="filter-card">
+          <summary class="filter-summary">
+            <span class="filter-label">Capacitador</span>
+            <span class="filter-summary-count" id="capacitador-count">0 seleccionados</span>
+          </summary>
+          <div class="filter-panel" id="capacitador-list"></div>
+          <span class="filter-help">Abre el panel y marca uno o varios capacitadores.</span>
+        </details>
+
+        <details class="filter-card">
+          <summary class="filter-summary">
+            <span class="filter-label">Pendiente</span>
+            <span class="filter-summary-count" id="pendiente-count">0 seleccionados</span>
+          </summary>
+          <div class="filter-panel" id="pendiente-list"></div>
+          <span class="filter-help">Puedes elegir uno o varios pendientes a la vez.</span>
+        </details>
+      </div>
+
+      <div class="summary">
+        <div class="summary-chips">
+          <span class="chip chip-ok">Cargados: <strong id="metric-total">0</strong></span>
+          <span class="chip chip-warn">Visibles: <strong id="metric-visible">0</strong></span>
+          <span class="chip">Con pendientes: <strong id="metric-faltantes">0</strong></span>
+        </div>
         <span class="meta" id="status">Cargando datos...</span>
       </div>
+
+      <div class="pager">
+        <div class="pager-group">
+          <button class="button button-ghost" id="prev-page" type="button">Anterior</button>
+          <button class="button button-ghost" id="next-page" type="button">Siguiente</button>
+          <span class="pager-info" id="page-info">Página 1 de 1</span>
+        </div>
+        <div class="pager-group">
+          <label class="pager-info" for="page-size">Filas por página</label>
+          <select id="page-size" class="field field-select" style="width: 130px;">
+            <option value="10">10</option>
+            <option value="15" selected>15</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+      </div>
+
       <div class="table-wrap">
-        <table>
+        <table aria-label="Tabla de faltantes ley">
           <thead>
             <tr id="head-row"></tr>
           </thead>
           <tbody id="body"></tbody>
         </table>
-        <div id="empty" class="empty" hidden>No hay registros para mostrar.</div>
+        <div id="empty" class="empty" hidden>
+          <h2>No hay registros para mostrar</h2>
+          <p>Prueba limpiar la búsqueda o cambiar el estado para volver a cargar resultados.</p>
+        </div>
       </div>
     </section>
   </div>
 
   <script>
     const state = {
-      rows: [],
+      allRows: [],
       filteredRows: [],
-      columns: ["SUCURSAL", "MUNICIPIO"],
+      columns: [],
       query: "",
       estado: "todas",
+      municipio: "",
+      capacitadores: [],
+      pendientes: [],
+      sortBy: "SUCURSAL",
+      sortDir: "asc",
+      page: 1,
+      pageSize: 15,
+      municipioOptions: [],
+      capacitadorOptions: [],
+      pendienteOptions: [],
+      requestSeq: 0,
     };
 
     const routeBase = window.location.pathname.replace(/\/$/, "");
     const apiUrl = (path) => `${routeBase}/api/${path}`;
 
     const els = {
+      brandLogo: document.getElementById("brand-logo"),
       search: document.getElementById("search"),
       estado: document.getElementById("estado"),
+      municipio: document.getElementById("municipio"),
+      capacitadorList: document.getElementById("capacitador-list"),
+      pendienteList: document.getElementById("pendiente-list"),
+      capacitadorCount: document.getElementById("capacitador-count"),
+      pendienteCount: document.getElementById("pendiente-count"),
       refresh: document.getElementById("refresh"),
+      clear: document.getElementById("clear"),
       export: document.getElementById("export"),
       status: document.getElementById("status"),
       headRow: document.getElementById("head-row"),
       body: document.getElementById("body"),
       empty: document.getElementById("empty"),
+      metricTotal: document.getElementById("metric-total"),
+      metricVisible: document.getElementById("metric-visible"),
+      metricFaltantes: document.getElementById("metric-faltantes"),
+      prevPage: document.getElementById("prev-page"),
+      nextPage: document.getElementById("next-page"),
+      pageInfo: document.getElementById("page-info"),
+      pageSize: document.getElementById("page-size"),
     };
+
+    els.brandLogo.src = `${routeBase}/assets/logo.png`;
+    els.brandLogo.addEventListener("error", () => {
+      els.brandLogo.style.display = "none";
+    });
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
 
     function setStatus(text, error = false) {
       els.status.textContent = text;
@@ -255,49 +882,288 @@
       });
     }
 
+    function getEstado(row) {
+      return String(row.ESTADO || row.estadoFaltantes || "").toUpperCase();
+    }
+
+    function getDisplayColumns(columns) {
+      return columns.filter((column) => column !== "PENDIENTES" && column !== "PENDIENTES_DETALLE");
+    }
+
+    function normalizeText(value = "") {
+      return String(value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toUpperCase();
+    }
+
+    function splitList(value) {
+      return String(value || "")
+        .split(",")
+        .map((piece) => piece.trim())
+        .filter(Boolean);
+    }
+
+    function uniqueSorted(values) {
+      return [...new Set(values.filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, "es-MX", { numeric: true, sensitivity: "base" })
+      );
+    }
+
+    function getSelectedValues(container) {
+      return Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+        .map((input) => input.value)
+        .filter(Boolean);
+    }
+
+    function setSelectedValues(container, values) {
+      const set = new Set(values);
+      Array.from(container.querySelectorAll('input[type="checkbox"]')).forEach((input) => {
+        input.checked = set.has(input.value);
+      });
+    }
+
+    function getPendingColumns(columns) {
+      return columns.filter((column) => String(column).startsWith("Pendiente "));
+    }
+
+    function getRowCapacitadores(row) {
+      return splitList(row.CAPACITADORES || row.capacitadores || "");
+    }
+
+    function getRowPendientes(row) {
+      return splitList(
+        row.PENDIENTES_DETALLE ||
+          row.pendientesDetalle ||
+          row.PENDIENTES ||
+          row.pendientes ||
+          getPendingColumns(state.columns)
+            .map((column) => String(row[column] || "").trim())
+            .filter(Boolean)
+            .join(", ")
+      )
+        .filter(Boolean);
+    }
+
+    function rowMatchesAnySelections(rowValues, selectedValues) {
+      if (!selectedValues.length) return true;
+      const rowSet = new Set((rowValues || []).map((value) => normalizeText(value)));
+      return selectedValues.some((selectedValue) => {
+        for (const rowValue of rowSet) {
+          if (rowValue === selectedValue || rowValue.includes(selectedValue) || selectedValue.includes(rowValue)) {
+            return true;
+          }
+        }
+        return false;
+      });
+    }
+
+    function getSortValue(row, key) {
+      const column = String(key || "").trim();
+      if (!column) return "";
+      if (column === "SUCURSAL") return row.SUCURSAL || "";
+      if (column === "MUNICIPIO") return row.MUNICIPIO || "";
+      if (column === "ESTADO") return row.ESTADO || row.estadoFaltantes || "";
+      if (column === "CAPACITADORES") return row.CAPACITADORES || "";
+      if (column.startsWith("Pendiente ")) return row[column] || "";
+      return row[column] || "";
+    }
+
+    function sortRows(rows, sortBy = "", sortDir = "asc") {
+      const key = String(sortBy || "").trim();
+      if (!key) return rows;
+      const direction = String(sortDir || "asc").toLowerCase() === "desc" ? -1 : 1;
+
+      return [...rows].sort((a, b) => {
+        const aValue = String(getSortValue(a, key) || "");
+        const bValue = String(getSortValue(b, key) || "");
+        if (!aValue && !bValue) return 0;
+        if (!aValue) return 1;
+        if (!bValue) return -1;
+        return aValue.localeCompare(bValue, "es-MX", { numeric: true, sensitivity: "base" }) * direction;
+      });
+    }
+
     function renderHead(columns) {
-      els.headRow.innerHTML = columns.map((column) => `<th>${column}</th>`).join("");
+      const tableHead = els.headRow.closest("thead");
+      if (!tableHead) return;
+
+      const pendingColumns = columns.filter((column) => String(column).startsWith("Pendiente "));
+      const baseColumns = columns.filter((column) => !String(column).startsWith("Pendiente "));
+
+      if (!pendingColumns.length) {
+        tableHead.innerHTML = `
+          <tr>
+            ${baseColumns
+              .map((column) => `
+                <th>
+                  <button type="button" class="th-button" data-sort="${escapeHtml(column)}" aria-label="Ordenar por ${escapeHtml(column)}">
+                    <span>${escapeHtml(column)}</span>
+                    <span class="th-indicator ${state.sortBy === column ? "active" : ""}">${state.sortBy === column ? (state.sortDir === "asc" ? "&uarr;" : "&darr;") : "&#8645;"}</span>
+                  </button>
+                </th>`)
+              .join("")}
+          </tr>`;
+        return;
+      }
+
+      const baseHeader = baseColumns
+        .map((column) => {
+          const active = state.sortBy === column;
+          const indicator = active ? (state.sortDir === "asc" ? "&uarr;" : "&darr;") : "&#8645;";
+          return `
+            <th rowspan="2">
+              <button type="button" class="th-button" data-sort="${escapeHtml(column)}" aria-label="Ordenar por ${escapeHtml(column)}">
+                <span>${escapeHtml(column)}</span>
+                <span class="th-indicator ${active ? "active" : ""}">${indicator}</span>
+              </button>
+            </th>`;
+        })
+        .join("");
+
+      const pendingHeader = pendingColumns
+        .map((column) => {
+          const active = state.sortBy === column;
+          const indicator = active ? (state.sortDir === "asc" ? "&uarr;" : "&darr;") : "&#8645;";
+          return `
+            <th>
+              <button type="button" class="th-button" data-sort="${escapeHtml(column)}" aria-label="Ordenar por ${escapeHtml(column)}">
+                <span>${escapeHtml(column)}</span>
+                <span class="th-indicator ${active ? "active" : ""}">${indicator}</span>
+              </button>
+            </th>`;
+        })
+        .join("");
+
+      tableHead.innerHTML = `
+        <tr>
+          ${baseHeader}
+          <th colspan="${pendingColumns.length}" class="pending-group-head">PENDIENTES</th>
+        </tr>
+        <tr>
+          ${pendingHeader}
+        </tr>`;
+    }
+
+    function renderPendingCells(row, pendingColumns) {
+      if (!pendingColumns.length) return "";
+
+      let cells = "";
+      let index = 0;
+      while (index < pendingColumns.length) {
+        const column = pendingColumns[index];
+        const value = String(row[column] || "").trim();
+        if (value) {
+          cells += `<td class="pending-cell pending-cell-filled"><span class="pill pill-warning">${escapeHtml(value)}</span></td>`;
+          index += 1;
+          continue;
+        }
+
+        let end = index + 1;
+        while (end < pendingColumns.length && !String(row[pendingColumns[end]] || "").trim()) {
+          end += 1;
+        }
+
+        const colspan = end - index;
+        cells += `<td class="pending-cell pending-cell-empty" colspan="${colspan}" aria-label="Sin faltantes"></td>`;
+        index = end;
+      }
+
+      return cells;
     }
 
     function renderBody(rows, columns) {
       if (!rows.length) {
         els.body.innerHTML = "";
         els.empty.hidden = false;
+        els.pageInfo.textContent = "Página 0 de 0";
         return;
       }
 
+      const pendingColumns = columns.filter((column) => String(column).startsWith("Pendiente "));
+      const baseColumns = columns.filter((column) => !String(column).startsWith("Pendiente "));
+
       els.empty.hidden = true;
       els.body.innerHTML = rows
-        .map(
-          (row) => `
-            <tr>
-              ${columns
-                .map((column) => {
-                  const value = row[column] || "";
-                  return `<td>${String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>`;
-                })
-                .join("")}
-            </tr>`
-        )
+        .map((row) => `
+          <tr>
+            ${baseColumns
+              .map((column, index) => {
+                const value = row[column] || "";
+                if (index === 0) {
+                  return `<td class="table-sucursal">${escapeHtml(value)}</td>`;
+                }
+                if (index === 1) {
+                  return `<td class="table-municipio">${escapeHtml(value)}</td>`;
+                }
+                if (column === "ESTADO") {
+                  const pillClass = getEstado(row).includes("SIN") ? "pill pill-success" : "pill pill-warning";
+                  return `<td><span class="${pillClass}">${escapeHtml(value)}</span></td>`;
+                }
+                if (column === "CAPACITADORES") {
+                  const pieces = splitList(value);
+                  return `<td>${pieces.length
+                    ? `<div class="pending-list compact capacitador-list">${pieces.map((piece) => `<span class="pill">${escapeHtml(piece)}</span>`).join("")}</div>`
+                    : "<span class='meta'>Sin datos</span>"}</td>`;
+                }
+                return `<td>${escapeHtml(value)}</td>`;
+              })
+              .join("")}
+            ${renderPendingCells(row, pendingColumns)}
+          </tr>`)
         .join("");
+    }
+
+    function updatePager(totalRows) {
+      const totalPages = Math.max(1, Math.ceil(totalRows / state.pageSize));
+      if (state.page > totalPages) {
+        state.page = totalPages;
+      }
+      if (state.page < 1) {
+        state.page = 1;
+      }
+
+      const start = totalRows === 0 ? 0 : (state.page - 1) * state.pageSize + 1;
+      const end = totalRows === 0 ? 0 : Math.min(totalRows, state.page * state.pageSize);
+
+      els.pageInfo.textContent = totalRows === 0
+        ? "Sin páginas"
+        : `Página ${state.page} de ${totalPages} · ${start}-${end} de ${totalRows}`;
+      els.prevPage.disabled = state.page <= 1 || totalRows === 0;
+      els.nextPage.disabled = state.page >= totalPages || totalRows === 0;
     }
 
     function applyFilter() {
       const q = state.query.trim().toLowerCase();
       state.filteredRows = !q
-        ? [...state.rows]
-        : state.rows.filter((row) =>
+        ? [...state.allRows]
+        : state.allRows.filter((row) =>
             state.columns.some((column) => String(row[column] || "").toLowerCase().includes(q)) ||
-            String(row.estadoFaltantes || "").toLowerCase().includes(q)
+            getEstado(row).toLowerCase().includes(q)
           );
-      renderBody(state.filteredRows, state.columns);
+
+      const pendientes = state.filteredRows.filter((row) => getEstado(row) === "FALTANTES").length;
+      els.metricTotal.textContent = String(state.allRows.length);
+      els.metricVisible.textContent = String(state.filteredRows.length);
+      els.metricFaltantes.textContent = String(pendientes);
+
+      updatePager(state.filteredRows.length);
+
       const estadoLabel =
         state.estado === "todas"
           ? "todas"
           : state.estado === "faltantes"
-            ? "faltantes"
+            ? "solo faltantes"
             : "sin faltantes";
-      setStatus(`${state.filteredRows.length} de ${state.rows.length} registros | ${estadoLabel}`);
+
+      setStatus(`${state.filteredRows.length} de ${state.allRows.length} registros visibles · ${estadoLabel}`);
+
+      const pageStart = (state.page - 1) * state.pageSize;
+      const pageRows = state.filteredRows.slice(pageStart, pageStart + state.pageSize);
+      renderBody(pageRows, state.columns);
+
       const params = new URLSearchParams();
       if (q) params.set("q", state.query.trim());
       if (state.estado !== "todas") params.set("estado", state.estado);
@@ -310,10 +1176,21 @@
       const params = new URLSearchParams();
       if (state.estado !== "todas") params.set("estado", state.estado);
       const data = await fetchJson(apiUrl(`data${params.toString() ? `?${params.toString()}` : ""}`));
-      state.rows = Array.isArray(data.rows) ? data.rows : [];
-      state.columns = Array.isArray(data.columns) && data.columns.length ? data.columns : ["SUCURSAL", "MUNICIPIO"];
+      state.allRows = Array.isArray(data.rows) ? data.rows : [];
+      state.columns = getDisplayColumns(Array.isArray(data.columns) ? data.columns : ["SUCURSAL", "MUNICIPIO"]);
       renderHead(state.columns);
       applyFilter();
+    }
+
+    function clearFilters() {
+      state.query = "";
+      state.estado = "todas";
+      state.page = 1;
+      els.search.value = "";
+      els.estado.value = "todas";
+      loadData().catch((error) => {
+        setStatus(error.message || "No se pudieron cargar los datos.", true);
+      });
     }
 
     els.search.addEventListener("input", () => {
@@ -323,18 +1200,316 @@
 
     els.estado.addEventListener("change", () => {
       state.estado = els.estado.value || "todas";
+      state.page = 1;
+      applyFilter();
+    });
+
+    els.pageSize.addEventListener("change", () => {
+      state.pageSize = Number(els.pageSize.value) || 15;
+      state.page = 1;
+      applyFilter();
+    });
+
+    els.prevPage.addEventListener("click", () => {
+      if (state.page > 1) {
+        state.page -= 1;
+        applyFilter();
+      }
+    });
+
+    els.nextPage.addEventListener("click", () => {
+      const totalPages = Math.max(1, Math.ceil(state.filteredRows.length / state.pageSize));
+      if (state.page < totalPages) {
+        state.page += 1;
+        applyFilter();
+      }
+    });
+
+    els.refresh.addEventListener("click", () => {
       loadData().catch((error) => {
         setStatus(error.message || "No se pudieron cargar los datos.", true);
       });
     });
 
-    els.refresh.addEventListener("click", async () => {
-      try {
-        await loadData();
-      } catch (error) {
-        setStatus(error.message || "No se pudieron cargar los datos.", true);
+    els.clear.addEventListener("click", clearFilters);
+
+    function updatePager(totalRows) {
+      const totalPages = Math.max(1, Math.ceil(totalRows / state.pageSize));
+      if (state.page > totalPages) {
+        state.page = totalPages;
       }
+      if (state.page < 1) {
+        state.page = 1;
+      }
+
+      const start = totalRows === 0 ? 0 : (state.page - 1) * state.pageSize + 1;
+      const end = totalRows === 0 ? 0 : Math.min(totalRows, state.page * state.pageSize);
+
+      els.pageInfo.textContent = totalRows === 0
+        ? "Sin paginas"
+        : `Página ${state.page} de ${totalPages} · ${start}-${end} de ${totalRows}`;
+      els.prevPage.disabled = state.page <= 1 || totalRows === 0;
+      els.nextPage.disabled = state.page >= totalPages || totalRows === 0;
+    }
+
+    function buildSearchHaystack(row) {
+      return normalizeText(Object.values(row).join(" "));
+    }
+
+    function renderCheckboxGroup(container, values, groupName, emptyLabel) {
+      if (!values.length) {
+        container.innerHTML = `<div class="filter-help">${escapeHtml(emptyLabel)}</div>`;
+        return;
+      }
+
+      container.innerHTML = values
+        .map((value) => `
+          <label class="filter-option">
+            <input type="checkbox" value="${escapeHtml(value)}" data-group="${groupName}">
+            <span>${escapeHtml(value)}</span>
+          </label>`)
+        .join("");
+    }
+
+    function renderFilterOptions() {
+      state.municipioOptions = uniqueSorted(state.allRows.map((row) => String(row.MUNICIPIO || "").trim()));
+      state.capacitadorOptions = uniqueSorted(state.allRows.flatMap((row) => getRowCapacitadores(row)));
+      state.pendienteOptions = uniqueSorted(state.allRows.flatMap((row) => getRowPendientes(row)));
+
+      els.municipio.innerHTML = [
+        `<option value="">Todos los municipios</option>`,
+        ...state.municipioOptions.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`),
+      ].join("");
+      renderCheckboxGroup(els.capacitadorList, state.capacitadorOptions, "capacitador", "Sin capacitadores disponibles");
+      renderCheckboxGroup(els.pendienteList, state.pendienteOptions, "pendiente", "Sin pendientes disponibles");
+
+      els.municipio.value = state.municipio;
+      setSelectedValues(els.capacitadorList, state.capacitadores);
+      setSelectedValues(els.pendienteList, state.pendientes);
+      els.capacitadorCount.textContent = `${state.capacitadores.length} seleccionados`;
+      els.pendienteCount.textContent = `${state.pendientes.length} seleccionados`;
+
+      const capacitadorCard = els.capacitadorList.closest(".filter-card");
+      if (capacitadorCard) {
+        capacitadorCard.classList.toggle("is-empty", state.capacitadorOptions.length === 0);
+      }
+    }
+
+    function buildExportHref() {
+      const params = new URLSearchParams();
+      if (state.query.trim()) params.set("q", state.query.trim());
+      if (state.estado !== "todas") params.set("estado", state.estado);
+      if (state.municipio) params.set("municipio", state.municipio);
+      if (state.sortBy) params.set("sortBy", state.sortBy);
+      if (state.sortDir) params.set("sortDir", state.sortDir);
+      state.capacitadores.forEach((value) => params.append("capacitador", value));
+      state.pendientes.forEach((value) => params.append("pendiente", value));
+      const queryString = params.toString();
+      return `${apiUrl(`export.xlsx${queryString ? `?${queryString}` : ""}`)}`;
+    }
+
+    function applyFilter() {
+      const q = normalizeText(state.query);
+      const estado = String(state.estado || "todas").toLowerCase();
+      const municipio = normalizeText(state.municipio);
+
+      let filtered = [...state.allRows];
+
+      if (estado !== "todas") {
+        filtered = filtered.filter((row) => {
+          const rowEstado = getEstado(row);
+          return estado === "faltantes" ? rowEstado === "FALTANTES" : rowEstado === "SIN FALTANTES";
+        });
+      }
+
+      if (q) {
+        filtered = filtered.filter((row) => buildSearchHaystack(row).includes(q));
+      }
+
+      if (municipio) {
+        filtered = filtered.filter((row) => normalizeText(row.MUNICIPIO || "") === municipio);
+      }
+
+      if (state.capacitadores.length) {
+        filtered = filtered.filter((row) => rowMatchesAnySelections(getRowCapacitadores(row), state.capacitadores));
+      }
+
+      if (state.pendientes.length) {
+        filtered = filtered.filter((row) => rowMatchesAllSelections(getRowPendientes(row), state.pendientes));
+      }
+
+      filtered = sortRows(filtered, state.sortBy, state.sortDir);
+      state.filteredRows = filtered;
+
+      els.metricTotal.textContent = String(state.allRows.length);
+      els.metricVisible.textContent = String(filtered.length);
+      els.metricFaltantes.textContent = String(filtered.filter((row) => getEstado(row) === "FALTANTES").length);
+
+      renderHead(state.columns);
+      updatePager(filtered.length);
+
+      const estadoLabel =
+        state.estado === "todas"
+          ? "todas"
+          : state.estado === "faltantes"
+            ? "solo faltantes"
+            : "sin faltantes";
+
+      const filterBits = [];
+      if (state.municipio) filterBits.push(`municipio ${state.municipio}`);
+      if (state.capacitadores.length) filterBits.push(`${state.capacitadores.length} capacitador(es)`);
+      if (state.pendientes.length) filterBits.push(`${state.pendientes.length} pendiente(s)`);
+      const filterLabel = filterBits.length ? ` · ${filterBits.join(" | ")}` : "";
+
+      setStatus(`${filtered.length} de ${state.allRows.length} registros visibles · ${estadoLabel}${filterLabel}`);
+
+      const pageStart = (state.page - 1) * state.pageSize;
+      const pageRows = filtered.slice(pageStart, pageStart + state.pageSize);
+      renderBody(pageRows, state.columns);
+      els.export.href = buildExportHref();
+    }
+
+    function loadData() {
+      setStatus("Cargando datos...");
+      return fetchJson(apiUrl("data"))
+        .then((data) => {
+          state.allRows = Array.isArray(data.rows) ? data.rows : [];
+          state.columns = getDisplayColumns(Array.isArray(data.columns) ? data.columns : ["SUCURSAL", "MUNICIPIO"]);
+          state.page = 1;
+          renderHead(state.columns);
+          renderFilterOptions();
+          applyFilter();
+        });
+    }
+
+    function clearFilters() {
+      state.query = "";
+      state.estado = "todas";
+      state.municipio = "";
+      state.capacitadores = [];
+      state.pendientes = [];
+      state.sortBy = "SUCURSAL";
+      state.sortDir = "asc";
+      state.page = 1;
+      els.search.value = "";
+      els.estado.value = "todas";
+      els.municipio.value = "";
+      setSelectedValues(els.capacitadorList, []);
+      setSelectedValues(els.pendienteList, []);
+      els.capacitadorCount.textContent = "0 seleccionados";
+      els.pendienteCount.textContent = "0 seleccionados";
+      applyFilter();
+    }
+
+    els.municipio.addEventListener("change", () => {
+      state.municipio = els.municipio.value || "";
+      state.page = 1;
+      applyFilter();
     });
+
+    els.capacitadorList.addEventListener("change", () => {
+      state.capacitadores = getSelectedValues(els.capacitadorList);
+      els.capacitadorCount.textContent = `${state.capacitadores.length} seleccionados`;
+      state.page = 1;
+      applyFilter();
+    });
+
+    els.pendienteList.addEventListener("change", () => {
+      state.pendientes = getSelectedValues(els.pendienteList);
+      els.pendienteCount.textContent = `${state.pendientes.length} seleccionados`;
+      state.page = 1;
+      applyFilter();
+    });
+
+    const tableHead = els.headRow.closest("thead");
+    if (tableHead) {
+      tableHead.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-sort]");
+        if (!button) return;
+        const column = button.getAttribute("data-sort");
+        if (!column) return;
+        if (state.sortBy === column) {
+          state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+        } else {
+          state.sortBy = column;
+          state.sortDir = "asc";
+        }
+        state.page = 1;
+        applyFilter();
+      });
+    }
+
+    function buildDataHref() {
+      const params = new URLSearchParams();
+      if (state.query.trim()) params.set("q", state.query.trim());
+      if (state.estado !== "todas") params.set("estado", state.estado);
+      if (state.municipio) params.set("municipio", state.municipio);
+      if (state.sortBy) params.set("sortBy", state.sortBy);
+      if (state.sortDir) params.set("sortDir", state.sortDir);
+      state.capacitadores.forEach((value) => params.append("capacitador", value));
+      state.pendientes.forEach((value) => params.append("pendiente", value));
+      const queryString = params.toString();
+      return apiUrl(`data${queryString ? `?${queryString}` : ""}`);
+    }
+
+    async function applyFilter() {
+      const requestId = ++state.requestSeq;
+      const totalRows = state.allRows.length;
+      const estadoLabel =
+        state.estado === "todas"
+          ? "todas"
+          : state.estado === "faltantes"
+            ? "solo faltantes"
+            : "sin faltantes";
+
+      const filterBits = [];
+      if (state.municipio) filterBits.push(`municipio ${state.municipio}`);
+      if (state.capacitadores.length) filterBits.push(`${state.capacitadores.length} capacitador(es)`);
+      if (state.pendientes.length) filterBits.push(`${state.pendientes.length} pendiente(s)`);
+      const filterLabel = filterBits.length ? ` · ${filterBits.join(" | ")}` : "";
+
+      setStatus("Aplicando filtros...");
+
+      try {
+        const data = await fetchJson(buildDataHref());
+        if (requestId !== state.requestSeq) return;
+
+        const filtered = Array.isArray(data.rows) ? data.rows : [];
+        state.filteredRows = filtered;
+
+        els.metricTotal.textContent = String(totalRows);
+        els.metricVisible.textContent = String(filtered.length);
+        els.metricFaltantes.textContent = String(filtered.filter((row) => getEstado(row) === "FALTANTES").length);
+
+        renderHead(state.columns);
+        updatePager(filtered.length);
+
+        setStatus(`${filtered.length} de ${totalRows} registros visibles · ${estadoLabel}${filterLabel}`);
+
+        const pageStart = (state.page - 1) * state.pageSize;
+        const pageRows = filtered.slice(pageStart, pageStart + state.pageSize);
+        renderBody(pageRows, state.columns);
+        els.export.href = buildExportHref();
+      } catch (error) {
+        if (requestId !== state.requestSeq) return;
+        setStatus(error.message || "No se pudieron aplicar los filtros.", true);
+        els.empty.hidden = false;
+        els.body.innerHTML = "";
+      }
+    }
+
+    function loadData() {
+      setStatus("Cargando datos...");
+      return fetchJson(apiUrl("data"))
+        .then((data) => {
+          state.allRows = Array.isArray(data.rows) ? data.rows : [];
+          state.columns = getDisplayColumns(Array.isArray(data.columns) ? data.columns : ["SUCURSAL", "MUNICIPIO"]);
+          state.page = 1;
+          renderHead(state.columns);
+          renderFilterOptions();
+          return applyFilter();
+        });
+    }
 
     loadData().catch((error) => {
       setStatus(error.message || "No se pudieron cargar los datos.", true);
@@ -342,3 +1517,8 @@
   </script>
 </body>
 </html>
+
+
+
+
+
