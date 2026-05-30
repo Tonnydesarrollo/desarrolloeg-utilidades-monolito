@@ -1,4 +1,4 @@
-import { promises as fs } from "fs";
+﻿import { promises as fs } from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { getBackgroundServicesStatus } from "../../services/backgroundServices.js";
@@ -1126,7 +1126,8 @@ export function renderDashboardHtml(data) {
           <h1>Estado de Servicios</h1>
           <p>Esta pagina prioriza el estado operativo real del monolito, los servicios de fondo y la huella residual de PM2 despues de la migracion.</p>
           <div class="hero-actions">
-            <a class="button primary" href="/status.json" target="_blank" rel="noreferrer">Ver JSON</a>
+            <a class="button primary" href="/status/status.json" target="_blank" rel="noreferrer">Ver JSON</a>
+            <a class="button ghost" href="/" rel="noreferrer">Inicio</a>
             <a class="button ghost" href="/health" target="_blank" rel="noreferrer">Health</a>
             <button class="button ghost" type="button" data-refresh-now>Actualizar ahora</button>
           </div>
@@ -1262,3 +1263,4 @@ export function renderDashboardHtml(data) {
 </body>
 </html>`;
 }
+

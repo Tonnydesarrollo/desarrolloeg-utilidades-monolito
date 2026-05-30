@@ -1,7 +1,8 @@
-import express from "express";
+﻿import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dashboardRouter } from "./modules/dashboard/dashboard.router.js";
+import { homeRouter } from "./modules/home/home.router.js";
 import { contabilidadRouter } from "./modules/contabilidad/contabilidad.router.js";
 import { facturacionRouter } from "./modules/facturacion/facturacion.router.js";
 import { constanciasV2Router } from "./modules/constancias-v2/constanciasV2.router.js";
@@ -122,8 +123,14 @@ export function createApp() {
     });
   });
 
-  app.use("/", dashboardRouter);
+  app.get("/status.json", (_req, res) => {
+    res.redirect(302, "/status/status.json");
+  });
+
+  app.use("/status", dashboardRouter);
+  app.use("/", homeRouter);
   app.use("/", facturacionRouter);
 
   return app;
 }
+
