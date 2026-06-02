@@ -12,6 +12,10 @@ constanciasV2Router.get("/health", (_req, res) => {
   res.json({ service: "constancias-v2", status: "ok" });
 });
 
+constanciasV2Router.get("/capacitaciones/:capacitacionId/HTML", (req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
+});
+
 constanciasV2Router.use(express.static(publicDir));
 constanciasV2Router.get("/", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));

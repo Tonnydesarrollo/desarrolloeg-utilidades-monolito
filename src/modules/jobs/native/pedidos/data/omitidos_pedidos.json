@@ -2703,5 +2703,55 @@
     "row": 541,
     "pedido": "6001317254",
     "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 542,
+    "pedido": "6001335079",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 543,
+    "pedido": "6001335081",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 544,
+    "pedido": "6001335083",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 545,
+    "pedido": "6001335085",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 546,
+    "pedido": "6001335088",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 547,
+    "pedido": "6001335089",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 548,
+    "pedido": "6001335090",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 549,
+    "pedido": "6001335068",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 550,
+    "pedido": "6001335069",
+    "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 551,
+    "pedido": "6001335070",
+    "reason": "sin_campos_faltantes"
   }
 ]
