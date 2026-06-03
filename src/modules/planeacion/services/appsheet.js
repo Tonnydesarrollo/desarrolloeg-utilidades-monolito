@@ -1,4 +1,4 @@
-function getFirst(row, keys) {
+锘縡unction getFirst(row, keys) {
   for (const key of keys) {
     const value = row[key];
     if (value !== undefined && value !== null && String(value).trim() !== '') {
@@ -23,7 +23,7 @@ function parseLatLng(row) {
   const lng = toNumber(getFirst(row, ['LNG', 'Lng', 'lng', 'LONGITUD', 'Longitud', 'longitude']));
   if (lat !== undefined && lng !== undefined) return { lat, lng };
 
-  const locationRaw = getFirst(row, ['LOCATION', 'Location', 'Ubicacion', 'Ubicaci髇', 'Geo', 'GEOCODE', 'LatLng', 'LATLNG', 'Coords', 'COORDS']);
+  const locationRaw = getFirst(row, ['LOCATION', 'Location', 'Ubicacion', 'Ubicaci贸n', 'Geo', 'GEOCODE', 'LatLng', 'LATLNG', 'Coords', 'COORDS']);
   if (typeof locationRaw === 'string') {
     const cleaned = locationRaw.replace(/[()]/g, '').trim();
     const parts = cleaned.split(',').map((p) => p.trim());
@@ -36,6 +36,32 @@ function parseLatLng(row) {
     }
   }
   return undefined;
+}
+
+export function normalizePlaneacionStatus(rawValue) {
+  const value = String(rawValue || '').trim().toUpperCase();
+  if (!value) return '';
+  if (value === 'FINALIZADA' || value.includes('FINAL') || value.includes('CAPAC')) return 'FINALIZADA';
+  if (value === 'PROGRAMADA' || value.includes('PROGRAM')) return 'PROGRAMADA';
+  if (value === 'PENDIENTE' || value.includes('PEND')) return 'PENDIENTE';
+  return value;
+}
+
+function getPlaneacionStatusValue(row) {
+  return getFirst(row, [
+    'ESTATUS CAPACITACION',
+    'Estatus Capacitacion',
+    'Estatus capacitaci贸n',
+    'Estatus Capacitaci贸n',
+    'ESTATUS_CAPACITACION',
+    'estatus_capacitacion',
+    'PLANEACION_STATUS',
+    'Planeacion Status',
+    'planeacion_status',
+    'STATUS',
+    'Status',
+    'status',
+  ]);
 }
 
 async function appsheetFind(table) {
@@ -66,6 +92,20 @@ async function appsheetFind(table) {
   return Array.isArray(data) ? data : data.Rows ?? [];
 }
 
+export async function fetchBranchStatusesFromAppSheet() {
+  const sucursales = await appsheetFind('SUCURSALES');
+  return sucursales
+    .map((row) => {
+      const id = String(getFirst(row, ['ID', 'Id', 'id']) ?? '').trim();
+      if (!id) return null;
+      const tienda = String(getFirst(row, ['TIENDA', 'Tienda', 'tienda']) ?? '').trim();
+      const label = String(getFirst(row, ['LABEL', 'Label', 'label', 'NOMBRE', 'Nombre', 'name', 'SUCURSAL', 'Sucursal']) ?? id).trim();
+      const planeacionStatus = normalizePlaneacionStatus(getPlaneacionStatusValue(row));
+      return { id, label, tienda, planeacionStatus };
+    })
+    .filter(Boolean);
+}
+
 export async function fetchBranchesFromAppSheet() {
   const [sucursales, municipios, estados, empresas] = await Promise.all([
     appsheetFind('SUCURSALES'),
@@ -91,7 +131,7 @@ export async function fetchBranchesFromAppSheet() {
   const empresasMap = new Map();
   for (const row of empresas) {
     const id = getFirst(row, ['ID', 'Id', 'id']);
-    const nombre = getFirst(row, ['RAZON SOCIAL', 'Raz髇 Social', 'Razon Social', 'Nombre']);
+    const nombre = getFirst(row, ['RAZON SOCIAL', 'Raz贸n Social', 'Razon Social', 'Nombre']);
     if (id !== undefined && nombre !== undefined) empresasMap.set(String(id), String(nombre));
   }
 
@@ -103,6 +143,7 @@ export async function fetchBranchesFromAppSheet() {
     if (!id) continue;
 
     const label = String(getFirst(row, ['LABEL', 'Label', 'label', 'NOMBRE', 'Nombre', 'name', 'SUCURSAL', 'Sucursal']) ?? id);
+    const planeacionStatus = normalizePlaneacionStatus(getPlaneacionStatusValue(row));
     const municipioId = String(getFirst(row, ['MUNICIPIO', 'Municipio', 'municipio']) ?? '');
     const estadoId = String(getFirst(row, ['ESTADO', 'Estado', 'estado']) ?? '');
     const empresaId = String(getFirst(row, ['EMPRESA', 'Empresa', 'ID EMPRESA', 'empresa']) ?? '');
@@ -124,9 +165,11 @@ export async function fetchBranchesFromAppSheet() {
       lat: coords ? String(coords.lat) : '',
       lng: coords ? String(coords.lng) : '',
       address,
+      planeacion_status: planeacionStatus,
       updated_at: now,
     });
   }
 
   return result;
 }
+

@@ -6,7 +6,7 @@ function getDataDir() {
 }
 
 const CSV_PATH = () => path.join(getDataDir(), 'branches.csv');
-const HEADERS = ['id','label','empresa_id','empresa_nombre','municipio_id','municipio_nombre','estado_id','estado_nombre','lat','lng','address','updated_at'];
+const HEADERS = ['id','label','empresa_id','empresa_nombre','municipio_id','municipio_nombre','estado_id','estado_nombre','lat','lng','address','planeacion_status','updated_at'];
 
 function ensureDataDir() {
   const dir = getDataDir();
@@ -36,7 +36,7 @@ export function readBranches() {
   if (!header) return [];
   const columns = header.split(',');
   return lines.filter((line) => line.trim() !== '').map(parseCsvLine).map((values) => {
-    const row = { id:'', label:'', empresa_id:'', empresa_nombre:'', municipio_id:'', municipio_nombre:'', estado_id:'', estado_nombre:'', lat:'', lng:'', address:'', updated_at:'' };
+    const row = { id:'', label:'', empresa_id:'', empresa_nombre:'', municipio_id:'', municipio_nombre:'', estado_id:'', estado_nombre:'', lat:'', lng:'', address:'', planeacion_status:'', updated_at:'' };
     columns.forEach((col, idx) => { row[col] = values[idx] ?? ''; });
     return row;
   });

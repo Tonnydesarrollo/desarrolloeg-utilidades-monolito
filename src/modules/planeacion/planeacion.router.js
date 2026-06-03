@@ -1,7 +1,7 @@
-import express from 'express';
+﻿import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { fetchBranchesFromAppSheet } from './services/appsheet.js';
+import { fetchBranchStatusesFromAppSheet, fetchBranchesFromAppSheet, normalizePlaneacionStatus } from './services/appsheet.js';
 import { geocodeMissing } from './services/geocode.js';
 import { readBranches, readCsvFile, writeBranches, writeCsvFile } from './services/csvStore.js';
 
@@ -16,10 +16,86 @@ function getStoresCsvPath() {
   return process.env.PLANEACION_STORES_CSV_PATH || path.resolve(process.cwd(), 'src', 'modules', 'planeacion', 'data', 'casaley_stores.csv');
 }
 
+function parsePlaneacionDate(rawValue) {
+  const value = String(rawValue || '').trim();
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const match = value.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (!match) return null;
+  let month = Number(match[1]);
+  let day = Number(match[2]);
+  let year = Number(match[3]);
+  if (year < 100) year += 2000;
+  if (month > 12 && day <= 12) [day, month] = [month, day];
+  const parsed = new Date(year, month - 1, day);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isExpiredVencimiento(rawValue) {
+  const vencimiento = parsePlaneacionDate(rawValue);
+  if (!vencimiento) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return vencimiento < today;
+}
+
+function getPlaneacionStatusTone(rawValue, vencimientoRaw) {
+  const value = normalizePlaneacionStatus(rawValue);
+  if (value === 'FINALIZADA') return '#16a34a';
+  if (value === 'PROGRAMADA') return '#ca8a04';
+  if (value === 'PENDIENTE' && isExpiredVencimiento(vencimientoRaw)) return '#dc2626';
+  return '#6b7280';
+}
+
+function getFirstDefined(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return '';
+}
+
+function getBranchStatusFromRow(row) {
+  return normalizePlaneacionStatus(
+    getFirstDefined(
+      row.planeacion_status,
+      row.planeacionStatus,
+      row['ESTATUS CAPACITACION'],
+      row['Estatus Capacitacion'],
+      row['Estatus Capacitación'],
+      row['Estatus capacitación'],
+      row.ESTATUS_CAPACITACION,
+      row.estatus_capacitacion,
+      row.STATUS,
+      row.status,
+      row.ESTATUS,
+      row.estatus
+    ) || 'PENDIENTE'
+  ) || 'PENDIENTE';
+}
+
+let planeacionStatusIndexCache = { loadedAt: 0, rows: [] };
+
+async function getPlaneacionStatusIndex() {
+  const now = Date.now();
+  if (planeacionStatusIndexCache.rows.length > 0 && now - planeacionStatusIndexCache.loadedAt < 5 * 60 * 1000) {
+    return planeacionStatusIndexCache.rows;
+  }
+  const rows = await fetchBranchStatusesFromAppSheet();
+  planeacionStatusIndexCache = { loadedAt: now, rows };
+  return rows;
+}
+
 planeacionApiRouter.get('/branches', async (_req, res) => {
   try {
     const csvPath = getStoresCsvPath();
     const rows = readCsvFile(csvPath);
+    const appSheetStatuses = await getPlaneacionStatusIndex();
+    const statusById = new Map(appSheetStatuses.map((row) => [String(row.id || '').trim(), row.planeacionStatus]));
+    const statusByTienda = new Map(appSheetStatuses.map((row) => [String(row.tienda || '').trim(), row.planeacionStatus]));
+    const statusByLabel = new Map(appSheetStatuses.map((row) => [String(row.label || '').trim().toLowerCase(), row.planeacionStatus]));
     const normalizeName = (value) => {
       const cleaned = String(value || '').trim().replace(/\s+/g, ' ');
       return cleaned || '';
@@ -31,6 +107,12 @@ planeacionApiRouter.get('/branches', async (_req, res) => {
       const assignedRaw = row.assigned_month || row.ASSIGNED_MONTH || row.mes || row.MES || '';
       const assignedMonth = assignedRaw === '' || assignedRaw === null || assignedRaw === undefined ? null : Number(assignedRaw);
       const vencimiento = row.VENCIMIENTOESTATAL || row.vencimientoestatal || row.VencimientoEstatal || row['VENCIMIENTO ESTATAL'] || row['Vencimiento Estatal'] || '';
+      const localStatus = getBranchStatusFromRow(row);
+      const appSheetStatus = statusByTienda.get(String(row.TIENDA || row.tienda || '').trim())
+        || statusById.get(String(row.id || row.ID || row.Id || '').trim())
+        || statusByLabel.get(String(label || title || '').trim().toLowerCase())
+        || '';
+      const planeacionStatus = normalizePlaneacionStatus(appSheetStatus || localStatus || 'PENDIENTE') || 'PENDIENTE';
       return {
         id: row.id || row.ID || row.Id || '',
         title: String(title || '').trim(),
@@ -43,6 +125,8 @@ planeacionApiRouter.get('/branches', async (_req, res) => {
         lat: row.lat || row.latitude || '',
         lng: row.lng || row.longitude || '',
         assignedMonth: Number.isFinite(assignedMonth) ? assignedMonth : null,
+        planeacionStatus,
+        planeacionTone: getPlaneacionStatusTone(planeacionStatus, vencimiento),
       };
     });
     const sorted = [...normalized].sort((a, b) => {
@@ -148,6 +232,9 @@ planeacionApiRouter.post('/branches/create', async (req, res) => {
     const normalizeKey = (value) => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/^\d+\s+/, '').replace(/\s+/g, ' ').trim();
     const csvPath = getStoresCsvPath();
     const rows = readCsvFile(csvPath);
+    const appSheetStatuses = await getPlaneacionStatusIndex();
+    const statusById = new Map(appSheetStatuses.map((row) => [String(row.id || '').trim(), row.planeacionStatus]));
+    const statusByLabel = new Map(appSheetStatuses.map((row) => [String(row.label || '').trim().toLowerCase(), row.planeacionStatus]));
     if (rows.length === 0) return res.status(400).json({ error: 'CSV vacio' });
     const exists = rows.some((row) => {
       const rowTienda = String(row.TIENDA || row.tienda || '').trim();
@@ -178,6 +265,15 @@ planeacionApiRouter.post('/branches/create', async (req, res) => {
   }
 });
 
-planeacionRouter.use(express.static(publicDir));
+planeacionRouter.use(
+  express.static(publicDir, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html') || filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      }
+    },
+  })
+);
 planeacionRouter.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 planeacionRouter.get('*splat', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+
