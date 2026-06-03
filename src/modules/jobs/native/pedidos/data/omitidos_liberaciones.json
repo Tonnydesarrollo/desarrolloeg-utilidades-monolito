@@ -2573,5 +2573,20 @@
     "row": 515,
     "liberacion": "5017618676",
     "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 516,
+    "liberacion": "5017906392",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 517,
+    "liberacion": "5017906393",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 518,
+    "liberacion": "5017906394",
+    "reason": "sin_actualizaciones"
   }
 ]
