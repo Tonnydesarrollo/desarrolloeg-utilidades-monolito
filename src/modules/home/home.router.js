@@ -1089,6 +1089,8 @@ function getHomeStyles() {
         backdrop-filter: blur(18px);
         box-shadow: 0 14px 28px rgba(26,42,58,0.08);
         overflow-x: auto;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
       }
       .dashboard-tabs-nav::-webkit-scrollbar {
@@ -1099,6 +1101,7 @@ function getHomeStyles() {
         display: inline-flex;
         align-items: center;
         gap: 8px;
+        min-height: 44px;
         padding: 11px 16px;
         border-radius: 999px;
         border: 1px solid transparent;
@@ -2106,6 +2109,7 @@ function getHomeStyles() {
           border-radius: 20px;
         }
         .dashboard-tab-btn {
+          min-height: 42px;
           padding: 10px 14px;
           font-size: 0.82rem;
         }
@@ -2113,6 +2117,17 @@ function getHomeStyles() {
           min-width: 1.65rem;
           height: 1.65rem;
           font-size: 0.74rem;
+        }
+        .calendar-summary {
+          gap: 6px;
+        }
+        .calendar-detail-window {
+          margin-top: 2px;
+        }
+        .calendar-detail-card,
+        .calendar-detail-empty {
+          padding: 16px;
+          border-radius: 20px;
         }
         .calendar-panel .fc .fc-toolbar {
           align-items: flex-start;
