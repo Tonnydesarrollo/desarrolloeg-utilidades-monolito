@@ -2828,5 +2828,10 @@
     "row": 566,
     "pedido": "6001334614",
     "reason": "sin_campos_faltantes"
+  },
+  {
+    "row": 567,
+    "pedido": "6001334615",
+    "reason": "sin_campos_faltantes"
   }
 ]

@@ -2577,16 +2577,66 @@
   {
     "row": 516,
     "liberacion": "5017906392",
-    "reason": "sin_actualizaciones"
+    "reason": "sin_cambios_desde_snapshot"
   },
   {
     "row": 517,
     "liberacion": "5017906393",
-    "reason": "sin_actualizaciones"
+    "reason": "sin_cambios_desde_snapshot"
   },
   {
     "row": 518,
     "liberacion": "5017906394",
-    "reason": "sin_actualizaciones"
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 519,
+    "liberacion": "5017906395",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 520,
+    "liberacion": "5017906396",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 521,
+    "liberacion": "5017906397",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 522,
+    "liberacion": "5017906398",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 523,
+    "liberacion": "5017906399",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 524,
+    "liberacion": "5017906410",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 525,
+    "liberacion": "5017906411",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 526,
+    "liberacion": "5017906412",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 527,
+    "liberacion": "5017906413",
+    "reason": "sin_cambios_desde_snapshot"
+  },
+  {
+    "row": 528,
+    "liberacion": "5017906414",
+    "reason": "sin_cambios_desde_snapshot"
   }
 ]
