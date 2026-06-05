@@ -49,10 +49,11 @@ export async function geocodeMissing(rows) {
         console.warn(`Geocode error for "${query}": ${message}`);
       }
       lastQueries.push({ id: row.id, query, found: false });
+      await sleep(1200);
     }
     if (resolved) success += 1; else failed += 1;
     updated.push(row);
-    await sleep(1100);
+    await sleep(1200);
   }
   return { rows: updated, success, failed, lastQueries };
 }

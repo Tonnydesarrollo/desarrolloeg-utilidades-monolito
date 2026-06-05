@@ -433,21 +433,17 @@ async function loadFaltantesLeyData() {
 
   let capacitadoresSucursales = [];
   if (config.capacitadoresAppId && config.capacitadoresAccessKey) {
-    try {
-      capacitadoresSucursales = await fetchTable(
-        {
-          ...config,
-          appsheetAppId: config.capacitadoresAppId,
-          appsheetAccessKey: config.capacitadoresAccessKey,
-          appsheetRegion: config.capacitadoresRegion,
-          appsheetLocale: config.capacitadoresLocale,
-          appsheetTimezone: config.capacitadoresTimezone,
-        },
-        config.sucursalesTable
-      );
-    } catch (_error) {
-      capacitadoresSucursales = [];
-    }
+    capacitadoresSucursales = await fetchTable(
+      {
+        ...config,
+        appsheetAppId: config.capacitadoresAppId,
+        appsheetAccessKey: config.capacitadoresAccessKey,
+        appsheetRegion: config.capacitadoresRegion,
+        appsheetLocale: config.capacitadoresLocale,
+        appsheetTimezone: config.capacitadoresTimezone,
+      },
+      config.sucursalesTable
+    );
   }
 
   const sucursalesById = makeMap(sucursales, ["Row ID", "ROW ID", "ID", "Id", "id"]);
@@ -515,13 +511,20 @@ async function loadFaltantesLeyData() {
       return aKey.localeCompare(bKey, "es-MX", { numeric: true, sensitivity: "base" });
     });
 
+  const sourceSummary = {
+    estatales: estatales.length,
+    sucursales: sucursales.length,
+    municipios: municipios.length,
+    capacitadoresSucursales: capacitadoresSucursales.length,
+  };
+
   cache.ts = Date.now();
   cache.rows = rows;
   cache.sucursalesById = sucursalesById;
   cache.municipiosById = municipiosById;
   cache.documentacionIds = documentacionIds;
 
-  return { config, rows, sucursalesById, municipiosById };
+  return { config, rows, sucursalesById, municipiosById, sourceSummary };
 }
 
 function normalizeEstadoFilter(estado = "") {
@@ -630,7 +633,7 @@ function applyAdvancedFilters(rows, filters = {}) {
 }
 
 export async function getFaltantesLeyData(query = "", estado = "todas", filters = {}) {
-  const { rows } = await loadFaltantesLeyData();
+  const { rows, sourceSummary } = await loadFaltantesLeyData();
   const rowsByEstado = filterRowsByEstado(rows, estado);
   const normalizedQuery = normalizeText(query);
   let filtered = !normalizedQuery
@@ -654,6 +657,10 @@ export async function getFaltantesLeyData(query = "", estado = "todas", filters 
     total: filtered.length,
     columns: headers,
     rows: exportRows,
+    source: {
+      provider: "AppSheet",
+      tables: sourceSummary,
+    },
   };
 }
 

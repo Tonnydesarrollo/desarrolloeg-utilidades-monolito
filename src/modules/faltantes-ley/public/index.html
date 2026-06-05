@@ -46,36 +46,6 @@
       padding: 24px;
     }
 
-    .shell::before,
-    .shell::after {
-      content: "";
-      position: fixed;
-      inset: auto;
-      pointer-events: none;
-      opacity: .24;
-      z-index: 0;
-    }
-
-    .shell::before {
-      width: 280px;
-      height: 280px;
-      right: -110px;
-      top: -100px;
-      border-radius: 999px;
-      background: rgba(15, 118, 110, 0.38);
-      filter: blur(6px);
-    }
-
-    .shell::after {
-      width: 320px;
-      height: 320px;
-      left: -120px;
-      bottom: 80px;
-      border-radius: 999px;
-      background: rgba(29, 78, 216, 0.22);
-      filter: blur(6px);
-    }
-
     .topbar,
     .panel {
       position: relative;
@@ -84,34 +54,34 @@
 
     .topbar {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
-      padding: 18px 22px;
+      padding: 12px 16px;
       margin-bottom: 16px;
       border: 1px solid var(--line);
       border-radius: var(--r-xl);
-      background: var(--panel);
-      box-shadow: var(--shadow);
+      background: linear-gradient(135deg, #0f172a, #111827);
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
       backdrop-filter: blur(10px);
     }
 
     .brand {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 14px;
       min-width: 0;
     }
 
     .brand-logo {
-      width: 56px;
-      height: 56px;
+      width: 50px;
+      height: 50px;
       object-fit: contain;
       flex: 0 0 auto;
-      border-radius: 16px;
+      border-radius: 14px;
       background: #fff;
       border: 1px solid rgba(203, 213, 225, 0.8);
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
       padding: 6px;
     }
 
@@ -121,46 +91,43 @@
 
     .eyebrow {
       margin: 0 0 4px;
-      color: var(--accent);
-      font-size: .72rem;
+      color: #7dd3fc;
+      font-size: .68rem;
       font-weight: 900;
-      letter-spacing: .18em;
+      letter-spacing: .16em;
       text-transform: uppercase;
     }
 
     .title {
       margin: 0;
-      color: var(--ink);
-      font-size: clamp(1.35rem, 2vw, 2rem);
-      line-height: 1;
+      color: #fff;
+      font-size: clamp(1.1rem, 1.55vw, 1.55rem);
+      line-height: 1.05;
       letter-spacing: -.04em;
       text-transform: uppercase;
     }
 
     .title-sub {
-      margin: 7px 0 0;
-      color: var(--ink-soft);
-      font-size: .95rem;
-      line-height: 1.5;
+      margin: 4px 0 0;
+      color: rgba(226, 232, 240, 0.88);
+      font-size: .84rem;
+      line-height: 1.4;
     }
 
     .topbar-badges {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 10px;
+      display: none;
     }
 
     .badge {
       display: inline-flex;
       align-items: center;
-      min-height: 34px;
-      padding: 7px 12px;
+      min-height: 30px;
+      padding: 6px 10px;
       border-radius: 999px;
-      border: 1px solid rgba(203, 213, 225, 0.9);
-      background: rgba(255,255,255,0.9);
-      color: var(--ink);
-      font-size: .84rem;
+      border: 1px solid rgba(125, 211, 252, 0.25);
+      background: rgba(15, 23, 42, 0.35);
+      color: #e2e8f0;
+      font-size: .8rem;
       font-weight: 800;
       white-space: nowrap;
     }
@@ -169,8 +136,8 @@
       overflow: hidden;
       border: 1px solid var(--line);
       border-radius: var(--r-xl);
-      background: var(--panel-strong);
-      box-shadow: var(--shadow);
+      background: linear-gradient(180deg, #ffffff, #f8fafc);
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
     }
 
     .toolbar {
@@ -178,29 +145,29 @@
       grid-template-columns: minmax(220px, 280px) minmax(280px, 1fr) auto auto auto;
       gap: 12px;
       align-items: center;
-      padding: 18px;
-      border-bottom: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(248,250,252,0.98), rgba(255,255,255,0.98));
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      background: #f8fafc;
     }
 
     .filters-panel {
       display: grid;
       grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(0, 1fr);
       gap: 12px;
-      padding: 18px;
-      border-bottom: 1px solid var(--line);
-      background: #fbfdff;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      background: #fff;
     }
 
     .filter-card {
       display: flex;
       flex-direction: column;
       gap: 10px;
-      padding: 14px;
+      padding: 12px;
       border: 1px solid rgba(203, 213, 225, 0.9);
       border-radius: 18px;
       background: #fff;
-      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+      box-shadow: none;
     }
 
     .filter-head {
@@ -263,7 +230,7 @@
       border-radius: 16px;
       background: #fff;
       box-shadow: var(--shadow-soft);
-      max-height: 220px;
+      max-height: 200px;
       overflow: auto;
     }
 
@@ -392,8 +359,8 @@
       gap: 10px;
       align-items: center;
       justify-content: space-between;
-      padding: 0 18px 18px;
-      border-bottom: 1px solid var(--line);
+      padding: 0 14px 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
       background: #fff;
     }
 
@@ -451,8 +418,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 14px 18px;
-      border-bottom: 1px solid var(--line);
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
       background: #fff;
       flex-wrap: wrap;
     }
@@ -489,6 +456,100 @@
       -webkit-overflow-scrolling: touch;
     }
 
+    .mobile-cards {
+      display: none;
+      gap: 12px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .mobile-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #ffffff, #fbfdff);
+      box-shadow: none;
+      overflow: hidden;
+    }
+
+    .mobile-card-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .mobile-card-title {
+      min-width: 0;
+      flex: 1 1 220px;
+    }
+
+    .mobile-card-name {
+      margin: 0;
+      color: var(--ink);
+      font-size: 1rem;
+      font-weight: 900;
+      line-height: 1.35;
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: auto;
+    }
+
+    .mobile-card-sub {
+      margin: 4px 0 0;
+      color: var(--ink-soft);
+      font-size: .86rem;
+      font-weight: 700;
+      line-height: 1.45;
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: auto;
+    }
+
+    .mobile-card-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .mobile-card-body {
+      padding: 12px 14px 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .mobile-card-section {
+      display: grid;
+      gap: 6px;
+    }
+
+    .mobile-card-label {
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .mobile-card-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .mobile-card-footer {
+      padding: 0 14px 14px;
+    }
+
+    .mobile-card-empty {
+      color: var(--muted);
+      font-size: .9rem;
+      font-style: italic;
+    }
+
     table {
       width: max-content;
       min-width: 100%;
@@ -505,10 +566,10 @@
       background: linear-gradient(180deg, #0f172a, #111827);
       color: #fff;
       text-align: left;
-      padding: 15px 16px;
-      font-size: .77rem;
+      padding: 12px 14px;
+      font-size: .7rem;
       text-transform: uppercase;
-      letter-spacing: .13em;
+      letter-spacing: .1em;
       border-bottom: 1px solid rgba(255,255,255,0.08);
     }
 
@@ -546,8 +607,8 @@
 
     thead th.pending-group-head {
       text-align: center;
-      letter-spacing: .2em;
-      font-size: .82rem;
+      letter-spacing: .14em;
+      font-size: .74rem;
       border-bottom: 0;
       border-left: 1px solid rgba(255,255,255,0.08);
       border-right: 1px solid rgba(255,255,255,0.08);
@@ -564,11 +625,14 @@
     tbody td {
       border: 1px solid #e2e8f0;
       background: #fff;
-      padding: 10px 12px;
+      padding: 7px 9px;
       vertical-align: top;
-      line-height: 1.4;
+      line-height: 1.28;
       min-width: 0;
-      overflow: hidden;
+      overflow: visible;
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: auto;
     }
 
     tbody tr:nth-child(even) td { background: #fbfdff; }
@@ -579,41 +643,51 @@
     }
 
     tbody tr td.pending-cell-empty {
-      background: linear-gradient(180deg, #dcfce7, #bbf7d0);
-      border-color: rgba(16, 185, 129, 0.18);
+      background: #f8fafc;
+      border-color: #e2e8f0;
       padding: 0;
     }
 
     tbody tr:nth-child(even) td.pending-cell-empty {
-      background: linear-gradient(180deg, #dcfce7, #bbf7d0);
+      background: #f8fafc;
     }
 
     tbody tr:hover td.pending-cell-empty {
-      background: linear-gradient(180deg, #bbf7d0, #86efac);
+      background: #f1f5f9;
     }
 
     thead th:nth-child(1),
-    tbody td:nth-child(1) { width: 180px; }
+    tbody td:nth-child(1) { width: 250px; }
 
     thead th:nth-child(2),
-    tbody td:nth-child(2) { width: 110px; }
+    tbody td:nth-child(2) { width: 150px; }
 
     thead th:nth-child(3),
-    tbody td:nth-child(3) { width: 95px; }
+    tbody td:nth-child(3) { width: 120px; }
 
     thead th:nth-child(4),
-    tbody td:nth-child(4) { width: 160px; }
+    tbody td:nth-child(4) { width: 170px; }
 
     thead th:nth-child(n + 5),
     tbody td:nth-child(n + 5) { width: 92px; }
 
-    .table-sucursal { font-weight: 800; }
-    .table-municipio { color: var(--ink-soft); }
+    .table-sucursal {
+      font-weight: 800;
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: auto;
+    }
+    .table-municipio {
+      color: var(--ink-soft);
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: auto;
+    }
 
     .pending-list {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 3px;
       min-width: 0;
       max-width: 100%;
     }
@@ -637,15 +711,20 @@
     .pill {
       display: inline-flex;
       align-items: center;
-      min-height: 28px;
-      padding: 5px 10px;
+      max-width: 100%;
+      min-height: 22px;
+      padding: 3px 7px;
       border-radius: 999px;
       background: #eef2ff;
       color: #1e3a8a;
       border: 1px solid rgba(37, 99, 235, 0.14);
-      font-size: .82rem;
+      font-size: .74rem;
       font-weight: 700;
-      line-height: 1.2;
+      line-height: 1.15;
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: auto;
     }
 
     .pill-success {
@@ -699,6 +778,15 @@
       table {
         min-width: 0;
       }
+      .table-wrap {
+        display: none;
+      }
+      .mobile-cards {
+        display: grid;
+      }
+      .summary {
+        gap: 8px;
+      }
     }
   </style>
 </head>
@@ -712,11 +800,6 @@
           <h1 class="title">Faltantes Ley</h1>
           <p class="title-sub">Consulta y exporta las sucursales con documentación pendiente.</p>
         </div>
-      </div>
-      <div class="topbar-badges">
-        <span class="badge">AppSheet</span>
-        <span class="badge">Exportación Excel</span>
-        <span class="badge">Monolito</span>
       </div>
     </header>
 
@@ -798,6 +881,7 @@
           </thead>
           <tbody id="body"></tbody>
         </table>
+        <div id="mobile-cards" class="mobile-cards" hidden></div>
         <div id="empty" class="empty" hidden>
           <h2>No hay registros para mostrar</h2>
           <p>Prueba limpiar la búsqueda o cambiar el estado para volver a cargar resultados.</p>
@@ -844,6 +928,7 @@
       status: document.getElementById("status"),
       headRow: document.getElementById("head-row"),
       body: document.getElementById("body"),
+      mobileCards: document.getElementById("mobile-cards"),
       empty: document.getElementById("empty"),
       metricTotal: document.getElementById("metric-total"),
       metricVisible: document.getElementById("metric-visible"),
@@ -1075,15 +1160,19 @@
     }
 
     function renderBody(rows, columns) {
+      const pendingColumns = columns.filter((column) => String(column).startsWith("Pendiente "));
+      const baseColumns = columns.filter((column) => !String(column).startsWith("Pendiente "));
+
       if (!rows.length) {
         els.body.innerHTML = "";
+        if (els.mobileCards) {
+          els.mobileCards.innerHTML = "";
+          els.mobileCards.hidden = true;
+        }
         els.empty.hidden = false;
         els.pageInfo.textContent = "Página 0 de 0";
         return;
       }
-
-      const pendingColumns = columns.filter((column) => String(column).startsWith("Pendiente "));
-      const baseColumns = columns.filter((column) => !String(column).startsWith("Pendiente "));
 
       els.empty.hidden = true;
       els.body.innerHTML = rows
@@ -1114,6 +1203,51 @@
             ${renderPendingCells(row, pendingColumns)}
           </tr>`)
         .join("");
+
+      if (els.mobileCards) {
+        els.mobileCards.hidden = false;
+        els.mobileCards.innerHTML = rows
+          .map((row) => {
+            const pendingValues = pendingColumns
+              .map((column) => String(row[column] || "").trim())
+              .filter(Boolean);
+            const pendingList = getRowPendientes(row);
+            const capacitadores = getRowCapacitadores(row);
+            const estado = getEstado(row);
+            const estadoClass = estado.includes("SIN") ? "pill-success" : "pill-warning";
+            const sucursal = escapeHtml(String(row.SUCURSAL || row.SUCURSAL || row["SUCURSAL"] || row[baseColumns[0]] || ""));
+            const municipio = escapeHtml(String(row.MUNICIPIO || row["MUNICIPIO"] || row[baseColumns[1]] || ""));
+            const stateLabel = escapeHtml(String(row.ESTADO || row.estadoFaltantes || ""));
+            return `
+              <article class="mobile-card">
+                <div class="mobile-card-head">
+                  <div class="mobile-card-title">
+                    <p class="mobile-card-name">${sucursal || "<span class='mobile-card-empty'>Sin sucursal</span>"}</p>
+                    <p class="mobile-card-sub">${municipio || "<span class='mobile-card-empty'>Sin municipio</span>"}</p>
+                  </div>
+                  <div class="mobile-card-badges">
+                    <span class="pill ${estadoClass}">${stateLabel || "Sin estado"}</span>
+                    <span class="pill">${pendingValues.length || pendingList.length || 0} pendientes</span>
+                  </div>
+                </div>
+                <div class="mobile-card-body">
+                  <section class="mobile-card-section">
+                    <span class="mobile-card-label">Capacitadores</span>
+                    <div class="mobile-card-pills capacitador-list">
+                      ${capacitadores.length ? capacitadores.map((piece) => `<span class="pill">${escapeHtml(piece)}</span>`).join("") : "<span class='mobile-card-empty'>Sin capacitadores</span>"}
+                    </div>
+                  </section>
+                  <section class="mobile-card-section">
+                    <span class="mobile-card-label">Documentación faltante</span>
+                    <div class="mobile-card-pills">
+                      ${pendingList.length ? pendingList.map((piece) => `<span class="pill pill-warning">${escapeHtml(piece)}</span>`).join("") : "<span class='mobile-card-empty'>Sin faltantes</span>"}
+                    </div>
+                  </section>
+                </div>
+              </article>`;
+          })
+          .join("");
+      }
     }
 
     function updatePager(totalRows) {

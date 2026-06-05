@@ -1,0 +1,293 @@
+﻿@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+
+:root {
+  --pg-bg: #f7fafc;
+  --pg-surface: rgba(255, 255, 255, 0.97);
+  --pg-ink: #1a2a3a;
+  --pg-muted: #556170;
+  --pg-line: rgba(26, 42, 58, 0.12);
+  --pg-shadow: 0 24px 60px rgba(26, 42, 58, 0.10);
+  --pg-navy: #1a2a3a;
+  --pg-navy-soft: #eef3f8;
+  --pg-crimson: #c0392b;
+  --pg-crimson-soft: #fbe9e7;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  color: var(--pg-ink);
+  background:
+    radial-gradient(circle at top left, rgba(192, 57, 43, 0.10), transparent 22%),
+    radial-gradient(circle at top right, rgba(26, 42, 58, 0.09), transparent 26%),
+    linear-gradient(180deg, #f8fafc 0%, #f2f6fa 48%, #ecf1f6 100%);
+}
+
+body.planeacion-official #root > div.h-screen.flex.flex-col.bg-gray-50 {
+  min-height: 100vh;
+  background: transparent;
+}
+
+body.planeacion-official #root > div > header {
+  position: sticky;
+  top: 14px;
+  z-index: 40;
+  margin: 14px 14px 18px;
+  padding: 18px 20px;
+  border-radius: 28px;
+  border: 1px solid rgba(26, 42, 58, 0.10);
+  border-top: 6px solid var(--pg-crimson);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--pg-shadow);
+  backdrop-filter: blur(18px);
+}
+
+body.planeacion-official #root > div > header h1 {
+  margin: 0;
+  font-family: "Cinzel", serif;
+  text-transform: uppercase;
+  letter-spacing: -0.03em;
+  color: var(--pg-ink);
+  font-size: clamp(1.45rem, 3vw, 2.35rem);
+}
+
+body.planeacion-official #root > div > header p {
+  margin: 8px 0 0;
+  font-family: "Montserrat", sans-serif;
+  color: var(--pg-muted);
+  line-height: 1.5;
+}
+
+body.planeacion-official #root > div > header button,
+body.planeacion-official #root > div > header select,
+body.planeacion-official #root > div > header input,
+body.planeacion-official #root > div > header label {
+  font-family: "Montserrat", sans-serif;
+}
+
+body.planeacion-official #root > div > header .flex.bg-gray-100.p-1.rounded-lg.border.border-gray-200 {
+  background: var(--pg-navy-soft);
+  border-color: rgba(26, 42, 58, 0.10);
+  border-radius: 999px;
+  padding: 6px;
+}
+
+body.planeacion-official #root > div > header .flex.bg-gray-100.p-1.rounded-lg.border.border-gray-200 > button {
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+body.planeacion-official #root > div > header .flex.bg-gray-100.p-1.rounded-lg.border.border-gray-200 > button.active {
+  background: #fff;
+  color: var(--pg-crimson);
+  box-shadow: 0 8px 18px rgba(26, 42, 58, 0.08);
+}
+
+body.planeacion-official #root > div > header .border-r.border-gray-200.pr-4 {
+  gap: 10px;
+}
+
+body.planeacion-official #root > div > header .border-r.border-gray-200.pr-4 > div {
+  padding: 10px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(26, 42, 58, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 24px rgba(26, 42, 58, 0.06);
+}
+
+body.planeacion-official #root > div > main {
+  max-width: 1480px;
+  width: calc(100% - 28px);
+  margin: 0 auto;
+  padding: 0 0 30px;
+}
+
+body.planeacion-official #root .grid.grid-cols-1.md\:grid-cols-3.lg\:grid-cols-4.gap-4.p-4.print\:grid-cols-3.print\:gap-2.calendar-print {
+  gap: 16px;
+  padding: 18px;
+}
+
+body.planeacion-official #root .calendar-print > div {
+  border-radius: 24px;
+  border: 1px solid rgba(26, 42, 58, 0.10);
+  border-top: 5px solid var(--pg-crimson);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.96));
+  box-shadow: var(--pg-shadow);
+}
+
+body.planeacion-official #root .calendar-print > div > div:first-child {
+  padding: 12px 14px;
+  font-family: "Montserrat", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.planeacion-official #root .calendar-print > div > div:first-child .text-white {
+  color: #fff;
+}
+
+body.planeacion-official #root .calendar-print > div > div:nth-child(2) {
+  padding: 10px;
+}
+
+body.planeacion-official #root .calendar-print li {
+  border-radius: 16px;
+  border: 1px solid rgba(26, 42, 58, 0.08);
+  background: #fff;
+  box-shadow: 0 10px 18px rgba(26, 42, 58, 0.05);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+body.planeacion-official #root .calendar-print li:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 26px rgba(26, 42, 58, 0.08);
+  border-color: rgba(192, 57, 43, 0.18);
+}
+
+body.planeacion-official #root .calendar-print li .font-medium {
+  font-family: "Montserrat", sans-serif;
+  font-weight: 800;
+  color: var(--pg-ink);
+}
+
+body.planeacion-official #root .calendar-print li .text-xs,
+body.planeacion-official #root .calendar-print li .text-gray-500,
+body.planeacion-official #root .calendar-print li .text-gray-400 {
+  font-family: "Montserrat", sans-serif;
+}
+
+body.planeacion-official #root .calendar-print li .text-[10px] {
+  letter-spacing: 0.04em;
+}
+
+body.planeacion-official #root .calendar-print .p-2.border-t.border-gray-100.mt-auto.print\:hidden {
+  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.96));
+}
+
+body.planeacion-official #root .calendar-detail-window {
+  position: sticky;
+  top: 130px;
+}
+
+body.planeacion-official #root .calendar-detail-card,
+body.planeacion-official #root .calendar-detail-empty {
+  border-radius: 24px;
+  border: 1px solid rgba(26, 42, 58, 0.10);
+  border-top: 5px solid var(--pg-crimson);
+  background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.97));
+  box-shadow: var(--pg-shadow);
+}
+
+body.planeacion-official #root .calendar-detail-card h3,
+body.planeacion-official #root .calendar-detail-empty h3 {
+  font-family: "Cinzel", serif;
+  text-transform: uppercase;
+  letter-spacing: -0.03em;
+}
+
+body.planeacion-official #root .calendar-detail-section strong,
+body.planeacion-official #root .accordion-summary-meta .status-chip,
+body.planeacion-official #root .accordion-summary-main span,
+body.planeacion-official #root .detail-block strong {
+  font-family: "Montserrat", sans-serif;
+}
+
+body.planeacion-official #root .accordion-card {
+  border-radius: 24px;
+  border: 1px solid rgba(26, 42, 58, 0.10);
+  background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.96));
+  box-shadow: var(--pg-shadow);
+}
+
+body.planeacion-official #root .accordion-summary {
+  padding: 14px 16px;
+}
+
+body.planeacion-official #root .accordion-summary-main strong {
+  font-family: "Cinzel", serif;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+
+body.planeacion-official #root .accordion-summary-meta .status-chip.is-finalizada {
+  background: rgba(22, 101, 52, 0.12);
+  color: #166534;
+}
+
+body.planeacion-official #root .accordion-summary-meta .status-chip.is-programada {
+  background: rgba(202, 138, 4, 0.12);
+  color: #92400e;
+}
+
+body.planeacion-official #root .tag-pill,
+body.planeacion-official #root .chip,
+body.planeacion-official #root .status-chip {
+  font-family: "Montserrat", sans-serif;
+}
+
+body.planeacion-official #root .calendar-panel .fc,
+body.planeacion-official #root .calendar-panel .fc * {
+  font-family: "Montserrat", sans-serif;
+}
+
+body.planeacion-official #root .calendar-panel .fc .fc-toolbar-title {
+  font-family: "Cinzel", serif;
+  text-transform: uppercase;
+}
+
+body.planeacion-official #root .calendar-panel .fc .fc-button {
+  border-radius: 999px;
+  border: 1px solid rgba(26, 42, 58, 0.12);
+}
+
+body.planeacion-official #root .calendar-panel .fc .fc-event {
+  cursor: pointer;
+}
+
+body.planeacion-official #root .page-loader-card {
+  border-radius: 24px;
+  border-top: 5px solid var(--pg-crimson);
+}
+
+@media (max-width: 1100px) {
+  body.planeacion-official #root > div > header {
+    margin: 10px 10px 14px;
+    padding: 16px;
+  }
+
+  body.planeacion-official #root > main {
+    width: calc(100% - 20px);
+  }
+
+  body.planeacion-official #root .calendar-detail-window {
+    position: static;
+    top: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  body.planeacion-official #root > div > header {
+    top: 8px;
+    border-radius: 22px;
+  }
+
+  body.planeacion-official #root .grid.grid-cols-1.md\:grid-cols-3.lg\:grid-cols-4.gap-4.p-4.print\:grid-cols-3.print\:gap-2.calendar-print {
+    padding: 12px;
+  }
+
+  body.planeacion-official #root .calendar-print > div {
+    border-radius: 20px;
+  }
+
+  body.planeacion-official #root .accordion-summary {
+    padding: 12px 14px;
+  }
+}
+
