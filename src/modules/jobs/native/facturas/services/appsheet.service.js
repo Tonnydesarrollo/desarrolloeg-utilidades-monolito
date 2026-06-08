@@ -9,9 +9,10 @@ const ID_AS_STRING = process.env.FACTURAS_APPSHEET_ID_AS_STRING === 'true';
 const TEST_MINIMAL = process.env.FACTURAS_APPSHEET_TEST_MINIMAL === 'true';
 const TEST_SINGLE = process.env.FACTURAS_APPSHEET_TEST_SINGLE === 'true';
 const ALLOWED_COLUMNS = (process.env.FACTURAS_APPSHEET_ALLOWED_COLUMNS || '').split(',').map(s => s.trim()).filter(Boolean);
+const APPSHEET_REGION = process.env.FACTURAS_APPSHEET_REGION || 'www.appsheet.com';
 
 function getUrl() {
-  return `https://api.appsheet.com/api/v2/apps/${process.env.FACTURAS_APPSHEET_APP_ID}/tables/${process.env.FACTURAS_APPSHEET_TABLE}/Action`;
+  return `https://${APPSHEET_REGION}/api/v2/apps/${process.env.FACTURAS_APPSHEET_APP_ID}/tables/${process.env.FACTURAS_APPSHEET_TABLE}/Action`;
 }
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -28,7 +29,55 @@ function toIso(value) {
   return d.toISOString();
 }
 
+async function appsheetAction(action, rows) {
+  return axios.post(getUrl(), {
+    Action: action,
+    Properties: { Locale: 'es-MX' },
+    Rows: rows,
+  }, {
+    headers: {
+      'Content-Type': 'application/json',
+      ApplicationAccessKey: process.env.FACTURAS_APPSHEET_API_KEY,
+      Accept: 'application/json',
+    },
+    validateStatus: () => true,
+  });
+}
+
+async function fetchExistingRows() {
+  const response = await appsheetAction('Find', []);
+  if (response.status < 200 || response.status >= 300) {
+    const errorText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    throw new Error(`AppSheet Find fallo (${response.status}): ${errorText}`);
+  }
+
+  return Array.isArray(response.data) ? response.data : (response.data?.Rows || response.data?.rows || []);
+}
+
+async function writeRows(action, rows) {
+  if (!rows.length) return;
+
+  let attempt = 0;
+  while (true) {
+    try {
+      const response = await appsheetAction(action, rows);
+      if (response.status < 200 || response.status >= 300) {
+        const errorText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+        throw new Error(`AppSheet ${action} fallo (${response.status}): ${errorText}`);
+      }
+      return;
+    } catch (error) {
+      attempt += 1;
+      const status = error?.response?.status;
+      if (attempt >= MAX_RETRIES || status !== 429) throw error;
+      await sleep(getRetryDelayMs(error, attempt));
+    }
+  }
+}
+
 export async function enviarAAppSheet(rows) {
+  const configuredAction = String(process.env.FACTURAS_APPSHEET_ACTION || 'AddOrUpdate').trim();
+
   if (ID_AS_STRING) {
     rows = rows.map(r => ({ ...r, id: r.id != null ? String(r.id) : r.id }));
   }
@@ -49,43 +98,53 @@ export async function enviarAAppSheet(rows) {
     });
   }
 
+  // AppSheet REST API only documents Add/Edit/Delete/Find, so we emulate
+  // AddOrUpdate by checking the current ids and dispatching the real verb.
+  const existingRows = await fetchExistingRows();
+  const existingIds = new Set(
+    existingRows
+      .map(row => row?.[KEY_COLUMN] ?? row?.id ?? row?.['Row ID'] ?? null)
+      .filter(value => value !== null && value !== undefined && String(value).trim() !== '')
+      .map(value => String(value))
+  );
+
   for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
     const chunk = rows.slice(i, i + CHUNK_SIZE);
-    let attempt = 0;
-    while (true) {
-      try {
-        await axios.post(getUrl(), {
-          Action: process.env.FACTURAS_APPSHEET_ACTION || 'AddOrUpdate',
-          Properties: { Locale: 'es-MX' },
-          Rows: chunk
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            ApplicationAccessKey: process.env.FACTURAS_APPSHEET_API_KEY
-          }
-        });
-        if (VERIFY_AFTER_WRITE) {
-          const first = chunk[0] || {};
-          const keyValue = first[KEY_COLUMN] ?? first.id ?? null;
-          if (keyValue !== null) {
-            await axios.post(getUrl(), {
-              Action: 'Find',
-              Properties: { Locale: 'es-MX', Selector: `${KEY_COLUMN} = ${keyValue}` },
-              Rows: [{ [KEY_COLUMN]: keyValue }]
-            }, {
-              headers: {
-                'Content-Type': 'application/json',
-                ApplicationAccessKey: process.env.FACTURAS_APPSHEET_API_KEY
-              }
-            });
-          }
+    const addRows = [];
+    const editRows = [];
+
+    if (configuredAction === 'Add') {
+      addRows.push(...chunk);
+    } else if (configuredAction === 'Edit') {
+      editRows.push(...chunk);
+    } else {
+      for (const row of chunk) {
+        const keyValue = row?.[KEY_COLUMN] ?? row?.id ?? null;
+        if (keyValue !== null && existingIds.has(String(keyValue))) {
+          editRows.push(row);
+        } else {
+          addRows.push(row);
         }
-        break;
-      } catch (error) {
-        attempt += 1;
-        const status = error?.response?.status;
-        if (attempt >= MAX_RETRIES || status !== 429) throw error;
-        await sleep(getRetryDelayMs(error, attempt));
+      }
+    }
+
+    if (editRows.length > 0) {
+      await writeRows('Edit', editRows);
+    }
+
+    if (addRows.length > 0) {
+      await writeRows('Add', addRows);
+    }
+
+    if (VERIFY_AFTER_WRITE && chunk.length > 0) {
+      const first = chunk[0] || {};
+      const keyValue = first[KEY_COLUMN] ?? first.id ?? null;
+      if (keyValue !== null) {
+        const verifyResponse = await appsheetAction('Find', [{ [KEY_COLUMN]: keyValue }]);
+        if (verifyResponse.status < 200 || verifyResponse.status >= 300) {
+          const errorText = typeof verifyResponse.data === 'string' ? verifyResponse.data : JSON.stringify(verifyResponse.data);
+          throw new Error(`AppSheet Find fallo (${verifyResponse.status}): ${errorText}`);
+        }
       }
     }
     await sleep(3000);

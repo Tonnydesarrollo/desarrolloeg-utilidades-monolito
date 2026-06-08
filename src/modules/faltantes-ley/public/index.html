@@ -34,9 +34,9 @@
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at top left, rgba(15, 118, 110, 0.2), transparent 18%),
-        radial-gradient(circle at top right, rgba(29, 78, 216, 0.18), transparent 20%),
-        linear-gradient(180deg, #f7fbff 0%, #edf3f8 100%);
+        radial-gradient(circle at top left, rgba(192, 57, 43, 0.10), transparent 18%),
+        radial-gradient(circle at top right, rgba(26, 42, 58, 0.08), transparent 22%),
+        linear-gradient(180deg, #f8fafc 0%, #eef3f8 46%, #e9eff5 100%);
     }
 
     .shell {
@@ -57,13 +57,14 @@
       align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      border: 1px solid var(--line);
+      padding: 16px 18px;
+      margin-bottom: 14px;
+      border: 1px solid rgba(26, 42, 58, 0.10);
       border-radius: var(--r-xl);
-      background: linear-gradient(135deg, #0f172a, #111827);
-      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
-      backdrop-filter: blur(10px);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.96));
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+      backdrop-filter: blur(16px);
     }
 
     .brand {
@@ -80,8 +81,8 @@
       flex: 0 0 auto;
       border-radius: 14px;
       background: #fff;
-      border: 1px solid rgba(203, 213, 225, 0.8);
-      box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
       padding: 6px;
     }
 
@@ -91,7 +92,7 @@
 
     .eyebrow {
       margin: 0 0 4px;
-      color: #7dd3fc;
+      color: var(--warn);
       font-size: .68rem;
       font-weight: 900;
       letter-spacing: .16em;
@@ -100,18 +101,19 @@
 
     .title {
       margin: 0;
-      color: #fff;
-      font-size: clamp(1.1rem, 1.55vw, 1.55rem);
-      line-height: 1.05;
-      letter-spacing: -.04em;
+      color: var(--ink);
+      font-size: clamp(1.15rem, 1.65vw, 1.7rem);
+      line-height: 1.08;
+      letter-spacing: -.05em;
       text-transform: uppercase;
     }
 
     .title-sub {
       margin: 4px 0 0;
-      color: rgba(226, 232, 240, 0.88);
+      color: var(--ink-soft);
       font-size: .84rem;
       line-height: 1.4;
+      max-width: 62ch;
     }
 
     .topbar-badges {
@@ -137,7 +139,7 @@
       border: 1px solid var(--line);
       border-radius: var(--r-xl);
       background: linear-gradient(180deg, #ffffff, #f8fafc);
-      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
     }
 
     .toolbar {
@@ -145,17 +147,18 @@
       grid-template-columns: minmax(220px, 280px) minmax(280px, 1fr) auto auto auto;
       gap: 12px;
       align-items: center;
-      padding: 12px 14px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-      background: #f8fafc;
+      padding: 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      background:
+        linear-gradient(180deg, rgba(248,250,252,0.98), rgba(255,255,255,0.98));
     }
 
     .filters-panel {
       display: grid;
       grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(0, 1fr);
       gap: 12px;
-      padding: 12px 14px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
       background: #fff;
     }
 
@@ -163,11 +166,12 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      padding: 12px;
-      border: 1px solid rgba(203, 213, 225, 0.9);
-      border-radius: 18px;
-      background: #fff;
-      box-shadow: none;
+      padding: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 20px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98));
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
     }
 
     .filter-head {
@@ -205,9 +209,9 @@
       cursor: pointer;
       min-height: 48px;
       padding: 0 15px;
-      border: 1px solid #d8e0ea;
-      border-radius: var(--r-md);
-      background: #fff;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #fff, #fbfdff);
       color: var(--ink);
       font-weight: 800;
     }
@@ -226,7 +230,7 @@
     .filter-panel {
       margin-top: 10px;
       padding: 10px;
-      border: 1px solid #d8e0ea;
+      border: 1px solid rgba(148, 163, 184, 0.18);
       border-radius: 16px;
       background: #fff;
       box-shadow: var(--shadow-soft);
@@ -267,7 +271,7 @@
 
     .field {
       width: 100%;
-      border: 1px solid #d8e0ea;
+      border: 1px solid rgba(148, 163, 184, 0.24);
       background: #fff;
       color: var(--ink);
       padding: 0 15px;
@@ -336,7 +340,7 @@
     }
 
     .button-ghost {
-      border: 1px solid #d8e0ea;
+      border: 1px solid rgba(148, 163, 184, 0.22);
       background: #fff;
       color: var(--ink);
     }
@@ -359,8 +363,8 @@
       gap: 10px;
       align-items: center;
       justify-content: space-between;
-      padding: 0 14px 12px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 0 14px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
       background: #fff;
     }
 
@@ -378,11 +382,12 @@
       min-height: 34px;
       padding: 8px 12px;
       border-radius: 999px;
-      border: 1px solid rgba(203, 213, 225, 0.9);
-      background: #fff;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: linear-gradient(180deg, #fff, #fafcff);
       color: var(--ink);
       font-size: .84rem;
       font-weight: 800;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
     }
 
     .chip strong {
@@ -419,7 +424,7 @@
       justify-content: space-between;
       gap: 12px;
       padding: 10px 14px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
       background: #fff;
       flex-wrap: wrap;
     }
@@ -464,10 +469,10 @@
     }
 
     .mobile-card {
-      border: 1px solid #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.18);
       border-radius: 18px;
       background: linear-gradient(180deg, #ffffff, #fbfdff);
-      box-shadow: none;
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
       overflow: hidden;
     }
 
@@ -563,7 +568,7 @@
       position: sticky;
       top: 0;
       z-index: 2;
-      background: linear-gradient(180deg, #0f172a, #111827);
+      background: linear-gradient(180deg, #1a2a3a, #111827);
       color: #fff;
       text-align: left;
       padding: 12px 14px;
@@ -623,9 +628,9 @@
     }
 
     tbody td {
-      border: 1px solid #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.18);
       background: #fff;
-      padding: 7px 9px;
+      padding: 8px 10px;
       vertical-align: top;
       line-height: 1.28;
       min-width: 0;
@@ -636,7 +641,7 @@
     }
 
     tbody tr:nth-child(even) td { background: #fbfdff; }
-    tbody tr:hover td { background: #eef7ff; }
+    tbody tr:hover td { background: #f1f7ff; }
 
     tbody td.pending-cell-filled {
       background: #fff;
@@ -676,6 +681,7 @@
       overflow-wrap: break-word;
       word-break: normal;
       hyphens: auto;
+      color: var(--ink);
     }
     .table-municipio {
       color: var(--ink-soft);
@@ -786,6 +792,13 @@
       }
       .summary {
         gap: 8px;
+      }
+      .toolbar,
+      .filters-panel,
+      .summary,
+      .pager {
+        padding-left: 12px;
+        padding-right: 12px;
       }
     }
   </style>

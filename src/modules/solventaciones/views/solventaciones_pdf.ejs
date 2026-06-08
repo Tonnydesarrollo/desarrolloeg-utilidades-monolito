@@ -32,6 +32,15 @@
     return "tone-slate";
   }
 
+  function getStatusGuide(value) {
+    const status = String(value ?? "").trim();
+    if (status === "3") return "Evidencia subsanada";
+    if (status === "2") return "Evidencia rechazada";
+    if (status === "1") return "Evidencia subida";
+    if (status === "0") return "Pendiente";
+    return "";
+  }
+
   const grupos = Array.isArray(reporte?.grupos) ? reporte.grupos : [];
   const resumen = reporte?.resumen || {};
   const resumenAvanzado = reporte?.resumenAvanzado || {};
@@ -402,10 +411,25 @@
       }
       .incidencia-title {
         margin: 0;
-        font-size: 0.76rem;
+        font-size: 0.82rem;
         font-weight: 800;
         color: #263244;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
       }
+      .incidencia-guide {
+        display: inline-block;
+        margin-bottom: 4px;
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--red);
+      }
+      .incidencia-guide.tone-gray { color: #64748b; }
+      .incidencia-guide.tone-blue { color: var(--blue); }
+      .incidencia-guide.tone-red { color: var(--red); }
+      .incidencia-guide.tone-green { color: var(--green); }
       .incidencia-info {
         margin-top: 2px;
         color: #67758a;
@@ -425,11 +449,24 @@
         color: #334155;
         white-space: pre-wrap;
       }
+      .incidencia-field-label {
+        margin-top: 6px;
+        font-size: 0.58rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748b;
+        font-weight: 800;
+      }
       .image-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 5px;
         margin-top: 6px;
+      }
+      .evidence-block {
+        margin-top: 5px;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       .image-card {
         display: block;
@@ -446,6 +483,30 @@
         height: 140px;
         object-fit: contain;
         background: #f8fbff;
+      }
+      .evidence-note {
+        padding: 8px 10px 10px;
+        border-top: 1px solid #e6edf6;
+        background: #fff7f8;
+      }
+      .evidence-note .label {
+        display: inline-block;
+        margin-bottom: 5px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #ffe8ea;
+        color: var(--red);
+        font-size: 0.56rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .evidence-note .text {
+        margin: 0;
+        font-size: 0.64rem;
+        line-height: 1.35;
+        color: #334155;
+        white-space: pre-wrap;
       }
       .image-fallback {
         height: 140px;
@@ -564,7 +625,7 @@
 
       <div class="content">
         <% if (!grupos.length) { %>
-          <div class="empty">No hubo registros VISITADA para los filtros seleccionados.</div>
+          <div class="empty">No hubo registros VISITADA o RECHAZADA para los filtros seleccionados.</div>
         <% } %>
 
         <% grupos.forEach(function (grupo, idx) { %>
@@ -633,10 +694,13 @@
                       <div class="incidencia">
                         <div class="incidencia-head">
                           <div>
+                            <% if (statusValue) { %>
+                              <div class="incidencia-guide <%= getStatusTone(statusValue) %>"><%= esc(getStatusGuide(statusValue)) %></div>
+                            <% } %>
                             <h4 class="incidencia-title"><%= esc(inc.titulo || "Sin titulo") %></h4>
                             <div class="incidencia-info">
                               <% if (inc.incidencia_id) { %><span>Incidencia #<%= esc(inc.incidencia_id) %></span><% } %>
-                              <% if (statusValue) { %><span> - Estatus <%= esc(getStatusLabel(statusValue)) %></span><% } %>
+                              <% if (statusValue) { %><span> - Estatus <%= esc(statusValue) %> · <%= esc(getStatusLabel(statusValue)) %></span><% } %>
                               <% if (inc.registro_fecha) { %><span> - <%= esc(inc.registro_fecha) %></span><% } %>
                             </div>
                           </div>
@@ -651,28 +715,86 @@
                         </div>
 
                         <% if (inc.descripcion) { %>
+                          <div class="incidencia-field-label">Motivo</div>
                           <div class="incidencia-desc"><%= esc(inc.descripcion) %></div>
                         <% } %>
 
-                        <% if (previewImagenes.length) { %>
-                          <div class="image-grid">
-                            <% previewImagenes.forEach(function (img, index) {
-                              const thumbSrc = img.pdfPreviewUrl || img.previewUrl || img.thumbnailUrl || img.url_imagen || img.url || "";
-                              const fullSrc = img.url_imagen || img.url || thumbSrc;
-                              const caption = clampText(img.filename || img.sysfilename || `Foto ${index + 1}`, 28);
-                            %>
-                              <a class="image-card" href="<%= esc(fullSrc) %>" target="_blank" rel="noreferrer" title="<%= esc(caption) %>">
-                                <% if (thumbSrc) { %>
-                                  <img src="<%= esc(thumbSrc) %>" alt="<%= esc(caption || 'Imagen') %>">
+                        <% const adjuntosIncidencia = Array.isArray(inc.adjuntosIncidencia) ? inc.adjuntosIncidencia : []; %>
+                        <% if (adjuntosIncidencia.length) { %>
+                          <div class="evidence-block">
+                            <div class="image-grid">
+                              <% adjuntosIncidencia.forEach(function (img, index) {
+                                const thumbSrc = img.pdfPreviewUrl || img.previewUrl || img.thumbnailUrl || img.url_imagen || img.url || "";
+                                const fullSrc = img.url_imagen || img.url || thumbSrc;
+                                const caption = clampText(img.filename || img.sysfilename || `Adjunto ${index + 1}`, 28);
+                              %>
+                                <% if (fullSrc) { %>
+                                  <a class="image-card" href="<%= esc(fullSrc) %>" target="_blank" rel="noreferrer" title="<%= esc(caption) %>">
+                                    <% if (thumbSrc) { %>
+                                      <img src="<%= esc(thumbSrc) %>" alt="<%= esc(caption || 'Imagen') %>">
+                                    <% } else { %>
+                                      <div class="image-fallback">Sin miniatura</div>
+                                    <% } %>
+                                    <% if (caption) { %>
+                                      <span class="image-caption"><%= esc(caption) %></span>
+                                    <% } %>
+                                  </a>
                                 <% } else { %>
-                                  <div class="image-fallback">Sin miniatura</div>
+                                  <div class="image-card">
+                                    <div class="image-fallback">Sin archivo adjunto</div>
+                                  </div>
                                 <% } %>
-                                <% if (caption) { %>
-                                  <span class="image-caption"><%= esc(caption) %></span>
-                                <% } %>
-                              </a>
-                            <% }); %>
+                              <% }); %>
+                            </div>
+                            <div class="evidence-note" style="border:1px solid #f0c3c8; border-radius:8px; background:#fff8f8;">
+                              <span class="label">Evidencia fotográfica</span>
+                            </div>
                           </div>
+                        <% } %>
+
+                        <% const evidenciasDetalle = Array.isArray(inc.evidenciasDetalle) ? inc.evidenciasDetalle : (Array.isArray(inc.imagenes) ? inc.imagenes : []); %>
+                        <% if (evidenciasDetalle.length) { %>
+                          <% evidenciasDetalle.forEach(function (ev) {
+                            const files = Array.isArray(ev.files) ? ev.files : [];
+                            const evidenceText = String(ev.descripcion || ev.observacion || ev.comentario || "").trim();
+                          %>
+                            <div class="evidence-block">
+                              <div class="image-grid">
+                                <% if (files.length) { %>
+                                  <% files.forEach(function (file, index) {
+                                    const thumbSrc = file.pdfPreviewUrl || file.previewUrl || file.thumbnailUrl || file.url_imagen || file.url || "";
+                                    const fullSrc = file.url_imagen || file.url || thumbSrc;
+                                    const caption = clampText(file.filename || file.sysfilename || `Foto ${index + 1}`, 28);
+                                  %>
+                                    <% if (fullSrc) { %>
+                                      <a class="image-card" href="<%= esc(fullSrc) %>" target="_blank" rel="noreferrer" title="<%= esc(caption) %>">
+                                        <% if (thumbSrc) { %>
+                                          <img src="<%= esc(thumbSrc) %>" alt="<%= esc(caption || 'Imagen') %>">
+                                        <% } else { %>
+                                          <div class="image-fallback">Sin miniatura</div>
+                                        <% } %>
+                                        <% if (caption) { %>
+                                          <span class="image-caption"><%= esc(caption) %></span>
+                                        <% } %>
+                                      </a>
+                                    <% } else { %>
+                                      <div class="image-card">
+                                        <div class="image-fallback">Sin archivo adjunto</div>
+                                      </div>
+                                    <% } %>
+                                  <% }); %>
+                                <% } else { %>
+                                  <div class="image-card">
+                                    <div class="image-fallback">Sin archivo adjunto</div>
+                                  </div>
+                                <% } %>
+                              </div>
+                              <div class="evidence-note" style="border:1px solid #f0c3c8; border-radius:8px; background:#fff8f8;">
+                                <span class="label"><%= esc(ev.is_observacion ? "Observación" : "Descripción de evidencia") %></span>
+                                <p class="text"><%= esc(evidenceText || "Sin descripción") %></p>
+                              </div>
+                            </div>
+                          <% }); %>
                         <% } else { %>
                           <div class="empty" style="margin-top:6px;">Sin evidencia adjunta para este motivo.</div>
                         <% } %>

@@ -21,6 +21,7 @@ const CONFIG = {
   retryBaseMs: Number(process.env.PEDIDOS_RETRY_BASE_MS || "750"),
   fetchTimeoutMs: Number(process.env.PEDIDOS_FETCH_TIMEOUT_MS || "20000"),
   appsheetDelayMs: Number(process.env.PEDIDOS_APPSHEET_DELAY_MS || "600"),
+  forceRefresh: String(process.env.PEDIDOS_FORCE_REFRESH || "").trim() === "1",
   outputDir: process.env.PEDIDOS_OUTPUT_DIR || path.resolve(process.cwd(), "src", "modules", "jobs", "native", "pedidos", "data")
 };
 
@@ -173,12 +174,12 @@ async function processPedidos(drive) {
     if (isEmpty(pedido)) { skippedRows.push({ row: i + 1, pedido: "", reason: "sin_pedido" }); skipped++; continue; }
     const trackedRow = buildPedidoReplicaRow(row, pedido);
     const needs = { PROVEEDOR: isEmpty(row.PROVEEDOR) || isBadProveedor(row.PROVEEDOR), ESTABLECIMIENTO: isEmpty(row.ESTABLECIMIENTO), FECHA: isEmpty(row.FECHA), IMPORTE: isEmpty(row.IMPORTE), DESCRIPCION: isEmpty(row.DESCRIPCION) };
-    if (!Object.values(needs).some(Boolean)) {
+    if (!CONFIG.forceRefresh && !Object.values(needs).some(Boolean)) {
       nextReplicaRows.push(trackedRow);
       skippedRows.push({ row: i + 1, pedido, reason: "sin_campos_faltantes" });
       continue;
     }
-    if (isTrackedRowUnchanged(trackedRow, CONFIG.appsheetKeyPedidos, replica.rows)) {
+    if (!CONFIG.forceRefresh && isTrackedRowUnchanged(trackedRow, CONFIG.appsheetKeyPedidos, replica.rows)) {
       nextReplicaRows.push(trackedRow);
       skippedRows.push({ row: i + 1, pedido, reason: "sin_cambios_desde_snapshot" });
       skippedUnchanged++;
@@ -221,12 +222,12 @@ async function processLiberaciones(drive) {
     if (isEmpty(liberacion)) { skippedRows.push({ row: i + 1, liberacion: "", reason: "sin_liberacion" }); skipped++; continue; }
     const trackedRow = buildLiberacionReplicaRow(row, liberacion);
     const needs = { "NUM. DE PEDIDO": isEmpty(row["NUM. DE PEDIDO"]), FECHA: isEmpty(row.FECHA) };
-    if (!Object.values(needs).some(Boolean)) {
+    if (!CONFIG.forceRefresh && !Object.values(needs).some(Boolean)) {
       nextReplicaRows.push(trackedRow);
       skippedRows.push({ row: i + 1, liberacion, reason: "sin_campos_faltantes" });
       continue;
     }
-    if (isTrackedRowUnchanged(trackedRow, CONFIG.appsheetKeyLiberaciones, replica.rows)) {
+    if (!CONFIG.forceRefresh && isTrackedRowUnchanged(trackedRow, CONFIG.appsheetKeyLiberaciones, replica.rows)) {
       nextReplicaRows.push(trackedRow);
       skippedRows.push({ row: i + 1, liberacion, reason: "sin_cambios_desde_snapshot" });
       skippedUnchanged++;

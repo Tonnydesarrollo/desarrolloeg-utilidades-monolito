@@ -6,10 +6,15 @@ import { CookieJar } from "tough-cookie";
 import { wrapper } from "axios-cookiejar-support";
 import * as cheerio from "cheerio";
 import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from "../../services/localReplica.js";
+import { loadJobState, saveJobState } from "../../services/jobState.js";
 
 const VALID_UPLOAD_TARGETS = new Set(["none", "all", "pagos", "relacionados", "facturas", "secuencial"]);
 
 let isRunning = false;
+const FORCE_RESYNC = String(process.env.CASALEY_FORCE_RESYNC || "").trim() === "1";
+const INCREMENTAL_SYNC = String(process.env.CASALEY_INCREMENTAL_SYNC || "1").trim() !== "0";
+const SYNC_LOOKBACK_DAYS = Math.max(0, Number(process.env.CASALEY_SYNC_LOOKBACK_DAYS || "2"));
+const APPSHEET_REGION = process.env.CASALEY_APPSHEET_REGION || "www.appsheet.com";
 
 function readEnv(names, fallback = "") {
   for (const name of names) {
@@ -35,18 +40,32 @@ function readBoolean(names, fallback = false) {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
-function formatDateDMY(date) {
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = String(date.getFullYear());
-  return `${dd}/${mm}/${yyyy}`;
+function getCurrentMonthRange() {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { ini: formatDateDMY(first), fin: formatDateDMY(last) };
 }
 
-function getLastMonthRange() {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const last = new Date(now.getFullYear(), now.getMonth(), 0);
-  return { ini: formatDateDMY(first), fin: formatDateDMY(last) };
+function computeIncrementalRange(defaultRange, lastSyncDateText, lookbackDays) {
+  const defaultStart = parseDMYToDate(defaultRange.ini) || new Date();
+  const defaultEnd = parseDMYToDate(defaultRange.fin) || new Date();
+  if (!lastSyncDateText) {
+    return { ...defaultRange };
+  }
+
+  const lastSyncDate = parseDMYToDate(lastSyncDateText);
+  if (!lastSyncDate) {
+    return { ...defaultRange };
+  }
+
+  const candidateStart = addDays(lastSyncDate, -Math.max(0, lookbackDays));
+  const start = candidateStart.getTime() > defaultStart.getTime() ? candidateStart : defaultStart;
+  const end = defaultEnd.getTime() >= start.getTime() ? defaultEnd : new Date();
+  return {
+    ini: formatDateDMY(start),
+    fin: formatDateDMY(end),
+  };
 }
 
 function decodeLatin1(data) {
@@ -58,6 +77,110 @@ function cleanText(value) {
     .replace(/\u00A0/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function formatDateDMY(date) {
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function parseDMYToDate(value) {
+  const text = cleanText(value);
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+}
+
+function addDays(date, days) {
+  const copy = new Date(date.getTime());
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function maxDateDMY(a, b) {
+  const da = parseDMYToDate(a);
+  const db = parseDMYToDate(b);
+  if (!da) return b || "";
+  if (!db) return a || "";
+  return da.getTime() >= db.getTime() ? a : b;
+}
+
+function getMaxDateFromRows(rows, columns) {
+  let max = "";
+  for (const row of rows || []) {
+    for (const column of columns) {
+      const value = cleanText(row?.[column] ?? "");
+      if (!value) continue;
+      if (!max) {
+        max = value;
+        continue;
+      }
+      max = maxDateDMY(max, value);
+    }
+  }
+  return max;
+}
+
+const CASA_LEY_FACTURA_HEADER_NAMES = new Set([
+  "Emisor",
+  "Receptor",
+  "Serie",
+  "Folio",
+  "Fecha factura",
+  "Fecha registro",
+  "Importe",
+  "Iva",
+  "Total",
+  "Estatus",
+  "Proveedor Sec",
+  "Num ent",
+  "Tienda",
+  "No Remision",
+  "Razón social",
+  "Folio Uuid",
+]);
+
+function looksLikeCasaLeyFacturaHeaderRow(cells) {
+  if (!Array.isArray(cells) || cells.length < 8) return false;
+  let matches = 0;
+  for (const cell of cells) {
+    const text = cleanText(cell);
+    if (CASA_LEY_FACTURA_HEADER_NAMES.has(text)) matches += 1;
+  }
+  return matches >= 8;
+}
+
+function looksLikeLoginPage(html) {
+  const text = String(html ?? "").toLowerCase();
+  return (
+    text.includes("txtlogin_us") ||
+    text.includes("btnlogin") ||
+    text.includes("reestablecer contraseña") ||
+    text.includes("capture el usuario")
+  );
+}
+
+function looksLikeServerErrorPage(html) {
+  const text = String(html ?? "").toLowerCase();
+  return (
+    text.includes("execution timeout expired") ||
+    text.includes("soapexception") ||
+    text.includes("unhandled exception") ||
+    text.includes("error 525") ||
+    text.includes("cloudflare")
+  );
+}
+
+function assertValidCasaLeyHtml(html, context, artifactPath = "") {
+  if (!looksLikeLoginPage(html) && !looksLikeServerErrorPage(html)) return;
+
+  if (artifactPath) {
+    fs.writeFileSync(artifactPath, html, "utf8");
+  }
+
+  throw new Error(`[casaley] ${context}: la respuesta parece una pagina de login o error.`);
 }
 
 function parseHiddenFields(html) {
@@ -103,16 +226,19 @@ function extractTable(html) {
 
   const headers = [];
   table.find("thead tr th").each((_, th) => headers.push(cleanText($(th).text())));
-  if (headers.length === 0) {
-    table.find("tr")
-      .first()
-      .find("th,td")
-      .each((_, cell) => headers.push(cleanText($(cell).text())));
+  const firstRow = table.find("tr").first();
+  const firstRowCells = firstRow
+    .find("th,td")
+    .toArray()
+    .map((cell) => cleanText($(cell).text()));
+  const firstRowHasHeaderCells = firstRow.find("th").length > 0;
+  if (headers.length === 0 && (firstRowHasHeaderCells || looksLikeCasaLeyFacturaHeaderRow(firstRowCells))) {
+    firstRowCells.forEach((cell) => headers.push(cell));
   }
 
   const rows = [];
   const trList = table.find("tr").toArray();
-  const startIndex = trList.length > 0 ? 1 : 0;
+  const startIndex = headers.length > 0 ? 1 : 0;
 
   for (let index = startIndex; index < trList.length; index += 1) {
     const $$ = cheerio.load(trList[index]);
@@ -191,6 +317,90 @@ function sanitizeRowValuesOnly(row) {
   return output;
 }
 
+function parseCasaLeyDateValue(value) {
+  const text = cleanText(value);
+  if (!text) return null;
+
+  const dmyMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}):(\d{2}))?$/);
+  if (dmyMatch) {
+    return {
+      year: Number(dmyMatch[3]),
+      month: Number(dmyMatch[2]),
+      day: Number(dmyMatch[1]),
+      hour: Number(dmyMatch[4] || 0),
+      minute: Number(dmyMatch[5] || 0),
+      second: Number(dmyMatch[6] || 0),
+      hasTime: Boolean(dmyMatch[4]),
+    };
+  }
+
+  const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}):(\d{2}))?$/);
+  if (isoMatch) {
+    return {
+      year: Number(isoMatch[1]),
+      month: Number(isoMatch[2]),
+      day: Number(isoMatch[3]),
+      hour: Number(isoMatch[4] || 0),
+      minute: Number(isoMatch[5] || 0),
+      second: Number(isoMatch[6] || 0),
+      hasTime: Boolean(isoMatch[4]),
+    };
+  }
+
+  return null;
+}
+
+function getCasaLeyMonthKeyFromValue(value) {
+  const parsed = parseCasaLeyDateValue(value);
+  if (!parsed) return "";
+  return `${String(parsed.year).padStart(4, "0")}-${String(parsed.month).padStart(2, "0")}`;
+}
+
+function getCasaLeyMonthKeyFromRow(row, candidateColumns = []) {
+  for (const column of candidateColumns) {
+    const monthKey = getCasaLeyMonthKeyFromValue(row?.[column]);
+    if (monthKey) return monthKey;
+  }
+  return "";
+}
+
+function groupRowsByMonth(rows, monthResolver) {
+  const buckets = new Map();
+  for (const row of rows || []) {
+    const monthKey = cleanText(monthResolver?.(row) || "") || "unknown";
+    if (!buckets.has(monthKey)) buckets.set(monthKey, []);
+    buckets.get(monthKey).push(row);
+  }
+  return Array.from(buckets.entries()).sort(([a], [b]) => a.localeCompare(b, "es"));
+}
+
+function formatCasaLeyDateForAppSheet(value, { dateOnly = false } = {}) {
+  const parsed = parseCasaLeyDateValue(value);
+  if (!parsed) return value;
+
+  const pad = (n) => String(n).padStart(2, "0");
+  const date = `${parsed.year}-${pad(parsed.month)}-${pad(parsed.day)}`;
+  if (dateOnly) return date;
+  return `${date} ${pad(parsed.hour)}:${pad(parsed.minute)}:${pad(parsed.second)}`;
+}
+
+function normalizeCasaLeyUploadRow(row) {
+  const output = {};
+  for (const [key, value] of Object.entries(row || {})) {
+    if (/^col_\d+$/i.test(key)) continue;
+    const cleaned = typeof value === "string" ? cleanText(value) : (value == null ? "" : value);
+    if (typeof cleaned === "string" && key.toLowerCase().includes("fecha")) {
+      const isFacturaDate = key.toLowerCase().includes("factura") && !key.toLowerCase().includes("registro");
+      output[key] = formatCasaLeyDateForAppSheet(cleaned, { dateOnly: isFacturaDate });
+    } else {
+      output[key] = cleaned;
+    }
+  }
+  if (!Object.prototype.hasOwnProperty.call(output, "CLUBFACTURA")) output.CLUBFACTURA = "";
+  if (!Object.prototype.hasOwnProperty.call(output, "FACTURA CLUBFACTURA")) output["FACTURA CLUBFACTURA"] = "";
+  return output;
+}
+
 async function sleep(ms) {
   if (ms <= 0) return;
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -248,7 +458,9 @@ async function loginCasaLey(client, config, user, password) {
     headers: { Referer: config.loginUrl },
     responseType: "arraybuffer",
   });
-  const homeHtml = decodeLatin1(homeResponse.data).toLowerCase();
+  const homeHtmlRaw = decodeLatin1(homeResponse.data);
+  const homeHtml = homeHtmlRaw.toLowerCase();
+  assertValidCasaLeyHtml(homeHtmlRaw, `login para ${user}`, path.join(config.outputDir, `debug_home_${user}.html`));
 
   const ok =
     homeHtml.includes("inicio") ||
@@ -262,7 +474,9 @@ async function loginCasaLey(client, config, user, password) {
   }
 }
 
-async function consultarPagos(client, config) {
+async function consultarPagos(client, config, range = {}) {
+  const fechaIni = range.fechaIni || config.fechaIni;
+  const fechaFin = range.fechaFin || config.fechaFin;
   const getResponse = await client.get(config.pagosUrl, {
     headers: { Referer: config.homeUrl },
     responseType: "arraybuffer",
@@ -278,8 +492,8 @@ async function consultarPagos(client, config) {
     __LASTFOCUS: "",
     "ctl00$ContentPlaceHolder1$TxBxReferencia": "",
     "ctl00$ContentPlaceHolder1$TxBxOperacion": "",
-    "ctl00$ContentPlaceHolder1$fechaIni": config.fechaIni,
-    "ctl00$ContentPlaceHolder1$fechaFin": config.fechaFin,
+    "ctl00$ContentPlaceHolder1$fechaIni": fechaIni,
+    "ctl00$ContentPlaceHolder1$fechaFin": fechaFin,
     "ctl00$ContentPlaceHolder1$cboTipoPago": "1",
     "ctl00$ContentPlaceHolder1$cboEstatus": "T",
     "ctl00$ContentPlaceHolder1$btnBuscar": "Buscar",
@@ -302,6 +516,7 @@ async function consultarPagos(client, config) {
   });
 
   const resultHtml = decodeLatin1(postResponse.data);
+  assertValidCasaLeyHtml(resultHtml, "consulta de pagos", path.join(config.outputDir, "debug_pagos_result.html"));
   const { rows } = extractTable(resultHtml);
 
   if (!rows.length) {
@@ -331,6 +546,9 @@ async function consultaDoctosRelacionados(client, config, referenciaPago) {
   );
 
   const text = decodeLatin1(response.data);
+  if (looksLikeLoginPage(text) || looksLikeServerErrorPage(text)) {
+    throw new Error("[casaley] consulta de doctos relacionados: la respuesta parece una pagina de login o error.");
+  }
 
   let data;
   try {
@@ -378,7 +596,9 @@ async function consultarRelacionadosDesdePagos(client, config, pagos) {
   return relacionados;
 }
 
-async function consultarFacturas(client, config, user) {
+async function consultarFacturas(client, config, user, range = {}) {
+  const fechaIni = range.fechaIni || config.fechaIni;
+  const fechaFin = range.fechaFin || config.fechaFin;
   const getResponse = await client.get(config.facturasUrl, {
     headers: { Referer: config.homeUrl },
     responseType: "arraybuffer",
@@ -394,10 +614,10 @@ async function consultarFacturas(client, config, user) {
     "ctl00$ContentPlaceHolder1$TxBxSerie": "",
     "ctl00$ContentPlaceHolder1$TxBxFolio": "",
     "ctl00$ContentPlaceHolder1$DrLiStatus": "ALL",
-    "ctl00$ContentPlaceHolder1$fechaIniFac": config.fechaIni,
-    "ctl00$ContentPlaceHolder1$fechaFinFac": config.fechaFin,
-    "ctl00$ContentPlaceHolder1$fechaIniReg": "",
-    "ctl00$ContentPlaceHolder1$fechaFinReg": "",
+    "ctl00$ContentPlaceHolder1$fechaIniFac": "",
+    "ctl00$ContentPlaceHolder1$fechaFinFac": "",
+    "ctl00$ContentPlaceHolder1$fechaIniReg": fechaIni,
+    "ctl00$ContentPlaceHolder1$fechaFinReg": fechaFin,
     "ctl00$ContentPlaceHolder1$btnBuscar": "Buscar",
     "ctl00$ContentPlaceHolder1$hdnRFC": user,
     "ctl00$ContentPlaceHolder1$hdnConsultas": "",
@@ -414,6 +634,7 @@ async function consultarFacturas(client, config, user) {
   });
 
   const resultHtml = decodeLatin1(postResponse.data);
+  assertValidCasaLeyHtml(resultHtml, "consulta de facturas", path.join(config.outputDir, "debug_facturas_result.html"));
   const { rows } = extractTable(resultHtml);
 
   if (!rows.length) {
@@ -425,7 +646,7 @@ async function consultarFacturas(client, config, user) {
 }
 
 async function appsheetAction(config, tableName, action, rows) {
-  const url = `https://api.appsheet.com/api/v2/apps/${config.appsheetAppId}/tables/${encodeURIComponent(tableName)}/Action`;
+  const url = `https://${APPSHEET_REGION}/api/v2/apps/${config.appsheetAppId}/tables/${encodeURIComponent(tableName)}/Action`;
   const response = await axios.post(
     url,
     {
@@ -442,7 +663,7 @@ async function appsheetAction(config, tableName, action, rows) {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      timeout: 60000,
+      timeout: config.appsheetTimeoutMs,
       validateStatus: () => true,
     }
   );
@@ -469,46 +690,95 @@ function responseLooksLikeNotFound(errorText) {
   return text.includes("cannot find") || text.includes("not found") || text.includes("notfound");
 }
 
-async function upsertOne(config, tableName, row, keyColumn) {
-  if (config.dryRun) return { ok: true, mode: "dry_run" };
-
-  const editResponse = await appsheetActionWithRetry(config, tableName, "Edit", [row]);
-  if (editResponse.status >= 200 && editResponse.status < 300) {
-    return { ok: true, mode: "edit" };
-  }
-
-  const editErrorText = typeof editResponse.data === "string" ? editResponse.data : JSON.stringify(editResponse.data);
-  if (responseLooksLikeNotFound(editErrorText)) {
-    const addResponse = await appsheetActionWithRetry(config, tableName, "Add", [row]);
-    if (addResponse.status >= 200 && addResponse.status < 300) {
-      return { ok: true, mode: "add" };
-    }
-    const addErrorText = typeof addResponse.data === "string" ? addResponse.data : JSON.stringify(addResponse.data);
-    return { ok: false, mode: "add_failed", error: addErrorText };
-  }
-
-  return { ok: false, mode: "edit_failed", error: editErrorText };
+function createCasaLeyRowId() {
+  return crypto.randomBytes(16).toString("base64url").replace(/[^A-Za-z0-9_]/g, "").slice(0, 22);
 }
 
-async function upsertMany(config, tableName, rows, keyColumn, label) {
+function buildExistingRowIndex(rows, keyColumn) {
+  const index = new Map();
+  for (const row of rows || []) {
+    const keyValue = row?.[keyColumn];
+    if (keyValue === null || keyValue === undefined || String(keyValue).trim() === "") continue;
+    index.set(String(keyValue), row);
+  }
+  return index;
+}
+
+function buildKnownKeySet(rows, keyColumn) {
+  const keys = new Set();
+  const iterable = Array.isArray(rows) ? rows : Object.values(rows || {});
+  for (const row of iterable) {
+    const keyValue = row?.[keyColumn] ?? row?.row?.[keyColumn];
+    if (keyValue === null || keyValue === undefined || String(keyValue).trim() === "") continue;
+    keys.add(String(keyValue));
+  }
+  return keys;
+}
+
+async function loadAppSheetRows(config, tableName) {
+  const response = await appsheetActionWithRetry(config, tableName, "Find", []);
+  if (response.status < 200 || response.status >= 300) {
+    const errorText = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
+    throw new Error(`No pude leer AppSheet (${tableName}): ${errorText}`);
+  }
+
+  return Array.isArray(response.data) ? response.data : (response.data?.Rows || response.data?.rows || []);
+}
+
+async function upsertOne(config, tableName, row, keyColumn, lookup) {
+  if (config.dryRun) return { ok: true, mode: "dry_run" };
+
+  const key = String(row?.[keyColumn] ?? "");
+  if (config.incrementalSync && !FORCE_RESYNC) {
+    if (lookup?.has?.(key)) {
+      return { ok: true, mode: "skip_existing" };
+    }
+  } else {
+    const existingRow = lookup instanceof Map ? lookup.get(key) : null;
+    if (existingRow) {
+      return { ok: true, mode: "skip_existing" };
+    }
+  }
+
+  const addRow = { ...row, "Row ID": createCasaLeyRowId() };
+  const addResponse = await appsheetActionWithRetry(config, tableName, "Add", [addRow]);
+  if (addResponse.status >= 200 && addResponse.status < 300) {
+    return { ok: true, mode: "add" };
+  }
+
+  const addErrorText = typeof addResponse.data === "string" ? addResponse.data : JSON.stringify(addResponse.data);
+  return { ok: false, mode: "add_failed", error: addErrorText };
+}
+
+async function upsertMany(config, tableName, rows, keyColumn, label, lookup = new Map()) {
   const queue = rows.slice();
   let ok = 0;
   let added = 0;
   let edited = 0;
+  let skippedExisting = 0;
   let failed = 0;
+  let processed = 0;
 
-  const workers = Array.from({ length: config.concurrency }, async () => {
+  console.log(`[casaley] ${label}: uploadando ${rows.length} filas`);
+
+  const workers = Array.from({ length: 1 }, async () => {
     while (queue.length) {
       const row = queue.shift();
-      const result = await upsertOne(config, tableName, row, keyColumn);
+      processed += 1;
+      const current = processed;
+      console.log(`[casaley] ${label}: fila ${current}/${rows.length} key=${row?.[keyColumn] ?? ""}`);
+      const result = await upsertOne(config, tableName, row, keyColumn, lookup);
       if (result.ok) {
         ok += 1;
         if (result.mode === "add") added += 1;
         if (result.mode === "edit") edited += 1;
+        if (result.mode === "skip_existing") skippedExisting += 1;
+        console.log(`[casaley] ${label}: fila ${current}/${rows.length} ok=${result.mode}`);
         continue;
       }
 
       failed += 1;
+      console.log(`[casaley] ${label}: fila ${current}/${rows.length} fallo=${result.mode}`);
       fs.appendFileSync(
         path.join(config.outputDir, `appsheet_errors_${label}.log`),
         `\n[${new Date().toISOString()}] table=${tableName} key=${row?.[keyColumn]} mode=${result.mode}\n${result.error}\n`,
@@ -518,7 +788,28 @@ async function upsertMany(config, tableName, rows, keyColumn, label) {
   });
 
   await Promise.all(workers);
-  return { total: rows.length, ok, edited, added, failed };
+  return { total: rows.length, ok, edited, added, skippedExisting, failed };
+}
+
+async function upsertManyByMonth(config, tableName, rows, keyColumn, label, lookup, monthResolver) {
+  const monthGroups = groupRowsByMonth(rows, monthResolver);
+  const summary = { total: 0, ok: 0, edited: 0, added: 0, skippedExisting: 0, failed: 0, batches: [] };
+
+  for (const [monthKey, monthRows] of monthGroups) {
+    if (!monthRows.length) continue;
+    console.log(`[casaley] ${label}: lote ${monthKey} con ${monthRows.length} filas`);
+    const result = await upsertMany({ ...config, concurrency: 1 }, tableName, monthRows, keyColumn, `${label}:${monthKey}`, lookup);
+    summary.total += result.total;
+    summary.ok += result.ok;
+    summary.edited += result.edited;
+    summary.added += result.added;
+    summary.skippedExisting += result.skippedExisting || 0;
+    summary.failed += result.failed;
+    summary.batches.push({ month: monthKey, ...result });
+    if (result.failed > 0) break;
+  }
+
+  return summary;
 }
 
 async function runForUser(config, label, user, password) {
@@ -528,13 +819,13 @@ async function runForUser(config, label, user, password) {
   await loginCasaLey(client, config, user, password);
 
   console.log(`[casaley] ${label}: pagos`);
-  const pagos = await consultarPagos(client, config);
+  const pagos = await consultarPagos(client, config, config.pagosRange);
 
   console.log(`[casaley] ${label}: relacionados`);
   const relacionados = await consultarRelacionadosDesdePagos(client, config, pagos);
 
   console.log(`[casaley] ${label}: facturas`);
-  const facturas = await consultarFacturas(client, config, user);
+  const facturas = await consultarFacturas(client, config, user, config.facturasRange);
 
   writeCsv(pagos, path.join(config.outputDir, `pagos_${label}.csv`));
   writeCsv(relacionados, path.join(config.outputDir, `relacionados_${label}.csv`));
@@ -576,7 +867,7 @@ function requireEnv(config) {
 }
 
 function buildConfig(options = {}) {
-  const { ini: defaultFechaIni, fin: defaultFechaFin } = getLastMonthRange();
+  const { ini: defaultFechaIni, fin: defaultFechaFin } = getCurrentMonthRange();
   const uploadTarget = String(options.uploadTarget || readEnv(["CASALEY_UPLOAD_TARGET"], "all")).toLowerCase().trim();
   if (!VALID_UPLOAD_TARGETS.has(uploadTarget)) {
     throw new Error("CASALEY_UPLOAD_TARGET invalido. Usa none, all, pagos, relacionados, facturas o secuencial.");
@@ -638,8 +929,11 @@ function buildConfig(options = {}) {
     facturasKey: readEnv(["CASALEY_FACTURAS_KEY", "FACTURAS_KEY"], ""),
     concurrency: Math.max(1, readNumber(["CASALEY_CONCURRENCY", "CONCURRENCY"], 6)),
     dryRun: readBoolean(["CASALEY_DRY_RUN", "DRY_RUN"], false),
+    incrementalSync: readBoolean(["CASALEY_INCREMENTAL_SYNC"], true),
+    uploadByMonth: readBoolean(["CASALEY_UPLOAD_BY_MONTH"], false),
     appsheetMaxRetries: Math.max(0, readNumber(["CASALEY_APPSHEET_MAX_RETRIES", "APPSHEET_MAX_RETRIES"], 5)),
     appsheetBaseDelayMs: Math.max(250, readNumber(["CASALEY_APPSHEET_BASE_DELAY_MS", "APPSHEET_BASE_DELAY_MS"], 1000)),
+    appsheetTimeoutMs: Math.max(60000, readNumber(["CASALEY_APPSHEET_TIMEOUT_MS"], 120000)),
     uploadTarget,
     isSequential,
     shouldUpload,
@@ -660,10 +954,20 @@ function buildConfig(options = {}) {
 async function runCasaleyJob(options = {}) {
   const config = buildConfig(options);
   requireEnv(config);
+  const state = loadJobState("casaley-sync-appsheet");
 
   fs.writeFileSync(path.join(config.outputDir, "appsheet_errors_pagos.log"), "", "utf8");
   fs.writeFileSync(path.join(config.outputDir, "appsheet_errors_relacionados.log"), "", "utf8");
   fs.writeFileSync(path.join(config.outputDir, "appsheet_errors_facturas.log"), "", "utf8");
+
+  const defaultPagosRange = { ini: config.fechaIni, fin: config.fechaFin };
+  const defaultFacturasRange = { ini: config.fechaIni, fin: config.fechaFin };
+  config.pagosRange = config.incrementalSync && !FORCE_RESYNC
+    ? computeIncrementalRange(defaultPagosRange, state.data?.pagos?.lastDate || "", SYNC_LOOKBACK_DAYS)
+    : defaultPagosRange;
+  config.facturasRange = config.incrementalSync && !FORCE_RESYNC
+    ? computeIncrementalRange(defaultFacturasRange, state.data?.facturas?.lastDate || "", SYNC_LOOKBACK_DAYS)
+    : defaultFacturasRange;
 
   const results = [];
   const usersToProcess = config.maxUsers > 0 ? config.users.slice(0, config.maxUsers) : config.users;
@@ -675,13 +979,15 @@ async function runCasaleyJob(options = {}) {
   const allRelacionados = results.flatMap((result) => result.relacionados);
   const allFacturas = results.flatMap((result) => result.facturas);
 
-  const pagosPrepared = config.pagosKey ? ensureKey(allPagos.map(sanitizeRowValuesOnly), config.pagosKey) : allPagos;
+  const prepareUploadRows = (rows) => rows.map((row) => normalizeCasaLeyUploadRow(sanitizeRowValuesOnly(row)));
+
+  const pagosPrepared = config.pagosKey ? ensureKey(prepareUploadRows(allPagos), config.pagosKey) : prepareUploadRows(allPagos);
   const relacionadosPrepared = config.relacionadosKey
-    ? ensureKey(allRelacionados.map(sanitizeRowValuesOnly), config.relacionadosKey)
-    : allRelacionados;
+    ? ensureKey(prepareUploadRows(allRelacionados), config.relacionadosKey)
+    : prepareUploadRows(allRelacionados);
   const facturasPrepared = config.facturasKey
-    ? ensureKey(allFacturas.map(sanitizeRowValuesOnly), config.facturasKey)
-    : allFacturas;
+    ? ensureKey(prepareUploadRows(allFacturas), config.facturasKey)
+    : prepareUploadRows(allFacturas);
 
   const pagosSelected = applyRowLimit(pagosPrepared, config.maxPagosRows);
   const relacionadosSelected = applyRowLimit(relacionadosPrepared, config.maxRelacionadosRows);
@@ -694,16 +1000,34 @@ async function runCasaleyJob(options = {}) {
   const pagosReplicaPath = resolveReplicaFile(config, "pagos");
   const relacionadosReplicaPath = resolveReplicaFile(config, "relacionados");
   const facturasReplicaPath = resolveReplicaFile(config, "facturas");
+  const [pagosExistingRows, relacionadosExistingRows, facturasExistingRows] = !config.incrementalSync || FORCE_RESYNC
+    ? (config.shouldUpload.pagos || config.shouldUpload.relacionados || config.shouldUpload.facturas
+      ? await Promise.all([
+          config.shouldUpload.pagos ? loadAppSheetRows(config, config.tablaPagos) : [],
+          config.shouldUpload.relacionados ? loadAppSheetRows(config, config.tablaRelacionados) : [],
+          config.shouldUpload.facturas ? loadAppSheetRows(config, config.tablaFacturas) : [],
+        ])
+      : [[], [], []])
+    : [[], [], []];
+  const pagosKnownLookup = config.incrementalSync && !FORCE_RESYNC
+    ? buildKnownKeySet(loadReplica(pagosReplicaPath).rows, config.pagosKey)
+    : buildExistingRowIndex(pagosExistingRows, config.pagosKey);
+  const relacionadosKnownLookup = config.incrementalSync && !FORCE_RESYNC
+    ? buildKnownKeySet(loadReplica(relacionadosReplicaPath).rows, config.relacionadosKey)
+    : buildExistingRowIndex(relacionadosExistingRows, config.relacionadosKey);
+  const facturasKnownLookup = config.incrementalSync && !FORCE_RESYNC
+    ? buildKnownKeySet(loadReplica(facturasReplicaPath).rows, config.facturasKey)
+    : buildExistingRowIndex(facturasExistingRows, config.facturasKey);
 
-  const pagosDiff = config.pagosKey
-    ? diffRowsAgainstReplica(pagosSelected, config.pagosKey, loadReplica(pagosReplicaPath).rows)
-    : { changedRows: pagosSelected, unchangedRows: [], rowsWithoutKey: [] };
-  const relacionadosDiff = config.relacionadosKey
-    ? diffRowsAgainstReplica(relacionadosSelected, config.relacionadosKey, loadReplica(relacionadosReplicaPath).rows)
-    : { changedRows: relacionadosSelected, unchangedRows: [], rowsWithoutKey: [] };
-  const facturasDiff = config.facturasKey
-    ? diffRowsAgainstReplica(facturasSelected, config.facturasKey, loadReplica(facturasReplicaPath).rows)
-    : { changedRows: facturasSelected, unchangedRows: [], rowsWithoutKey: [] };
+  const pagosDiff = FORCE_RESYNC || !config.pagosKey
+    ? { changedRows: pagosSelected, unchangedRows: [], rowsWithoutKey: [] }
+    : diffRowsAgainstReplica(pagosSelected, config.pagosKey, loadReplica(pagosReplicaPath).rows);
+  const relacionadosDiff = FORCE_RESYNC || !config.relacionadosKey
+    ? { changedRows: relacionadosSelected, unchangedRows: [], rowsWithoutKey: [] }
+    : diffRowsAgainstReplica(relacionadosSelected, config.relacionadosKey, loadReplica(relacionadosReplicaPath).rows);
+  const facturasDiff = FORCE_RESYNC || !config.facturasKey
+    ? { changedRows: facturasSelected, unchangedRows: [], rowsWithoutKey: [] }
+    : diffRowsAgainstReplica(facturasSelected, config.facturasKey, loadReplica(facturasReplicaPath).rows);
 
   writeCsv(pagosDiff.changedRows, path.join(config.outputDir, "pagos_to_upload.csv"));
   writeCsv(relacionadosDiff.changedRows, path.join(config.outputDir, "relacionados_to_upload.csv"));
@@ -714,6 +1038,7 @@ async function runCasaleyJob(options = {}) {
     users: usersToProcess.length,
     uploadTarget: config.uploadTarget,
     dryRun: config.dryRun,
+    uploadByMonth: config.uploadByMonth,
     pagos: pagosPrepared.length,
     relacionados: relacionadosPrepared.length,
     facturas: facturasPrepared.length,
@@ -735,6 +1060,7 @@ async function runCasaleyJob(options = {}) {
       maxRelacionadosRows: config.maxRelacionadosRows || null,
       maxFacturasRows: config.maxFacturasRows || null,
     },
+    forceResync: FORCE_RESYNC,
     outputDir: config.outputDir,
   };
 
@@ -747,7 +1073,24 @@ async function runCasaleyJob(options = {}) {
       summary.uploads.pagos = { total: 0, ok: 0, edited: 0, added: 0, failed: 0, skippedUnchanged: pagosDiff.unchangedRows.length };
       saveReplicaRows(pagosReplicaPath, pagosSelected, config.pagosKey, { mergeWithExisting: true });
     } else {
-      summary.uploads.pagos = await upsertMany(config, config.tablaPagos, pagosDiff.changedRows, config.pagosKey, "pagos");
+      summary.uploads.pagos = config.uploadByMonth
+        ? await upsertManyByMonth(
+            config,
+            config.tablaPagos,
+            pagosDiff.changedRows,
+            config.pagosKey,
+            "pagos",
+            pagosKnownLookup,
+            (row) => getCasaLeyMonthKeyFromRow(row, ["Fecha pago", "Fecha cobro", "Fecha de carga"])
+          )
+        : await upsertMany(
+            config,
+            config.tablaPagos,
+            pagosDiff.changedRows,
+            config.pagosKey,
+            "pagos",
+            pagosKnownLookup
+          );
       if (summary.uploads.pagos.failed === 0) {
         saveReplicaRows(pagosReplicaPath, pagosSelected, config.pagosKey, { mergeWithExisting: true });
       }
@@ -767,13 +1110,34 @@ async function runCasaleyJob(options = {}) {
       };
       saveReplicaRows(relacionadosReplicaPath, relacionadosSelected, config.relacionadosKey, { mergeWithExisting: true });
     } else {
-      summary.uploads.relacionados = await upsertMany(
-        config,
-        config.tablaRelacionados,
-        relacionadosDiff.changedRows,
-        config.relacionadosKey,
-        "relacionados"
+      const pagosMonthByKey = new Map(
+        pagosPrepared.map((row) => {
+          const keyValue = row?.[config.pagosKey];
+          return [String(keyValue ?? ""), getCasaLeyMonthKeyFromRow(row, ["Fecha pago", "Fecha cobro", "Fecha de carga"])];
+        })
       );
+      summary.uploads.relacionados = config.uploadByMonth
+        ? await upsertManyByMonth(
+            config,
+            config.tablaRelacionados,
+            relacionadosDiff.changedRows,
+            config.relacionadosKey,
+            "relacionados",
+            relacionadosKnownLookup,
+            (row) => {
+              const pagoKey = cleanText(row?.referencia_pago ?? row?.["referencia_pago"] ?? row?.["Referencia de pago"] ?? "");
+              if (pagoKey && pagosMonthByKey.has(pagoKey)) return pagosMonthByKey.get(pagoKey);
+              return getCasaLeyMonthKeyFromRow(row, ["Fecha pago", "Fecha cobro", "Fecha de carga"]);
+            }
+          )
+        : await upsertMany(
+            config,
+            config.tablaRelacionados,
+            relacionadosDiff.changedRows,
+            config.relacionadosKey,
+            "relacionados",
+            relacionadosKnownLookup
+          );
       if (summary.uploads.relacionados.failed === 0) {
         saveReplicaRows(relacionadosReplicaPath, relacionadosSelected, config.relacionadosKey, { mergeWithExisting: true });
       }
@@ -793,16 +1157,47 @@ async function runCasaleyJob(options = {}) {
       };
       saveReplicaRows(facturasReplicaPath, facturasSelected, config.facturasKey, { mergeWithExisting: true });
     } else {
-      summary.uploads.facturas = await upsertMany(
-        config,
-        config.tablaFacturas,
-        facturasDiff.changedRows,
-        config.facturasKey,
-        "facturas"
-      );
+      summary.uploads.facturas = config.uploadByMonth
+        ? await upsertManyByMonth(
+            config,
+            config.tablaFacturas,
+            facturasDiff.changedRows,
+            config.facturasKey,
+            "facturas",
+            facturasKnownLookup,
+            (row) => getCasaLeyMonthKeyFromRow(row, ["Fecha registro", "Fecha factura"])
+          )
+        : await upsertMany(
+            config,
+            config.tablaFacturas,
+            facturasDiff.changedRows,
+            config.facturasKey,
+            "facturas",
+            facturasKnownLookup
+          );
       if (summary.uploads.facturas.failed === 0) {
         saveReplicaRows(facturasReplicaPath, facturasSelected, config.facturasKey, { mergeWithExisting: true });
       }
+    }
+  }
+
+  if (config.incrementalSync && !FORCE_RESYNC) {
+    const nextState = {
+      ...(state.data || {}),
+      pagos: { ...(state.data?.pagos || {}) },
+      facturas: { ...(state.data?.facturas || {}) },
+    };
+    const pagosLastDate = getMaxDateFromRows(pagosSelected, ["Fecha pago", "Fecha cobro", "Fecha de carga"]);
+    const facturasLastDate = getMaxDateFromRows(facturasSelected, ["Fecha registro", "Fecha factura"]);
+    if (pagosLastDate) nextState.pagos.lastDate = pagosLastDate;
+    if (facturasLastDate) nextState.facturas.lastDate = facturasLastDate;
+
+    const uploadsFailed =
+      (summary.uploads.pagos?.failed || 0) +
+      (summary.uploads.relacionados?.failed || 0) +
+      (summary.uploads.facturas?.failed || 0);
+    if (uploadsFailed === 0) {
+      saveJobState("casaley-sync-appsheet", nextState);
     }
   }
 

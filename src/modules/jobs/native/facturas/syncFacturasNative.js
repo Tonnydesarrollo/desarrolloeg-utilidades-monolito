@@ -5,10 +5,46 @@ import { obtenerFacturasEmitidas } from './services/clubfactura.facturas.js';
 import { enviarAAppSheet } from './services/appsheet.service.js';
 import { descargarXml } from './services/clubfactura.download.js';
 import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from '../../services/localReplica.js';
+import { loadJobState, saveJobState } from '../../services/jobState.js';
 
 const MAX_EMPRESAS = Math.max(0, Number(process.env.FACTURAS_MAX_EMPRESAS || '0'));
 const MAX_PAGES = Math.max(0, Number(process.env.FACTURAS_MAX_PAGES || '0'));
 const MAX_ROWS = Math.max(0, Number(process.env.FACTURAS_MAX_ROWS || '0'));
+const FORCE_RESYNC = String(process.env.FACTURAS_FORCE_RESYNC || '').trim() === '1';
+const INCREMENTAL_SYNC = String(process.env.FACTURAS_INCREMENTAL_SYNC || '1').trim() !== '0';
+const SYNC_LOOKBACK_DAYS = Math.max(0, Number(process.env.FACTURAS_SYNC_LOOKBACK_DAYS || '2'));
+const JOB_ID = 'facturas-native-sync';
+
+function toDateValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addDays(date, days) {
+  const copy = new Date(date.getTime());
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function isRowNewerThanCursor(row, cursor) {
+  if (!cursor) return true;
+  const rowDate = toDateValue(row?.fecha);
+  if (!rowDate) return false;
+  if (rowDate.getTime() > cursor.lastSeenAt) return true;
+  if (rowDate.getTime() < cursor.lastSeenAt) return false;
+  return Number(row?.id || 0) > Number(cursor.lastSeenId || 0);
+}
+
+function normalizeCursor(row) {
+  const rowDate = toDateValue(row?.fecha);
+  if (!rowDate) return null;
+  return {
+    lastSeenAt: rowDate.getTime(),
+    lastSeenId: Number(row?.id || 0),
+    lastSeenFecha: row?.fecha || null,
+  };
+}
 
 function extractPedidoFromXmlText(xmlText) {
   if (!xmlText) return null;
@@ -88,6 +124,8 @@ export async function syncFacturasNative() {
   try {
     await iniciarSesionWeb();
     await loginClubFactura();
+    const state = loadJobState(JOB_ID);
+    const nextState = { ...(state.data || {}), companies: { ...(state.data?.companies || {}) } };
     const acumuladas = [];
     const empresas = [
       { id: 15622, proveedor: 'xwDqa6Mt6a42iqKHzJG9L6' },
@@ -96,15 +134,26 @@ export async function syncFacturasNative() {
     const empresasToProcess = MAX_EMPRESAS > 0 ? empresas.slice(0, MAX_EMPRESAS) : empresas;
 
     for (const empresa of empresasToProcess) {
+      const companyState = nextState.companies?.[String(empresa.id)] || {};
+      const cursor = INCREMENTAL_SYNC && !FORCE_RESYNC && companyState.lastSeenAt
+        ? { lastSeenAt: Number(companyState.lastSeenAt), lastSeenId: Number(companyState.lastSeenId || 0) }
+        : null;
+      const fromDate = cursor?.lastSeenAt
+        ? addDays(new Date(cursor.lastSeenAt), -SYNC_LOOKBACK_DAYS)
+        : null;
       let page = 1;
       let total = 0;
       let pagesProcessed = 0;
+      let newestSeen = null;
       while (true) {
         if (MAX_PAGES > 0 && pagesProcessed >= MAX_PAGES) break;
         if (MAX_ROWS > 0 && acumuladas.length >= MAX_ROWS) break;
 
         const { items, totalCount } = await obtenerFacturasEmitidas({ empresa: empresa.id, pageNumber: page, pageSize: 100 });
         if (!items.length) break;
+        if (cursor && pagesProcessed > 0 && items.every((item) => !isRowNewerThanCursor(item, cursor))) {
+          break;
+        }
         const remainingRows = MAX_ROWS > 0 ? Math.max(MAX_ROWS - acumuladas.length, 0) : items.length;
         const pageItems = MAX_ROWS > 0 ? items.slice(0, remainingRows) : items;
         if (!pageItems.length) break;
@@ -140,6 +189,10 @@ export async function syncFacturasNative() {
             PEDIDO: pedido,
             UUID: uuid
           });
+          const rowCursor = normalizeCursor(rows[rows.length - 1]);
+          if (rowCursor && (!newestSeen || rowCursor.lastSeenAt > newestSeen.lastSeenAt || (rowCursor.lastSeenAt === newestSeen.lastSeenAt && rowCursor.lastSeenId > newestSeen.lastSeenId))) {
+            newestSeen = rowCursor;
+          }
         }
         acumuladas.push(...rows);
         total += rows.length;
@@ -154,9 +207,11 @@ export async function syncFacturasNative() {
 
     const snapshotPath = resolveDumpFile('cfdis_snapshot.json');
     const snapshot = loadReplica(snapshotPath);
-    const { changedRows: toUpload, unchangedRows } = diffRowsAgainstReplica(acumuladas, 'id', snapshot.rows, {
-      entryMatchesRow: isLegacyFacturasReplicaMatch,
-    });
+    const { changedRows: toUpload, unchangedRows } = FORCE_RESYNC
+      ? { changedRows: acumuladas, unchangedRows: [] }
+      : diffRowsAgainstReplica(acumuladas, 'id', snapshot.rows, {
+          entryMatchesRow: isLegacyFacturasReplicaMatch,
+        });
     const missingUuid = acumuladas.filter(r => !r.UUID);
 
     writeCsv(resolveDumpFile('cfdis_all.csv'), acumuladas);
@@ -168,6 +223,24 @@ export async function syncFacturasNative() {
     }
 
     saveReplicaRows(snapshotPath, acumuladas, 'id', { mergeWithExisting: true });
+    if (INCREMENTAL_SYNC && !FORCE_RESYNC) {
+      const companyIds = empresasToProcess.map((empresa) => String(empresa.id));
+      for (const companyId of companyIds) {
+        const companyRows = acumuladas.filter((row) => String(row.PROVEEDOR || '') === String(empresas.find((empresa) => String(empresa.id) === companyId)?.proveedor || ''));
+        const newest = companyRows.reduce((acc, row) => {
+          const current = normalizeCursor(row);
+          if (!current) return acc;
+          if (!acc) return current;
+          if (current.lastSeenAt > acc.lastSeenAt) return current;
+          if (current.lastSeenAt === acc.lastSeenAt && current.lastSeenId > acc.lastSeenId) return current;
+          return acc;
+        }, null);
+        if (newest) {
+          nextState.companies[companyId] = newest;
+        }
+      }
+      saveJobState(JOB_ID, nextState);
+    }
 
     return {
       ok: true,
@@ -175,11 +248,13 @@ export async function syncFacturasNative() {
       unchanged: unchangedRows.length,
       total: acumuladas.length,
       missingUuid: missingUuid.length,
+      incrementalSync: INCREMENTAL_SYNC,
       limits: {
         maxEmpresas: MAX_EMPRESAS || null,
         maxPages: MAX_PAGES || null,
         maxRows: MAX_ROWS || null,
       },
+      forceResync: FORCE_RESYNC,
     };
   } finally {
     isRunning = false;

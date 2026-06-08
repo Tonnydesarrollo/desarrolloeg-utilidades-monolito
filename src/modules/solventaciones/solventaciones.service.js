@@ -438,39 +438,131 @@ async function pcsinaloaReadBySolicitudId(token, solicitudId) {
   return registros;
 }
 
+async function pcsinaloaReadIncidenciaEvidenciaList(token, incidenciaId) {
+  const payload = {
+    VC: "slc_solicitud_incidencia",
+    VA: "incidencia_evidencia_list",
+    incidencia_id: Number(incidenciaId),
+  };
+
+  const res = await postJsonWithRetry(PCSINALOA_READ_URL, {
+    method: "POST",
+    headers: {
+      ...PCSINALOA_COMMON_HEADERS,
+      Authorization: token,
+      Referer: "https://pcsinaloa.gob.mx/webapp/buzon",
+      "client-fk": PCSINALOA_CLIENT_FK,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`PCSinaloa read fallido (${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  const data = JSON.parse(text);
+  const contenido = data?.data;
+  const registros = Array.isArray(contenido) ? contenido : (contenido ? [contenido] : []);
+  return registros;
+}
+
+function normalizarAdjuntosIncidencia(imageList) {
+  return (Array.isArray(imageList) ? imageList : [])
+    .filter(Boolean)
+    .map((img) => {
+      const sysfilename = String(img?.sysfilename || "").trim();
+      const url_imagen = sysfilename ? `${PCSINALOA_BASE_URL.replace(/\/+$/, "")}/static/${sysfilename}` : "";
+      const previewUrl = buildProxyImageUrl(url_imagen);
+      return {
+        ...img,
+        sysfilename,
+        url_imagen,
+        thumbnailUrl: previewUrl || url_imagen,
+        previewUrl: previewUrl || url_imagen,
+        filename: String(img?.filename || "").trim(),
+        contenttype: String(img?.contenttype || "").trim(),
+        descripcion: String(img?.descripcion || "").trim(),
+        has_media: Boolean(url_imagen || previewUrl),
+      };
+    });
+}
+
 function enriquecerIncidenciasConImagenes(incidencias) {
   return incidencias
     .map((inc) => {
       if (!inc) return null;
 
-      let imageList = inc.image_list || [];
-      if (typeof imageList === "string") {
-        try {
-          imageList = JSON.parse(imageList);
-        } catch {
-          imageList = [];
-        }
+      const files = Array.isArray(inc?.files) ? inc.files.filter(Boolean) : [];
+      const imageSources = [
+        inc.image_list,
+        inc.imageList,
+        inc.imagenes,
+        inc.images,
+        inc.evidencias,
+        inc.evidence_list,
+        inc.evidencia_list,
+      ];
+
+      let imageList = imageSources
+        .flatMap((value) => {
+          if (!value) return [];
+          if (typeof value === "string") {
+            try {
+              const parsed = JSON.parse(value);
+              return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+            } catch {
+              return [];
+            }
+          }
+          return Array.isArray(value) ? value : [value];
+        })
+        .filter(Boolean);
+
+      if (!imageList.length && (files.length || inc.incidencia_evidencia_id || inc.is_observacion || inc.observacion)) {
+        imageList = [{
+          ...inc,
+          files,
+        }];
       }
-      if (!Array.isArray(imageList)) imageList = [];
 
       const imagenes = imageList.map((img) => {
-        const sysfilename = String(img?.sysfilename || "").trim();
+        const attachedFiles = Array.isArray(img?.files) ? img.files.filter(Boolean) : [];
+        const primaryFile = attachedFiles[0] || null;
+        const sysfilename = String(
+          img?.sysfilename ||
+          primaryFile?.sysfilename ||
+          primaryFile?.filename ||
+          ""
+        ).trim();
         const url_imagen = sysfilename ? `${PCSINALOA_BASE_URL.replace(/\/+$/, "")}/static/${sysfilename}` : "";
         const previewUrl = buildProxyImageUrl(url_imagen);
+        const descripcion = String(img?.descripcion || img?.observacion || img?.comentario || "").trim();
+        const isObservacion = Boolean(img?.is_observacion || (!url_imagen && !previewUrl && !attachedFiles.length && descripcion));
         return {
           ...img,
           sysfilename,
+          descripcion,
+          files: attachedFiles,
+          is_observacion: isObservacion,
           url_imagen,
+          filename: String(img?.filename || primaryFile?.filename || "").trim(),
+          contenttype: String(img?.contenttype || primaryFile?.contenttype || "").trim(),
           thumbnailUrl: previewUrl || String(img?.thumbnailUrl || img?.thumbUrl || img?.thumbnail || "").trim() || url_imagen,
           previewUrl: previewUrl || url_imagen,
+          has_media: Boolean(url_imagen || previewUrl || attachedFiles.length),
         };
       });
 
+      const evidenciaDescripcion = getBestEvidenceDescription(imagenes.map((img) => img.descripcion));
+
       return {
+        ...inc,
         incidencia_id: inc.incidencia_id,
         solicitud_id: inc.solicitud_id,
         titulo: inc.titulo,
         descripcion: inc.descripcion,
+        evidenciaDescripcion,
         estatus: inc.estatus,
         status: inc.status,
         registro_fecha: inc.registro_fecha,
@@ -515,6 +607,92 @@ function buildIncidenciaKey(inc) {
     .join("|");
 }
 
+function getBestEvidenceDescription(descriptions) {
+  const candidates = dedupeStrings(Array.isArray(descriptions) ? descriptions : []);
+  if (!candidates.length) return "";
+
+  const genericPattern = /^(se anexa evidencia|evidencia|observacion|observación|sin archivo adjunto|sin miniatura)$/i;
+  const scored = candidates.map((text) => {
+    const normalized = normalizeLoose(text);
+    let score = text.length;
+    if (genericPattern.test(text)) score -= 1000;
+    if (/falta|presentar|renovar|actualizar|subsan/i.test(normalized)) score += 75;
+    if (/\d/.test(text)) score += 5;
+    return { text, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score || b.text.length - a.text.length);
+  return scored[0]?.text || candidates[0] || "";
+}
+
+function mergeIncidenciasById(incidencias) {
+  const map = new Map();
+
+  for (const inc of Array.isArray(incidencias) ? incidencias : []) {
+    if (!inc) continue;
+    const key = String(inc.incidencia_id || buildIncidenciaKey(inc) || "").trim() || `row-${map.size + 1}`;
+    const current = map.get(key);
+    const baseImages = Array.isArray(inc.imagenes) ? inc.imagenes : [];
+    const evidenceTexts = [
+      inc.evidenciaDescripcion,
+      inc.descripcion,
+      ...baseImages.map((img) => img?.descripcion),
+    ].filter(Boolean);
+
+    if (!current) {
+      map.set(key, {
+        ...inc,
+        imagenes: [...baseImages],
+        _evidenceTexts: [...evidenceTexts],
+        _rawRecords: [inc],
+      });
+      continue;
+    }
+
+    current.imagenes = [...(Array.isArray(current.imagenes) ? current.imagenes : []), ...baseImages];
+    current._evidenceTexts.push(...evidenceTexts);
+    current._rawRecords.push(inc);
+
+    const keepFields = [
+      "titulo",
+      "descripcion",
+      "estatus",
+      "status",
+      "registro_fecha",
+      "solicitud_id",
+    ];
+    for (const field of keepFields) {
+      if ((current[field] === undefined || current[field] === null || current[field] === "") && inc[field]) {
+        current[field] = inc[field];
+      }
+    }
+  }
+
+  return [...map.values()].map((inc) => {
+    const imagenes = dedupeStrings([]); // placeholder to keep shape stable if needed
+    const mergedImages = [];
+    const seen = new Set();
+    for (const img of Array.isArray(inc.imagenes) ? inc.imagenes : []) {
+      const imgKey = [
+        String(img?.sysfilename || "").trim(),
+        String(img?.filename || "").trim(),
+        String(img?.descripcion || "").trim(),
+      ].join("|");
+      if (seen.has(imgKey)) continue;
+      seen.add(imgKey);
+      mergedImages.push(img);
+    }
+
+    const evidenciaDescripcion = getBestEvidenceDescription(inc._evidenceTexts);
+    return {
+      ...inc,
+      evidenciaDescripcion,
+      imagenes: mergedImages,
+      evidencias: mergedImages.length || Number(inc.evidencias) || 0,
+    };
+  });
+}
+
 function parseStatusValue(inc) {
   const raw = inc?.status ?? inc?.estatus ?? inc?.estado_codigo ?? null;
   const num = Number(raw);
@@ -523,9 +701,9 @@ function parseStatusValue(inc) {
 
 function getStatusLabelFromValue(status) {
   if (status === 0) return "Pendiente";
-  if (status === 1) return "Revisada";
-  if (status === 2) return "Solventada";
-  if (status === 3) return "Cerrada";
+  if (status === 1) return "Subido";
+  if (status === 2) return "Rechazado";
+  if (status === 3) return "Subsanado";
   return "Sin clasificar";
 }
 
@@ -612,8 +790,9 @@ export async function obtenerSolventacionesCompleto(query = {}) {
   ]);
 
   const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
+  const estatusIncluidos = new Set(["visitada", "rechazada"]);
   const visitadasBase = rows
-    .filter((row) => normalizeText(readField(row, ["estatus", "ESTATUS"])) === "visitada")
+    .filter((row) => estatusIncluidos.has(normalizeText(readField(row, ["estatus", "ESTATUS"]))))
     .map((row) => {
       const sucursalId = String(readField(row, ["sucursal_id", "SUCURSAL_ID", "Row ID", "ID"]) || "").trim();
       const sucursal = sucursalesMap?.[sucursalId] || null;
@@ -640,7 +819,47 @@ export async function obtenerSolventacionesCompleto(query = {}) {
       if (solicitudId) {
         try {
           const rawIncidencias = await pcsinaloaReadBySolicitudId(token, solicitudId);
-          incidencias = sortIncidenciasForReport(enriquecerIncidenciasConImagenes(rawIncidencias));
+          const incidenciasBase = sortIncidenciasForReport(rawIncidencias);
+          incidencias = await Promise.all(
+            incidenciasBase.map(async (inc) => {
+              const adjuntosIncidencia = normalizarAdjuntosIncidencia(inc.image_list || inc.imageList || []);
+              let evidenciasDetalle = [];
+              try {
+                evidenciasDetalle = await pcsinaloaReadIncidenciaEvidenciaList(token, inc.incidencia_id);
+              } catch (err) {
+                evidenciasDetalle = [];
+                inc.errorEvidencias = err.message;
+              }
+
+              evidenciasDetalle = (Array.isArray(evidenciasDetalle) ? evidenciasDetalle : []).map((ev) => ({
+                ...ev,
+                files: (Array.isArray(ev?.files) ? ev.files.filter(Boolean) : []).map((file) => {
+                  const sysfilename = String(file?.sysfilename || "").trim();
+                  const url_imagen = sysfilename ? `${PCSINALOA_BASE_URL.replace(/\/+$/, "")}/static/${sysfilename}` : "";
+                  const previewUrl = buildProxyImageUrl(url_imagen);
+                  return {
+                    ...file,
+                    sysfilename,
+                    url_imagen,
+                    thumbnailUrl: previewUrl || url_imagen,
+                    previewUrl: previewUrl || url_imagen,
+                  };
+                }),
+              }));
+
+              const evidenciaDescripcion = getBestEvidenceDescription(evidenciasDetalle.map((ev) => ev.descripcion));
+              const evidenciasCount = adjuntosIncidencia.length + evidenciasDetalle.filter((ev) => Array.isArray(ev.files) && ev.files.length > 0).length;
+
+              return {
+                ...inc,
+                evidenciaDescripcion,
+                adjuntosIncidencia,
+                evidenciasDetalle,
+                imagenes: [...adjuntosIncidencia, ...evidenciasDetalle],
+                evidencias: evidenciasCount || Number(inc.evidencias) || 0,
+              };
+            })
+          );
         } catch (err) {
           incidencias = [];
           item.errorIncidencias = err.message;
@@ -652,7 +871,7 @@ export async function obtenerSolventacionesCompleto(query = {}) {
         ...item,
         incidencias,
         imagenes,
-        evidenciasCount: imagenes.length || Number(item.evidenciasCount || 0) || 0,
+        evidenciasCount: incidencias.reduce((acc, inc) => acc + (Number(inc.evidencias) || 0), 0) || Number(item.evidenciasCount || 0) || 0,
       };
     })
   );
@@ -772,7 +991,10 @@ export async function prepararSolventacionesPdf(reporte) {
   for (const grupo of grupos) {
     for (const item of Array.isArray(grupo.items) ? grupo.items : []) {
       for (const inc of Array.isArray(item.incidencias) ? item.incidencias : []) {
-        const imagenes = Array.isArray(inc.imagenes) ? inc.imagenes : [];
+        const imagenes = [
+          ...(Array.isArray(inc.adjuntosIncidencia) ? inc.adjuntosIncidencia : []),
+          ...(Array.isArray(inc.evidenciasDetalle) ? inc.evidenciasDetalle.flatMap((ev) => Array.isArray(ev.files) ? ev.files : []) : []),
+        ];
         for (const img of imagenes) {
           const source = img.url_imagen || img.url || img.previewUrl || img.thumbnailUrl || "";
           try {

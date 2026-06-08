@@ -118,6 +118,18 @@ Llena en `.env.docker` los secretos y llaves reales:
 - Google
 - WhatsApp
 
+Si necesitas reponer facturas de ClubFactura que no quedaron en AppSheet, activa una re-sincronizacion forzada con:
+
+- `FACTURAS_FORCE_RESYNC=1`
+
+Eso hace que el job vuelva a enviar las filas del rango actual aunque la réplica local las marque como ya sincronizadas.
+
+Para el job de `PEDIDOS_LEY`, puedes activar una relectura completa con:
+
+- `PEDIDOS_FORCE_REFRESH=1`
+
+Ese modo vuelve a abrir los PDF aunque la fila ya tenga datos completos, lo que ayuda cuando sospechas que la información quedó desactualizada o el extractor mejoró y quieres reescribir valores existentes.
+
 No pongas rutas locales de Windows en `.env.docker`; `docker-compose.yml` ya inyecta rutas Linux portables dentro del contenedor.
 
 ### 2. Crear carpetas locales persistentes

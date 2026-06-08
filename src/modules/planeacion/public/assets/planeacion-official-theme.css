@@ -6,7 +6,7 @@
   --pg-ink: #1a2a3a;
   --pg-muted: #556170;
   --pg-line: rgba(26, 42, 58, 0.12);
-  --pg-shadow: 0 24px 60px rgba(26, 42, 58, 0.10);
+  --pg-shadow: 0 22px 54px rgba(26, 42, 58, 0.09);
   --pg-navy: #1a2a3a;
   --pg-navy-soft: #eef3f8;
   --pg-crimson: #c0392b;
@@ -22,6 +22,7 @@ body {
   margin: 0;
   font-family: "Inter", "Segoe UI", sans-serif;
   color: var(--pg-ink);
+  line-height: 1.45;
   background:
     radial-gradient(circle at top left, rgba(192, 57, 43, 0.10), transparent 22%),
     radial-gradient(circle at top right, rgba(26, 42, 58, 0.09), transparent 26%),
@@ -35,9 +36,9 @@ body.planeacion-official #root > div.h-screen.flex.flex-col.bg-gray-50 {
 
 body.planeacion-official #root > div > header {
   position: sticky;
-  top: 14px;
+  top: 10px;
   z-index: 40;
-  margin: 14px 14px 18px;
+  margin: 10px 12px 14px;
   padding: 18px 20px;
   border-radius: 28px;
   border: 1px solid rgba(26, 42, 58, 0.10);
@@ -53,7 +54,7 @@ body.planeacion-official #root > div > header h1 {
   text-transform: uppercase;
   letter-spacing: -0.03em;
   color: var(--pg-ink);
-  font-size: clamp(1.45rem, 3vw, 2.35rem);
+  font-size: clamp(1.35rem, 2.6vw, 2.15rem);
 }
 
 body.planeacion-official #root > div > header p {
@@ -61,6 +62,17 @@ body.planeacion-official #root > div > header p {
   font-family: "Montserrat", sans-serif;
   color: var(--pg-muted);
   line-height: 1.5;
+  max-width: 62ch;
+}
+
+body.planeacion-official #root > div > header .flex.items-center.gap-3 {
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+body.planeacion-official #root > div > header .hidden.md\:flex.items-center.gap-2.mr-4.border-r.border-gray-200.pr-4 {
+  display: none !important;
 }
 
 body.planeacion-official #root > div > header button,
@@ -70,11 +82,16 @@ body.planeacion-official #root > div > header label {
   font-family: "Montserrat", sans-serif;
 }
 
+body.planeacion-official #root > div > header button {
+  min-height: 38px;
+}
+
 body.planeacion-official #root > div > header .flex.bg-gray-100.p-1.rounded-lg.border.border-gray-200 {
   background: var(--pg-navy-soft);
   border-color: rgba(26, 42, 58, 0.10);
   border-radius: 999px;
   padding: 6px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
 }
 
 body.planeacion-official #root > div > header .flex.bg-gray-100.p-1.rounded-lg.border.border-gray-200 > button {
@@ -94,81 +111,156 @@ body.planeacion-official #root > div > header .border-r.border-gray-200.pr-4 {
 }
 
 body.planeacion-official #root > div > header .border-r.border-gray-200.pr-4 > div {
-  padding: 10px 12px;
-  border-radius: 18px;
+  padding: 12px 13px;
+  border-radius: 20px;
   border: 1px solid rgba(26, 42, 58, 0.08);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 10px 24px rgba(26, 42, 58, 0.06);
 }
 
 body.planeacion-official #root > div > main {
-  max-width: 1480px;
+  max-width: 1560px;
   width: calc(100% - 28px);
   margin: 0 auto;
-  padding: 0 0 30px;
+  padding: 0 0 40px;
 }
 
 body.planeacion-official #root .grid.grid-cols-1.md\:grid-cols-3.lg\:grid-cols-4.gap-4.p-4.print\:grid-cols-3.print\:gap-2.calendar-print {
-  gap: 16px;
+  gap: 18px;
   padding: 18px;
 }
 
+body.planeacion-official #root .calendar-print {
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+
 body.planeacion-official #root .calendar-print > div {
-  border-radius: 24px;
+  height: 100%;
+  min-height: 520px;
+  max-height: 640px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 26px;
   border: 1px solid rgba(26, 42, 58, 0.10);
-  border-top: 5px solid var(--pg-crimson);
+  border-top: 6px solid var(--pg-crimson);
   overflow: hidden;
   background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.96));
   box-shadow: var(--pg-shadow);
 }
 
 body.planeacion-official #root .calendar-print > div > div:first-child {
-  padding: 12px 14px;
+  min-height: 74px;
+  padding: 16px 18px;
   font-family: "Montserrat", sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  background-color: transparent;
+  position: relative;
+  overflow: hidden;
+  font-size: 0.78rem;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 body.planeacion-official #root .calendar-print > div > div:first-child .text-white {
   color: #fff;
 }
 
+body.planeacion-official #root .calendar-print > div > div:first-child::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.14));
+  mix-blend-mode: soft-light;
+}
+
 body.planeacion-official #root .calendar-print > div > div:nth-child(2) {
-  padding: 10px;
+  padding: 14px 14px 16px;
+  overflow-y: auto !important;
+  max-height: none !important;
+  flex: 1 1 auto !important;
+  display: flex;
+  flex-direction: column;
+}
+
+body.planeacion-official #root .calendar-print > div > div:nth-child(2) > div {
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-content: start;
 }
 
 body.planeacion-official #root .calendar-print li {
-  border-radius: 16px;
-  border: 1px solid rgba(26, 42, 58, 0.08);
+  min-height: 92px;
+  border-radius: 18px;
+  border: 1px solid rgba(26, 42, 58, 0.07);
   background: #fff;
-  box-shadow: 0 10px 18px rgba(26, 42, 58, 0.05);
-  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  box-shadow: 0 8px 16px rgba(26, 42, 58, 0.04);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
 body.planeacion-official #root .calendar-print li:hover {
   transform: translateY(-1px);
   box-shadow: 0 16px 26px rgba(26, 42, 58, 0.08);
   border-color: rgba(192, 57, 43, 0.18);
+  background: #fffdfa;
 }
 
 body.planeacion-official #root .calendar-print li .font-medium {
   font-family: "Montserrat", sans-serif;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--pg-ink);
+  font-size: 0.96rem;
+  line-height: 1.22;
 }
 
 body.planeacion-official #root .calendar-print li .text-xs,
 body.planeacion-official #root .calendar-print li .text-gray-500,
 body.planeacion-official #root .calendar-print li .text-gray-400 {
   font-family: "Montserrat", sans-serif;
+  line-height: 1.35;
 }
 
 body.planeacion-official #root .calendar-print li .text-[10px] {
   letter-spacing: 0.04em;
+  font-size: 0.65rem;
+}
+
+body.planeacion-official #root .calendar-print > div.bg-gray-50.rounded-lg.border.border-gray-200.shadow-sm.flex.flex-col.h-full.md\:col-span-3.lg\:col-span-4.print\:hidden {
+  border-top: 6px solid var(--pg-navy);
+}
+
+body.planeacion-official #root .calendar-print > div.bg-gray-50.rounded-lg.border.border-gray-200.shadow-sm.flex.flex-col.h-full.md\:col-span-3.lg\:col-span-4.print\:hidden > div:first-child {
+  background: linear-gradient(180deg, #1f2e40 0%, #152131 100%);
+  color: #fff;
+  border-bottom-color: rgba(255, 255, 255, 0.10);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+body.planeacion-official #root .calendar-print > div.bg-gray-50.rounded-lg.border.border-gray-200.shadow-sm.flex.flex-col.h-full.md\:col-span-3.lg\:col-span-4.print\:hidden > div:first-child .ml-2.text-xs.bg-gray-200.px-2.py-0\.5.rounded-full {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
 body.planeacion-official #root .calendar-print .p-2.border-t.border-gray-100.mt-auto.print\:hidden {
   background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.96));
+  padding: 11px 13px 13px;
+  margin-top: auto;
+  border-top: 1px solid rgba(26, 42, 58, 0.06);
+}
+
+body.planeacion-official #root .calendar-print .p-2.border-t.border-gray-100.mt-auto.print\:hidden button {
+  min-height: 38px;
+  border-radius: 999px;
+  padding-inline: 12px;
 }
 
 body.planeacion-official #root .calendar-detail-window {
@@ -178,7 +270,7 @@ body.planeacion-official #root .calendar-detail-window {
 
 body.planeacion-official #root .calendar-detail-card,
 body.planeacion-official #root .calendar-detail-empty {
-  border-radius: 24px;
+  border-radius: 26px;
   border: 1px solid rgba(26, 42, 58, 0.10);
   border-top: 5px solid var(--pg-crimson);
   background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.97));
@@ -200,14 +292,25 @@ body.planeacion-official #root .detail-block strong {
 }
 
 body.planeacion-official #root .accordion-card {
-  border-radius: 24px;
+  border-radius: 26px;
   border: 1px solid rgba(26, 42, 58, 0.10);
   background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.96));
   box-shadow: var(--pg-shadow);
 }
 
 body.planeacion-official #root .accordion-summary {
-  padding: 14px 16px;
+  padding: 16px 18px;
+}
+
+body.planeacion-official #root .fixed.inset-0.z-50.flex.items-center.justify-center > div {
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body.planeacion-official #root .fixed.inset-0.z-50.flex.items-center.justify-center > div > div:nth-child(2),
+body.planeacion-official #root .fixed.inset-0.z-50.flex.items-center.justify-center > div > div:last-child {
+  flex-shrink: 0;
 }
 
 body.planeacion-official #root .accordion-summary-main strong {
@@ -240,15 +343,22 @@ body.planeacion-official #root .calendar-panel .fc * {
 body.planeacion-official #root .calendar-panel .fc .fc-toolbar-title {
   font-family: "Cinzel", serif;
   text-transform: uppercase;
+  letter-spacing: -0.03em;
+  font-size: clamp(1.05rem, 2vw, 1.45rem);
 }
 
 body.planeacion-official #root .calendar-panel .fc .fc-button {
   border-radius: 999px;
   border: 1px solid rgba(26, 42, 58, 0.12);
+  box-shadow: 0 8px 16px rgba(26, 42, 58, 0.04);
+  min-height: 38px;
+  padding-inline: 0.9rem;
 }
 
 body.planeacion-official #root .calendar-panel .fc .fc-event {
   cursor: pointer;
+  border-radius: 10px;
+  border: 0;
 }
 
 body.planeacion-official #root .page-loader-card {
@@ -256,10 +366,122 @@ body.planeacion-official #root .page-loader-card {
   border-top: 5px solid var(--pg-crimson);
 }
 
+@media print {
+  body.planeacion-official {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  @page {
+    size: auto;
+    margin: 8mm;
+  }
+
+  body.planeacion-official *,
+  body.planeacion-official *::before,
+  body.planeacion-official *::after {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+  }
+
+  body.planeacion-official .leaflet-container,
+  body.planeacion-official .leaflet-pane,
+  body.planeacion-official .leaflet-control-container,
+  body.planeacion-official .branch-tooltip,
+  body.planeacion-official .print\:hidden,
+  body.planeacion-official #root > div > header {
+    display: none !important;
+  }
+
+  body.planeacion-official #root > div.h-screen.flex.flex-col.bg-gray-50 {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  body.planeacion-official #root > div,
+  body.planeacion-official #root > div > main {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body.planeacion-official #root .calendar-print {
+    display: block !important;
+    gap: 8px !important;
+    padding: 8px !important;
+    align-items: start !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body.planeacion-official #root .calendar-print > div {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    break-before: auto !important;
+    break-after: auto !important;
+    margin: 0 !important;
+    margin-bottom: 10px !important;
+  }
+
+  body.planeacion-official #root .calendar-print > div > div:first-child {
+    min-height: 52px !important;
+    padding: 10px 12px !important;
+    height: auto !important;
+  }
+
+  body.planeacion-official #root .calendar-print > div > div:nth-child(2) {
+    overflow: visible !important;
+    padding: 10px !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  body.planeacion-official #root .calendar-print > div > div:nth-child(2) > div {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+    height: auto !important;
+  }
+
+  body.planeacion-official #root .calendar-print li {
+    min-height: 0 !important;
+    padding: 8px !important;
+    height: auto !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  body.planeacion-official #root .calendar-print .p-2.border-t.border-gray-100.mt-auto.print\:hidden {
+    display: none !important;
+  }
+
+  body.planeacion-official #root .calendar-detail-window {
+    display: none !important;
+  }
+}
+
 @media (max-width: 1100px) {
   body.planeacion-official #root > div > header {
     margin: 10px 10px 14px;
-    padding: 16px;
+    padding: 16px 16px 14px;
   }
 
   body.planeacion-official #root > main {
@@ -279,15 +501,62 @@ body.planeacion-official #root .page-loader-card {
   }
 
   body.planeacion-official #root .grid.grid-cols-1.md\:grid-cols-3.lg\:grid-cols-4.gap-4.p-4.print\:grid-cols-3.print\:gap-2.calendar-print {
-    padding: 12px;
+    padding: 14px;
+    gap: 14px;
+  }
+
+  body.planeacion-official #root .calendar-print {
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
   }
 
   body.planeacion-official #root .calendar-print > div {
-    border-radius: 20px;
+    min-height: 380px;
+    max-height: none;
+    border-radius: 22px;
+  }
+
+  body.planeacion-official #root .calendar-print > div > div:nth-child(2) > div {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   }
 
   body.planeacion-official #root .accordion-summary {
-    padding: 12px 14px;
+    padding: 13px 14px;
+  }
+
+  body.planeacion-official #root > div > header h1 {
+    font-size: clamp(1.25rem, 5vw, 1.7rem);
+  }
+
+body.planeacion-official #root .calendar-print li {
+    min-height: 72px;
+  }
+}
+
+@media (max-width: 640px) {
+  body.planeacion-official #root > div > header .flex.items-center.gap-3 {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  body.planeacion-official #root > div > header .flex.items-center.gap-3 > * {
+    flex: 1 1 auto;
+  }
+
+  body.planeacion-official #root > div > header button,
+  body.planeacion-official #root > div > header .flex.bg-gray-100.p-1.rounded-lg.border.border-gray-200 > button {
+    min-height: 40px;
+  }
+
+  body.planeacion-official #root .calendar-print > div {
+    min-height: 340px;
+  }
+
+  body.planeacion-official #root .calendar-print {
+    grid-template-columns: 1fr;
+  }
+
+  body.planeacion-official #root .calendar-print > div > div:nth-child(2) > div {
+    grid-template-columns: 1fr;
   }
 }
 
