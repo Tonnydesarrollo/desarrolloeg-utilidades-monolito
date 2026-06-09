@@ -471,11 +471,15 @@ function getCasaLeyCobroFlag(tipoPago) {
   return String(tipoPago) === "1" ? "Y" : "N";
 }
 
+function getCasaLeyCobroDisplayValue(tipoPago) {
+  return String(tipoPago) === "1" ? "COBRADO" : "NO COBRADO";
+}
+
 function normalizeCasaLeyCobroValue(value) {
   const text = cleanText(value).toLowerCase();
   if (!text) return "";
-  if (["y", "yes", "true", "1"].includes(text)) return "Y";
-  if (["n", "no", "false", "0"].includes(text)) return "N";
+  if (["y", "yes", "true", "1", "cobrado"].includes(text)) return "Y";
+  if (["n", "no", "false", "0", "no cobrado"].includes(text)) return "N";
   return text.toUpperCase();
 }
 
@@ -484,7 +488,7 @@ function isCasaLeyCobroFlagYes(value) {
 }
 
 function annotateCasaLeyPagos(rows, tipoPago) {
-  const flag = getCasaLeyCobroFlag(tipoPago);
+  const flag = getCasaLeyCobroDisplayValue(tipoPago);
   return (rows || []).map((row) => ({
     ...row,
     COBRADO: flag,
@@ -905,6 +909,23 @@ async function loadAppSheetRows(config, tableName) {
   return Array.isArray(response.data) ? response.data : (response.data?.Rows || response.data?.rows || []);
 }
 
+async function verifyAppSheetKeyPresent(config, tableName, keyColumn, keyValue, attempts = 3) {
+  const key = String(keyValue ?? "");
+  if (!key) return false;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const rows = await loadAppSheetRows(config, tableName);
+    const knownKeys = buildKnownKeySet(rows, keyColumn);
+    if (knownKeys.has(key)) return true;
+
+    if (attempt < attempts - 1) {
+      await sleep(1000 * (attempt + 1));
+    }
+  }
+
+  return false;
+}
+
 async function upsertOne(config, tableName, row, keyColumn, lookup) {
   if (config.dryRun) return { ok: true, mode: "dry_run" };
 
@@ -918,7 +939,7 @@ async function upsertOne(config, tableName, row, keyColumn, lookup) {
     if (desiredCobrado === "Y" && currentCobrado !== "Y") {
       const editRow = {
         [keyColumn]: key,
-        COBRADO: "Y",
+        COBRADO: getCasaLeyCobroDisplayValue("1"),
       };
       const editResponse = await appsheetActionWithRetry(config, tableName, "Edit", [editRow]);
       if (editResponse.status >= 200 && editResponse.status < 300) {
@@ -939,6 +960,10 @@ async function upsertOne(config, tableName, row, keyColumn, lookup) {
   const addRow = { ...row };
   const addResponse = await appsheetActionWithRetry(config, tableName, "Add", [addRow]);
   if (addResponse.status >= 200 && addResponse.status < 300) {
+    const verified = await verifyAppSheetKeyPresent(config, tableName, keyColumn, key);
+    if (!verified) {
+      return { ok: false, mode: "add_not_persisted", error: `AppSheet acepto el Add, pero no encontre la llave ${keyColumn}=${key} despues de verificar.` };
+    }
     return { ok: true, mode: "add" };
   }
 
