@@ -350,6 +350,72 @@ function parseCasaLeyDateValue(value) {
   return null;
 }
 
+function stripCasaLeyDiacritics(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function parseAppSheetSpanishDateValue(value) {
+  const text = cleanText(value);
+  if (!text) return null;
+
+  const normalized = stripCasaLeyDiacritics(text.toLowerCase());
+  const match = normalized.match(/^(?:[a-z]+,\s*)?(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/i);
+  if (!match) return null;
+
+  const monthMap = {
+    enero: 1,
+    febrero: 2,
+    marzo: 3,
+    abril: 4,
+    mayo: 5,
+    junio: 6,
+    julio: 7,
+    agosto: 8,
+    septiembre: 9,
+    setiembre: 9,
+    octubre: 10,
+    noviembre: 11,
+    diciembre: 12,
+  };
+
+  const month = monthMap[match[2]];
+  if (!month) return null;
+
+  return {
+    year: Number(match[3]),
+    month,
+    day: Number(match[1]),
+    hour: Number(match[4] || 0),
+    minute: Number(match[5] || 0),
+    second: Number(match[6] || 0),
+  };
+}
+
+function getRangeDateBounds(range = {}) {
+  const start = parseDMYToDate(range.fechaIni || range.ini || "");
+  const end = parseDMYToDate(range.fechaFin || range.fin || "");
+  return { start, end };
+}
+
+function isParsedDateWithinRange(parsed, range = {}) {
+  if (!parsed) return false;
+  const { start, end } = getRangeDateBounds(range);
+  const current = new Date(parsed.year, parsed.month - 1, parsed.day, parsed.hour || 0, parsed.minute || 0, parsed.second || 0);
+  if (start && current.getTime() < start.getTime()) return false;
+  if (end && current.getTime() > end.getTime()) return false;
+  return true;
+}
+
+function getAppSheetChequeDateRange(row, tipoCobroFlag) {
+  const preferredDate = row?.["Fecha cobro"] ?? row?.["Fecha pago"] ?? row?.["Fecha de carga"] ?? "";
+  const parsed = parseAppSheetSpanishDateValue(preferredDate) || parseAppSheetSpanishDateValue(row?.["Fecha cobro"]) || parseAppSheetSpanishDateValue(row?.["Fecha pago"]);
+  if (!parsed) return null;
+  const formatted = `${String(parsed.day).padStart(2, "0")}/${String(parsed.month).padStart(2, "0")}/${String(parsed.year)}`;
+  return { fechaIni: formatted, fechaFin: formatted };
+}
+
 function getCasaLeyMonthKeyFromValue(value) {
   const parsed = parseCasaLeyDateValue(value);
   if (!parsed) return "";
@@ -396,9 +462,33 @@ function normalizeCasaLeyUploadRow(row) {
       output[key] = cleaned;
     }
   }
-  if (!Object.prototype.hasOwnProperty.call(output, "CLUBFACTURA")) output.CLUBFACTURA = "";
-  if (!Object.prototype.hasOwnProperty.call(output, "FACTURA CLUBFACTURA")) output["FACTURA CLUBFACTURA"] = "";
+  delete output.CLUBFACTURA;
+  delete output["FACTURA CLUBFACTURA"];
   return output;
+}
+
+function getCasaLeyCobroFlag(tipoPago) {
+  return String(tipoPago) === "1" ? "Y" : "N";
+}
+
+function normalizeCasaLeyCobroValue(value) {
+  const text = cleanText(value).toLowerCase();
+  if (!text) return "";
+  if (["y", "yes", "true", "1"].includes(text)) return "Y";
+  if (["n", "no", "false", "0"].includes(text)) return "N";
+  return text.toUpperCase();
+}
+
+function isCasaLeyCobroFlagYes(value) {
+  return normalizeCasaLeyCobroValue(value) === "Y";
+}
+
+function annotateCasaLeyPagos(rows, tipoPago) {
+  const flag = getCasaLeyCobroFlag(tipoPago);
+  return (rows || []).map((row) => ({
+    ...row,
+    COBRADO: flag,
+  }));
 }
 
 async function sleep(ms) {
@@ -474,7 +564,7 @@ async function loginCasaLey(client, config, user, password) {
   }
 }
 
-async function consultarPagos(client, config, range = {}) {
+async function consultarPagos(client, config, range = {}, tipoPago = "1") {
   const fechaIni = range.fechaIni || config.fechaIni;
   const fechaFin = range.fechaFin || config.fechaFin;
   const getResponse = await client.get(config.pagosUrl, {
@@ -494,7 +584,7 @@ async function consultarPagos(client, config, range = {}) {
     "ctl00$ContentPlaceHolder1$TxBxOperacion": "",
     "ctl00$ContentPlaceHolder1$fechaIni": fechaIni,
     "ctl00$ContentPlaceHolder1$fechaFin": fechaFin,
-    "ctl00$ContentPlaceHolder1$cboTipoPago": "1",
+    "ctl00$ContentPlaceHolder1$cboTipoPago": String(tipoPago),
     "ctl00$ContentPlaceHolder1$cboEstatus": "T",
     "ctl00$ContentPlaceHolder1$btnBuscar": "Buscar",
     "ctl00$ContentPlaceHolder1$TotalRelacionados": "",
@@ -524,13 +614,23 @@ async function consultarPagos(client, config, range = {}) {
     console.warn("Sin filas de Pagos.");
     return [];
   }
-  return rows;
+  return annotateCasaLeyPagos(rows, tipoPago);
 }
 
-async function consultaDoctosRelacionados(client, config, referenciaPago) {
+async function consultaDoctosRelacionados(client, config, referenciaPago, tipo = config.relTipo || "1", range = {}) {
+  const tipoPago = String(tipo || "1");
+  const fechaIni = range.fechaIni || config.fechaIni;
+  const fechaFin = range.fechaFin || config.fechaFin;
   const response = await client.post(
     config.relUrl,
-    { filtro: String(referenciaPago), tipo: String(config.relTipo) },
+    {
+      filtro: String(referenciaPago),
+      tipo: tipoPago,
+      tipoPago: tipoPago,
+      cboTipoPago: tipoPago,
+      fechaIni,
+      fechaFin,
+    },
     {
       headers: {
         Accept: "application/json, text/javascript, */*; q=0.01",
@@ -554,7 +654,7 @@ async function consultaDoctosRelacionados(client, config, referenciaPago) {
   try {
     data = JSON.parse(text);
   } catch {
-    return { raw: text };
+    return [];
   }
 
   if (data && typeof data === "object" && "d" in data) {
@@ -563,13 +663,26 @@ async function consultaDoctosRelacionados(client, config, referenciaPago) {
       try {
         return JSON.parse(nested);
       } catch {
-        return nested;
+        return [];
       }
     }
     return nested;
   }
 
   return data;
+}
+
+async function consultaDoctosRelacionadosConFallback(client, config, referenciaPago, tipo, range = {}) {
+  const primaryTipo = String(tipo || "1");
+  const secondaryTipo = primaryTipo === "1" ? "0" : "1";
+
+  const primary = await consultaDoctosRelacionados(client, config, referenciaPago, primaryTipo, range);
+  const primaryItems = Array.isArray(primary) ? primary : (primary ? [primary] : []);
+  if (primaryItems.length > 0 || secondaryTipo === primaryTipo) return primaryItems;
+
+  const secondary = await consultaDoctosRelacionados(client, config, referenciaPago, secondaryTipo, range);
+  const secondaryItems = Array.isArray(secondary) ? secondary : (secondary ? [secondary] : []);
+  return secondaryItems.length > 0 ? secondaryItems : primaryItems;
 }
 
 async function consultarRelacionadosDesdePagos(client, config, pagos) {
@@ -580,10 +693,17 @@ async function consultarRelacionadosDesdePagos(client, config, pagos) {
     const referenciaPago = cleanText(pagos[index]?.["Referencia de pago"] ?? "");
     if (!referenciaPago) continue;
 
-    let rel = cache.get(referenciaPago);
+    const tipoRelacionados = isCasaLeyCobroFlagYes(pagos[index]?.COBRADO) ? "1" : "0";
+    const cacheKey = `${referenciaPago}|${tipoRelacionados}`;
+    const fechaRelacionados = cleanText(pagos[index]?.["Fecha cobro"] ?? pagos[index]?.["Fecha pago"] ?? pagos[index]?.["Fecha de carga"] ?? "") || config.pagosRange;
+    const relacionadosRange = fechaRelacionados && typeof fechaRelacionados === "string"
+      ? { fechaIni: fechaRelacionados, fechaFin: fechaRelacionados }
+      : config.pagosRange;
+
+    let rel = cache.get(cacheKey);
     if (!rel) {
-      rel = await consultaDoctosRelacionados(client, config, referenciaPago);
-      cache.set(referenciaPago, rel);
+      rel = await consultaDoctosRelacionadosConFallback(client, config, referenciaPago, tipoRelacionados, relacionadosRange);
+      cache.set(cacheKey, rel);
     }
 
     const items = Array.isArray(rel) ? rel : (rel ? [rel] : []);
@@ -594,6 +714,66 @@ async function consultarRelacionadosDesdePagos(client, config, pagos) {
   }
 
   return relacionados;
+}
+
+async function backfillRelacionadosFromAppSheet(client, config, portalPagos, relaciondosActuales = []) {
+  if (!config.shouldUpload.relacionados || !config.tablaPagos) return relaciondosActuales;
+
+  const portalRefs = new Set(
+    (portalPagos || [])
+      .map((row) => cleanText(row?.["Referencia de pago"] ?? ""))
+      .filter(Boolean)
+  );
+
+  const existingRows = await loadAppSheetRows(config, config.tablaPagos);
+  const backfillCandidates = existingRows.filter((row) => {
+    const referenciaPago = cleanText(row?.["Referencia de pago"] ?? row?.Referencia ?? "");
+    if (!referenciaPago || portalRefs.has(referenciaPago)) return false;
+
+    const cobrado = isCasaLeyCobroFlagYes(row?.COBRADO);
+    const dateText = row?.["Fecha cobro"] ?? row?.["Fecha pago"] ?? row?.["Fecha de carga"] ?? "";
+    const parsedDate = parseAppSheetSpanishDateValue(dateText);
+    return isParsedDateWithinRange(parsedDate, config.pagosRange);
+  });
+
+  if (!backfillCandidates.length) return relaciondosActuales;
+
+  console.log(`[casaley] relacionados: backfill desde AppSheet ${backfillCandidates.length} filas`);
+
+  const cache = new Map();
+  const adicionales = [];
+  for (const row of backfillCandidates) {
+    const referenciaPago = cleanText(row?.["Referencia de pago"] ?? row?.Referencia ?? "");
+    if (!referenciaPago) continue;
+
+    const tipoRelacionados = isCasaLeyCobroFlagYes(row?.COBRADO) ? "1" : "0";
+    const cacheKey = `${referenciaPago}|${tipoRelacionados}`;
+    const relatedRange = getAppSheetChequeDateRange(row, tipoRelacionados === "1" ? "Y" : "N") || config.pagosRange;
+
+    let rel = cache.get(cacheKey);
+    if (!rel) {
+      rel = await consultaDoctosRelacionadosConFallback(client, config, referenciaPago, tipoRelacionados, relatedRange);
+      cache.set(cacheKey, rel);
+    }
+
+    if (referenciaPago === "R100120262073144122") {
+      const debugItems = Array.isArray(rel) ? rel : (rel ? [rel] : []);
+      console.log(
+        `[casaley] debug relacionados target=${referenciaPago} tipo=${tipoRelacionados} rango=${JSON.stringify(relatedRange)} filas=${debugItems.length} refs=${debugItems.map((item) => String(item?.Referencia ?? "")).join("|")}`
+      );
+    }
+
+    const items = Array.isArray(rel) ? rel : (rel ? [rel] : []);
+    for (const item of items) {
+      if (item && typeof item === "object") adicionales.push({ referencia_pago: referenciaPago, ...item });
+      else adicionales.push({ referencia_pago: referenciaPago, relacionado_raw: String(item) });
+    }
+  }
+
+  if (!adicionales.length) return relaciondosActuales;
+  relaciondosActuales.push(...adicionales);
+
+  return relaciondosActuales;
 }
 
 async function consultarFacturas(client, config, user, range = {}) {
@@ -729,18 +909,34 @@ async function upsertOne(config, tableName, row, keyColumn, lookup) {
   if (config.dryRun) return { ok: true, mode: "dry_run" };
 
   const key = String(row?.[keyColumn] ?? "");
-  if (config.incrementalSync && !FORCE_RESYNC) {
-    if (lookup?.has?.(key)) {
-      return { ok: true, mode: "skip_existing" };
+  const existingRow = lookup instanceof Map ? lookup.get(key) : null;
+  const keyExists = Boolean(existingRow) || Boolean(lookup?.has?.(key));
+  const desiredCobrado = normalizeCasaLeyCobroValue(row?.COBRADO ?? "");
+  const currentCobrado = normalizeCasaLeyCobroValue(existingRow?.COBRADO ?? "");
+
+  if (existingRow) {
+    if (desiredCobrado === "Y" && currentCobrado !== "Y") {
+      const editRow = {
+        [keyColumn]: key,
+        COBRADO: "Y",
+      };
+      const editResponse = await appsheetActionWithRetry(config, tableName, "Edit", [editRow]);
+      if (editResponse.status >= 200 && editResponse.status < 300) {
+        return { ok: true, mode: "edit" };
+      }
+
+      const editErrorText = typeof editResponse.data === "string" ? editResponse.data : JSON.stringify(editResponse.data);
+      return { ok: false, mode: "edit_failed", error: editErrorText };
     }
-  } else {
-    const existingRow = lookup instanceof Map ? lookup.get(key) : null;
-    if (existingRow) {
-      return { ok: true, mode: "skip_existing" };
-    }
+
+    return { ok: true, mode: "skip_existing" };
   }
 
-  const addRow = { ...row, "Row ID": createCasaLeyRowId() };
+  if (keyExists) {
+    return { ok: true, mode: "skip_existing" };
+  }
+
+  const addRow = { ...row };
   const addResponse = await appsheetActionWithRetry(config, tableName, "Add", [addRow]);
   if (addResponse.status >= 200 && addResponse.status < 300) {
     return { ok: true, mode: "add" };
@@ -818,20 +1014,29 @@ async function runForUser(config, label, user, password) {
   console.log(`[casaley] ${label}: login`);
   await loginCasaLey(client, config, user, password);
 
-  console.log(`[casaley] ${label}: pagos`);
-  const pagos = await consultarPagos(client, config, config.pagosRange);
+  console.log(`[casaley] ${label}: pagos cobrados`);
+  const pagosCobrados = await consultarPagos(client, config, config.pagosRange, "1");
+
+  console.log(`[casaley] ${label}: pagos no cobrados`);
+  const pagosNoCobrados = await consultarPagos(client, config, config.pagosRange, "0");
+
+  const pagos = [...pagosCobrados, ...pagosNoCobrados];
+  console.log(
+    `[casaley] ${label}: pagos detectados cobrados=${pagosCobrados.length} no_cobrados=${pagosNoCobrados.length} total=${pagos.length}`
+  );
 
   console.log(`[casaley] ${label}: relacionados`);
   const relacionados = await consultarRelacionadosDesdePagos(client, config, pagos);
+  const relacionadosBackfilled = await backfillRelacionadosFromAppSheet(client, config, pagos, relacionados);
 
   console.log(`[casaley] ${label}: facturas`);
   const facturas = await consultarFacturas(client, config, user, config.facturasRange);
 
   writeCsv(pagos, path.join(config.outputDir, `pagos_${label}.csv`));
-  writeCsv(relacionados, path.join(config.outputDir, `relacionados_${label}.csv`));
+  writeCsv(relacionadosBackfilled, path.join(config.outputDir, `relacionados_${label}.csv`));
   writeCsv(facturas, path.join(config.outputDir, `facturas_${label}.csv`));
 
-  return { pagos, relacionados, facturas };
+  return { pagos, relacionados: relacionadosBackfilled, facturas };
 }
 
 function requireEnv(config) {
@@ -982,20 +1187,9 @@ async function runCasaleyJob(options = {}) {
   const prepareUploadRows = (rows) => rows.map((row) => normalizeCasaLeyUploadRow(sanitizeRowValuesOnly(row)));
 
   const pagosPrepared = config.pagosKey ? ensureKey(prepareUploadRows(allPagos), config.pagosKey) : prepareUploadRows(allPagos);
-  const relacionadosPrepared = config.relacionadosKey
-    ? ensureKey(prepareUploadRows(allRelacionados), config.relacionadosKey)
-    : prepareUploadRows(allRelacionados);
   const facturasPrepared = config.facturasKey
     ? ensureKey(prepareUploadRows(allFacturas), config.facturasKey)
     : prepareUploadRows(allFacturas);
-
-  const pagosSelected = applyRowLimit(pagosPrepared, config.maxPagosRows);
-  const relacionadosSelected = applyRowLimit(relacionadosPrepared, config.maxRelacionadosRows);
-  const facturasSelected = applyRowLimit(facturasPrepared, config.maxFacturasRows);
-
-  writeCsv(pagosPrepared, path.join(config.outputDir, "pagos_ALL.csv"));
-  writeCsv(relacionadosPrepared, path.join(config.outputDir, "relacionados_ALL.csv"));
-  writeCsv(facturasPrepared, path.join(config.outputDir, "facturas_ALL.csv"));
 
   const pagosReplicaPath = resolveReplicaFile(config, "pagos");
   const relacionadosReplicaPath = resolveReplicaFile(config, "relacionados");
@@ -1009,9 +1203,20 @@ async function runCasaleyJob(options = {}) {
         ])
       : [[], [], []])
     : [[], [], []];
-  const pagosKnownLookup = config.incrementalSync && !FORCE_RESYNC
-    ? buildKnownKeySet(loadReplica(pagosReplicaPath).rows, config.pagosKey)
-    : buildExistingRowIndex(pagosExistingRows, config.pagosKey);
+  const pagosExistingRowsForLookup = config.shouldUpload.pagos
+    ? (pagosExistingRows.length ? pagosExistingRows : await loadAppSheetRows(config, config.tablaPagos))
+    : [];
+  const relacionadosPrepared = config.relacionadosKey
+    ? ensureKey(prepareUploadRows(allRelacionados), config.relacionadosKey)
+    : prepareUploadRows(allRelacionados);
+  const pagosSelected = applyRowLimit(pagosPrepared, config.maxPagosRows);
+  const relacionadosSelected = applyRowLimit(relacionadosPrepared, config.maxRelacionadosRows);
+  const facturasSelected = applyRowLimit(facturasPrepared, config.maxFacturasRows);
+
+  writeCsv(pagosPrepared, path.join(config.outputDir, "pagos_ALL.csv"));
+  writeCsv(relacionadosPrepared, path.join(config.outputDir, "relacionados_ALL.csv"));
+  writeCsv(facturasPrepared, path.join(config.outputDir, "facturas_ALL.csv"));
+  const pagosKnownLookup = buildExistingRowIndex(pagosExistingRowsForLookup, config.pagosKey);
   const relacionadosKnownLookup = config.incrementalSync && !FORCE_RESYNC
     ? buildKnownKeySet(loadReplica(relacionadosReplicaPath).rows, config.relacionadosKey)
     : buildExistingRowIndex(relacionadosExistingRows, config.relacionadosKey);
