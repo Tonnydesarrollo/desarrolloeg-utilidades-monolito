@@ -455,6 +455,11 @@ function normalizeCasaLeyUploadRow(row) {
   for (const [key, value] of Object.entries(row || {})) {
     if (/^col_\d+$/i.test(key)) continue;
     const cleaned = typeof value === "string" ? cleanText(value) : (value == null ? "" : value);
+    if (key === "COBRADO") {
+      const normalizedCobro = normalizeCasaLeyCobroValue(cleaned);
+      output[key] = normalizedCobro === "Y" ? "Y" : normalizedCobro === "N" ? "N" : cleaned;
+      continue;
+    }
     if (typeof cleaned === "string" && key.toLowerCase().includes("fecha")) {
       const isFacturaDate = key.toLowerCase().includes("factura") && !key.toLowerCase().includes("registro");
       output[key] = formatCasaLeyDateForAppSheet(cleaned, { dateOnly: isFacturaDate });
@@ -493,6 +498,87 @@ function annotateCasaLeyPagos(rows, tipoPago) {
     ...row,
     COBRADO: flag,
   }));
+}
+
+function pickCasaLeyValue(row, ...keys) {
+  for (const key of keys) {
+    const value = cleanText(row?.[key] ?? "");
+    if (value) return value;
+  }
+  return "";
+}
+
+function buildCasaLeyChequeUpdateRow(row, keyColumn, baseRow = null) {
+  const source = sanitizeRowValuesOnly(row);
+  const output = normalizeCasaLeyUploadRow(sanitizeRowValuesOnly(baseRow || row));
+
+  const keyValue = pickCasaLeyValue(source, keyColumn, "Referencia de pago", "Referencia");
+  if (keyValue) output[keyColumn] = keyValue;
+
+  const paymentFieldMap = [
+    ["Documento pago", ["Documento pago", "Documento Pago", "documento_pago"]],
+    ["Forma pago", ["Forma pago", "Forma Pago", "forma_pago"]],
+    ["Fecha pago", ["Fecha pago", "Fecha Pago", "fecha_pago"]],
+    ["Fecha cobro", ["Fecha cobro", "Fecha Cobro", "fecha_cobro"]],
+    ["Fecha de carga", ["Fecha de carga", "Fecha Carga", "fecha_de_carga"]],
+    ["# Operacion", ["# Operacion", "# Operación", "Operacion", "Operación", "N Operacion", "N Operación"]],
+    ["Moneda", ["Moneda"]],
+    ["Tipo de cambio", ["Tipo de cambio", "Tipo Cambio"]],
+    ["Importe", ["Importe"]],
+    ["Emisor", ["Emisor"]],
+    ["Cuenta banco", ["Cuenta banco", "Cuenta Banco"]],
+    ["Receptor", ["Receptor"]],
+    ["Proveedor", ["Proveedor"]],
+    ["Cuenta receptora", ["Cuenta receptora", "Cuenta Receptora"]],
+    ["UUID de pago", ["UUID de pago", "UUID Pago"]],
+    ["Doctos relacionados", ["Doctos relacionados", "Doctos Relacionados"]],
+  ];
+
+  for (const [targetKey, aliases] of paymentFieldMap) {
+    const value = pickCasaLeyValue(source, ...aliases);
+    if (value !== "") output[targetKey] = value;
+  }
+
+  output.COBRADO = "Y";
+  return output;
+}
+
+function hasCasaLeyEditableDiff(existingRow, nextRow) {
+  const compareFields = [
+    "Documento pago",
+    "Forma pago",
+    "# Operacion",
+    "Moneda",
+    "Tipo de cambio",
+    "Importe",
+    "Emisor",
+    "Cuenta banco",
+    "Receptor",
+    "Proveedor",
+    "Cuenta receptora",
+    "UUID de pago",
+    "Doctos relacionados",
+  ];
+
+  for (const field of compareFields) {
+    const existingValue = cleanText(existingRow?.[field] ?? "");
+    const nextValue = cleanText(nextRow?.[field] ?? "");
+    if (nextValue && existingValue !== nextValue) return true;
+  }
+
+  const existingCobrado = normalizeCasaLeyCobroValue(existingRow?.COBRADO ?? "");
+  const nextCobrado = normalizeCasaLeyCobroValue(nextRow?.COBRADO ?? "");
+  return Boolean(nextCobrado) && existingCobrado !== nextCobrado;
+}
+
+function stripCasaLeyReadOnlyFields(row) {
+  const output = sanitizeRowValuesOnly(row);
+  delete output["Row ID"];
+  delete output["Related PAGADOS_LEYs"];
+  delete output["Related PEDIDOS_LEYs"];
+  delete output.FACTURADOR;
+  delete output["CHEQUES POR MES"];
+  return output;
 }
 
 async function sleep(ms) {
@@ -780,6 +866,64 @@ async function backfillRelacionadosFromAppSheet(client, config, portalPagos, rel
   return relaciondosActuales;
 }
 
+async function reconcileNoCobradoChequesToCobrado(client, config) {
+  if (!config.tablaPagos || !config.pagosKey) {
+    return { updatedRows: [], checked: 0, updated: 0, skipped: 0 };
+  }
+
+  const existingRows = await loadAppSheetRows(config, config.tablaPagos);
+  const pendingRows = existingRows.filter((row) => normalizeCasaLeyCobroValue(row?.COBRADO ?? "") !== "Y");
+  if (!pendingRows.length) {
+    return { updatedRows: [], checked: 0, updated: 0, skipped: 0 };
+  }
+
+  console.log(`[casaley] pagos: reconciliando ${pendingRows.length} cheques no cobrados`);
+
+  const portalCache = new Map();
+  const updatedRows = [];
+  let checked = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const row of pendingRows) {
+    const referenciaPago = cleanText(row?.["Referencia de pago"] ?? row?.[config.pagosKey] ?? row?.Referencia ?? "");
+    if (!referenciaPago) {
+      skipped += 1;
+      continue;
+    }
+
+    const dateRange = getAppSheetChequeDateRange(row, "N") || config.pagosRange;
+    const cacheKey = `${dateRange.fechaIni || ""}|${dateRange.fechaFin || ""}`;
+
+    let portalRows = portalCache.get(cacheKey);
+    if (!portalRows) {
+      portalRows = await consultarPagos(client, config, dateRange, "1");
+      portalCache.set(cacheKey, portalRows);
+    }
+
+    checked += 1;
+    const match = (Array.isArray(portalRows) ? portalRows : []).find((portalRow) => {
+      const portalRef = cleanText(portalRow?.["Referencia de pago"] ?? portalRow?.[config.pagosKey] ?? portalRow?.Referencia ?? "");
+      return portalRef === referenciaPago;
+    });
+
+    if (!match) continue;
+
+    const editRow = stripCasaLeyReadOnlyFields(buildCasaLeyChequeUpdateRow(match, config.pagosKey, row));
+    const response = await appsheetActionWithRetry(config, config.tablaPagos, "Edit", [editRow]);
+    if (response.status >= 200 && response.status < 300) {
+      updatedRows.push(editRow);
+      updated += 1;
+      console.log(`[casaley] pagos: reconciliado a cobrado ${referenciaPago}`);
+    } else {
+      const errorText = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
+      console.log(`[casaley] pagos: fallo reconciliando ${referenciaPago}: ${errorText}`);
+    }
+  }
+
+  return { updatedRows, checked, updated, skipped };
+}
+
 async function consultarFacturas(client, config, user, range = {}) {
   const fechaIni = range.fechaIni || config.fechaIni;
   const fechaFin = range.fechaFin || config.fechaFin;
@@ -899,6 +1043,21 @@ function buildKnownKeySet(rows, keyColumn) {
   return keys;
 }
 
+function mergeRowsByKey(rows, extraRows, keyColumn) {
+  const merged = new Map();
+  for (const row of rows || []) {
+    const keyValue = cleanText(row?.[keyColumn] ?? row?.["Referencia de pago"] ?? row?.Referencia ?? "");
+    if (!keyValue) continue;
+    merged.set(keyValue, row);
+  }
+  for (const row of extraRows || []) {
+    const keyValue = cleanText(row?.[keyColumn] ?? row?.["Referencia de pago"] ?? row?.Referencia ?? "");
+    if (!keyValue) continue;
+    merged.set(keyValue, row);
+  }
+  return Array.from(merged.values());
+}
+
 async function loadAppSheetRows(config, tableName) {
   const response = await appsheetActionWithRetry(config, tableName, "Find", []);
   if (response.status < 200 || response.status >= 300) {
@@ -936,14 +1095,15 @@ async function upsertOne(config, tableName, row, keyColumn, lookup) {
   const currentCobrado = normalizeCasaLeyCobroValue(existingRow?.COBRADO ?? "");
 
   if (existingRow) {
-    if (desiredCobrado === "Y" && currentCobrado !== "Y") {
-      const editRow = {
-        [keyColumn]: key,
-        COBRADO: getCasaLeyCobroDisplayValue("1"),
-      };
+    const editRow = stripCasaLeyReadOnlyFields(buildCasaLeyChequeUpdateRow(row, keyColumn, existingRow));
+    const shouldUpdate = desiredCobrado === "Y"
+      ? currentCobrado !== "Y" || hasCasaLeyEditableDiff(existingRow, editRow)
+      : hasCasaLeyEditableDiff(existingRow, editRow);
+
+    if (shouldUpdate) {
       const editResponse = await appsheetActionWithRetry(config, tableName, "Edit", [editRow]);
       if (editResponse.status >= 200 && editResponse.status < 300) {
-        return { ok: true, mode: "edit" };
+        return { ok: true, mode: currentCobrado !== "Y" ? "edit" : "backfill_edit" };
       }
 
       const editErrorText = typeof editResponse.data === "string" ? editResponse.data : JSON.stringify(editResponse.data);
@@ -1050,18 +1210,26 @@ async function runForUser(config, label, user, password) {
     `[casaley] ${label}: pagos detectados cobrados=${pagosCobrados.length} no_cobrados=${pagosNoCobrados.length} total=${pagos.length}`
   );
 
+  const reconciliacionPagos = await reconcileNoCobradoChequesToCobrado(client, config);
+  const pagosFinales = mergeRowsByKey(pagos, reconciliacionPagos.updatedRows, config.pagosKey);
+  if (reconciliacionPagos.updated > 0) {
+    console.log(
+      `[casaley] ${label}: pagos reconciliados a cobrado=${reconciliacionPagos.updated} revisados=${reconciliacionPagos.checked} omitidos=${reconciliacionPagos.skipped}`
+    );
+  }
+
   console.log(`[casaley] ${label}: relacionados`);
-  const relacionados = await consultarRelacionadosDesdePagos(client, config, pagos);
-  const relacionadosBackfilled = await backfillRelacionadosFromAppSheet(client, config, pagos, relacionados);
+  const relacionados = await consultarRelacionadosDesdePagos(client, config, pagosFinales);
+  const relacionadosBackfilled = await backfillRelacionadosFromAppSheet(client, config, pagosFinales, relacionados);
 
   console.log(`[casaley] ${label}: facturas`);
   const facturas = await consultarFacturas(client, config, user, config.facturasRange);
 
-  writeCsv(pagos, path.join(config.outputDir, `pagos_${label}.csv`));
+  writeCsv(pagosFinales, path.join(config.outputDir, `pagos_${label}.csv`));
   writeCsv(relacionadosBackfilled, path.join(config.outputDir, `relacionados_${label}.csv`));
   writeCsv(facturas, path.join(config.outputDir, `facturas_${label}.csv`));
 
-  return { pagos, relacionados: relacionadosBackfilled, facturas };
+  return { pagos: pagosFinales, relacionados: relacionadosBackfilled, facturas };
 }
 
 function requireEnv(config) {
