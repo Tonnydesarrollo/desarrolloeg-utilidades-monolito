@@ -10,7 +10,7 @@ import { loadJobState, saveJobState } from "../../services/jobState.js";
 
 const VALID_UPLOAD_TARGETS = new Set(["none", "all", "pagos", "relacionados", "facturas", "secuencial"]);
 
-let isRunning = false;
+const activeRuns = new Map();
 const FORCE_RESYNC = String(process.env.CASALEY_FORCE_RESYNC || "").trim() === "1";
 const INCREMENTAL_SYNC = String(process.env.CASALEY_INCREMENTAL_SYNC || "1").trim() !== "0";
 const SYNC_LOOKBACK_DAYS = Math.max(0, Number(process.env.CASALEY_SYNC_LOOKBACK_DAYS || "2"));
@@ -40,11 +40,54 @@ function readBoolean(names, fallback = false) {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
+function getCasaLeyExecutionPlan(config) {
+  return {
+    pagos: Boolean(config.shouldUpload.pagos || config.shouldUpload.relacionados),
+    relacionados: Boolean(config.shouldUpload.relacionados),
+    facturas: Boolean(config.shouldUpload.facturas),
+  };
+}
+
+function resolveExecutionScope(uploadTarget) {
+  const normalized = String(uploadTarget || "all").toLowerCase().trim();
+  if (normalized === "pagos" || normalized === "relacionados" || normalized === "facturas") {
+    return normalized;
+  }
+  return "all";
+}
+
+function canStartScope(scope) {
+  if (scope === "all") {
+    return activeRuns.size === 0;
+  }
+
+  return !activeRuns.has("all") && !activeRuns.has(scope);
+}
+
+function markScopeStarted(scope) {
+  activeRuns.set(scope, Date.now());
+}
+
+function markScopeFinished(scope) {
+  activeRuns.delete(scope);
+}
+
 function getCurrentMonthRange() {
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth(), 1);
   const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { ini: formatDateDMY(first), fin: formatDateDMY(last) };
+}
+
+function resolveCasaLeyMonthRange() {
+  const current = getCurrentMonthRange();
+  const manualIni = readEnv(["CASALEY_FECHA_INI", "FECHA_INI"], "").trim();
+  const manualFin = readEnv(["CASALEY_FECHA_FIN", "FECHA_FIN"], "").trim();
+
+  return {
+    ini: manualIni || current.ini,
+    fin: manualFin || current.fin,
+  };
 }
 
 function computeIncrementalRange(defaultRange, lastSyncDateText, lookbackDays) {
@@ -820,15 +863,14 @@ async function backfillRelacionadosFromAppSheet(client, config, portalPagos, rel
     const referenciaPago = cleanText(row?.["Referencia de pago"] ?? row?.Referencia ?? "");
     if (!referenciaPago || portalRefs.has(referenciaPago)) return false;
 
-    const cobrado = isCasaLeyCobroFlagYes(row?.COBRADO);
+    if (normalizeCasaLeyCobroValue(row?.COBRADO ?? "") === "Y") return false;
+
     const dateText = row?.["Fecha cobro"] ?? row?.["Fecha pago"] ?? row?.["Fecha de carga"] ?? "";
     const parsedDate = parseAppSheetSpanishDateValue(dateText);
     return isParsedDateWithinRange(parsedDate, config.pagosRange);
   });
 
   if (!backfillCandidates.length) return relaciondosActuales;
-
-  console.log(`[casaley] relacionados: backfill desde AppSheet ${backfillCandidates.length} filas`);
 
   const cache = new Map();
   const adicionales = [];
@@ -1193,43 +1235,54 @@ async function upsertManyByMonth(config, tableName, rows, keyColumn, label, look
   return summary;
 }
 
-async function runForUser(config, label, user, password) {
+async function runForUser(config, label, user, password, plan) {
   const client = createCasaLeyClient(config);
+  const result = { pagos: [], relacionados: [], facturas: [] };
+  let pagosFinales = [];
 
   console.log(`[casaley] ${label}: login`);
   await loginCasaLey(client, config, user, password);
 
-  console.log(`[casaley] ${label}: pagos cobrados`);
-  const pagosCobrados = await consultarPagos(client, config, config.pagosRange, "1");
+  if (plan.pagos) {
+    console.log(`[casaley] ${label}: pagos cobrados`);
+    const pagosCobrados = await consultarPagos(client, config, config.pagosRange, "1");
 
-  console.log(`[casaley] ${label}: pagos no cobrados`);
-  const pagosNoCobrados = await consultarPagos(client, config, config.pagosRange, "0");
+    console.log(`[casaley] ${label}: pagos no cobrados`);
+    const pagosNoCobrados = await consultarPagos(client, config, config.pagosRange, "0");
 
-  const pagos = [...pagosCobrados, ...pagosNoCobrados];
-  console.log(
-    `[casaley] ${label}: pagos detectados cobrados=${pagosCobrados.length} no_cobrados=${pagosNoCobrados.length} total=${pagos.length}`
-  );
-
-  const reconciliacionPagos = await reconcileNoCobradoChequesToCobrado(client, config);
-  const pagosFinales = mergeRowsByKey(pagos, reconciliacionPagos.updatedRows, config.pagosKey);
-  if (reconciliacionPagos.updated > 0) {
+    const pagos = [...pagosCobrados, ...pagosNoCobrados];
     console.log(
-      `[casaley] ${label}: pagos reconciliados a cobrado=${reconciliacionPagos.updated} revisados=${reconciliacionPagos.checked} omitidos=${reconciliacionPagos.skipped}`
+      `[casaley] ${label}: pagos detectados cobrados=${pagosCobrados.length} no_cobrados=${pagosNoCobrados.length} total=${pagos.length}`
     );
+
+    const reconciliacionPagos = await reconcileNoCobradoChequesToCobrado(client, config);
+    pagosFinales = mergeRowsByKey(pagos, reconciliacionPagos.updatedRows, config.pagosKey);
+    if (reconciliacionPagos.updated > 0) {
+      console.log(
+        `[casaley] ${label}: pagos reconciliados a cobrado=${reconciliacionPagos.updated} revisados=${reconciliacionPagos.checked} omitidos=${reconciliacionPagos.skipped}`
+      );
+    }
+
+    writeCsv(pagosFinales, path.join(config.outputDir, `pagos_${label}.csv`));
+    result.pagos = pagosFinales;
   }
 
-  console.log(`[casaley] ${label}: relacionados`);
-  const relacionados = await consultarRelacionadosDesdePagos(client, config, pagosFinales);
-  const relacionadosBackfilled = await backfillRelacionadosFromAppSheet(client, config, pagosFinales, relacionados);
+  if (plan.relacionados) {
+    console.log(`[casaley] ${label}: relacionados`);
+    const relacionados = await consultarRelacionadosDesdePagos(client, config, pagosFinales);
+    const relacionadosBackfilled = await backfillRelacionadosFromAppSheet(client, config, pagosFinales, relacionados);
+    writeCsv(relacionadosBackfilled, path.join(config.outputDir, `relacionados_${label}.csv`));
+    result.relacionados = relacionadosBackfilled;
+  }
 
-  console.log(`[casaley] ${label}: facturas`);
-  const facturas = await consultarFacturas(client, config, user, config.facturasRange);
+  if (plan.facturas) {
+    console.log(`[casaley] ${label}: facturas`);
+    const facturas = await consultarFacturas(client, config, user, config.facturasRange);
+    writeCsv(facturas, path.join(config.outputDir, `facturas_${label}.csv`));
+    result.facturas = facturas;
+  }
 
-  writeCsv(pagosFinales, path.join(config.outputDir, `pagos_${label}.csv`));
-  writeCsv(relacionadosBackfilled, path.join(config.outputDir, `relacionados_${label}.csv`));
-  writeCsv(facturas, path.join(config.outputDir, `facturas_${label}.csv`));
-
-  return { pagos: pagosFinales, relacionados: relacionadosBackfilled, facturas };
+  return result;
 }
 
 function requireEnv(config) {
@@ -1265,7 +1318,7 @@ function requireEnv(config) {
 }
 
 function buildConfig(options = {}) {
-  const { ini: defaultFechaIni, fin: defaultFechaFin } = getCurrentMonthRange();
+  const { ini: defaultFechaIni, fin: defaultFechaFin } = resolveCasaLeyMonthRange();
   const uploadTarget = String(options.uploadTarget || readEnv(["CASALEY_UPLOAD_TARGET"], "all")).toLowerCase().trim();
   if (!VALID_UPLOAD_TARGETS.has(uploadTarget)) {
     throw new Error("CASALEY_UPLOAD_TARGET invalido. Usa none, all, pagos, relacionados, facturas o secuencial.");
@@ -1367,22 +1420,27 @@ async function runCasaleyJob(options = {}) {
     ? computeIncrementalRange(defaultFacturasRange, state.data?.facturas?.lastDate || "", SYNC_LOOKBACK_DAYS)
     : defaultFacturasRange;
 
+  const executionPlan = getCasaLeyExecutionPlan(config);
   const results = [];
   const usersToProcess = config.maxUsers > 0 ? config.users.slice(0, config.maxUsers) : config.users;
   for (const account of usersToProcess) {
-    results.push(await runForUser(config, account.label, account.user, account.password));
+    results.push(await runForUser(config, account.label, account.user, account.password, executionPlan));
   }
 
-  const allPagos = results.flatMap((result) => result.pagos);
-  const allRelacionados = results.flatMap((result) => result.relacionados);
-  const allFacturas = results.flatMap((result) => result.facturas);
+  const allPagos = executionPlan.pagos ? results.flatMap((result) => result.pagos) : [];
+  const allRelacionados = executionPlan.relacionados ? results.flatMap((result) => result.relacionados) : [];
+  const allFacturas = executionPlan.facturas ? results.flatMap((result) => result.facturas) : [];
 
   const prepareUploadRows = (rows) => rows.map((row) => normalizeCasaLeyUploadRow(sanitizeRowValuesOnly(row)));
 
-  const pagosPrepared = config.pagosKey ? ensureKey(prepareUploadRows(allPagos), config.pagosKey) : prepareUploadRows(allPagos);
-  const facturasPrepared = config.facturasKey
+  const pagosPrepared = executionPlan.pagos
+    ? (config.pagosKey ? ensureKey(prepareUploadRows(allPagos), config.pagosKey) : prepareUploadRows(allPagos))
+    : [];
+  const facturasPrepared = executionPlan.facturas && config.facturasKey
     ? ensureKey(prepareUploadRows(allFacturas), config.facturasKey)
-    : prepareUploadRows(allFacturas);
+    : executionPlan.facturas
+      ? prepareUploadRows(allFacturas)
+      : [];
 
   const pagosReplicaPath = resolveReplicaFile(config, "pagos");
   const relacionadosReplicaPath = resolveReplicaFile(config, "relacionados");
@@ -1399,37 +1457,49 @@ async function runCasaleyJob(options = {}) {
   const pagosExistingRowsForLookup = config.shouldUpload.pagos
     ? (pagosExistingRows.length ? pagosExistingRows : await loadAppSheetRows(config, config.tablaPagos))
     : [];
-  const relacionadosPrepared = config.relacionadosKey
+  const relacionadosPrepared = executionPlan.relacionados && config.relacionadosKey
     ? ensureKey(prepareUploadRows(allRelacionados), config.relacionadosKey)
-    : prepareUploadRows(allRelacionados);
-  const pagosSelected = applyRowLimit(pagosPrepared, config.maxPagosRows);
-  const relacionadosSelected = applyRowLimit(relacionadosPrepared, config.maxRelacionadosRows);
-  const facturasSelected = applyRowLimit(facturasPrepared, config.maxFacturasRows);
+    : executionPlan.relacionados
+      ? prepareUploadRows(allRelacionados)
+      : [];
+  const pagosSelected = executionPlan.pagos ? applyRowLimit(pagosPrepared, config.maxPagosRows) : [];
+  const relacionadosSelected = executionPlan.relacionados ? applyRowLimit(relacionadosPrepared, config.maxRelacionadosRows) : [];
+  const facturasSelected = executionPlan.facturas ? applyRowLimit(facturasPrepared, config.maxFacturasRows) : [];
 
-  writeCsv(pagosPrepared, path.join(config.outputDir, "pagos_ALL.csv"));
-  writeCsv(relacionadosPrepared, path.join(config.outputDir, "relacionados_ALL.csv"));
-  writeCsv(facturasPrepared, path.join(config.outputDir, "facturas_ALL.csv"));
-  const pagosKnownLookup = buildExistingRowIndex(pagosExistingRowsForLookup, config.pagosKey);
-  const relacionadosKnownLookup = config.incrementalSync && !FORCE_RESYNC
+  if (executionPlan.pagos) writeCsv(pagosPrepared, path.join(config.outputDir, "pagos_ALL.csv"));
+  if (executionPlan.relacionados) writeCsv(relacionadosPrepared, path.join(config.outputDir, "relacionados_ALL.csv"));
+  if (executionPlan.facturas) writeCsv(facturasPrepared, path.join(config.outputDir, "facturas_ALL.csv"));
+  const pagosKnownLookup = config.shouldUpload.pagos ? buildExistingRowIndex(pagosExistingRowsForLookup, config.pagosKey) : new Map();
+  const relacionadosKnownLookup = config.shouldUpload.relacionados && config.incrementalSync && !FORCE_RESYNC
     ? buildKnownKeySet(loadReplica(relacionadosReplicaPath).rows, config.relacionadosKey)
-    : buildExistingRowIndex(relacionadosExistingRows, config.relacionadosKey);
-  const facturasKnownLookup = config.incrementalSync && !FORCE_RESYNC
+    : config.shouldUpload.relacionados
+      ? buildExistingRowIndex(relacionadosExistingRows, config.relacionadosKey)
+      : new Map();
+  const facturasKnownLookup = config.shouldUpload.facturas && config.incrementalSync && !FORCE_RESYNC
     ? buildKnownKeySet(loadReplica(facturasReplicaPath).rows, config.facturasKey)
-    : buildExistingRowIndex(facturasExistingRows, config.facturasKey);
+    : config.shouldUpload.facturas
+      ? buildExistingRowIndex(facturasExistingRows, config.facturasKey)
+      : new Map();
 
-  const pagosDiff = FORCE_RESYNC || !config.pagosKey
+  const pagosDiff = config.shouldUpload.pagos && (FORCE_RESYNC || !config.pagosKey)
     ? { changedRows: pagosSelected, unchangedRows: [], rowsWithoutKey: [] }
-    : diffRowsAgainstReplica(pagosSelected, config.pagosKey, loadReplica(pagosReplicaPath).rows);
-  const relacionadosDiff = FORCE_RESYNC || !config.relacionadosKey
+    : config.shouldUpload.pagos
+      ? diffRowsAgainstReplica(pagosSelected, config.pagosKey, loadReplica(pagosReplicaPath).rows)
+      : { changedRows: [], unchangedRows: [], rowsWithoutKey: [] };
+  const relacionadosDiff = config.shouldUpload.relacionados && (FORCE_RESYNC || !config.relacionadosKey)
     ? { changedRows: relacionadosSelected, unchangedRows: [], rowsWithoutKey: [] }
-    : diffRowsAgainstReplica(relacionadosSelected, config.relacionadosKey, loadReplica(relacionadosReplicaPath).rows);
-  const facturasDiff = FORCE_RESYNC || !config.facturasKey
+    : config.shouldUpload.relacionados
+      ? diffRowsAgainstReplica(relacionadosSelected, config.relacionadosKey, loadReplica(relacionadosReplicaPath).rows)
+      : { changedRows: [], unchangedRows: [], rowsWithoutKey: [] };
+  const facturasDiff = config.shouldUpload.facturas && (FORCE_RESYNC || !config.facturasKey)
     ? { changedRows: facturasSelected, unchangedRows: [], rowsWithoutKey: [] }
-    : diffRowsAgainstReplica(facturasSelected, config.facturasKey, loadReplica(facturasReplicaPath).rows);
+    : config.shouldUpload.facturas
+      ? diffRowsAgainstReplica(facturasSelected, config.facturasKey, loadReplica(facturasReplicaPath).rows)
+      : { changedRows: [], unchangedRows: [], rowsWithoutKey: [] };
 
-  writeCsv(pagosDiff.changedRows, path.join(config.outputDir, "pagos_to_upload.csv"));
-  writeCsv(relacionadosDiff.changedRows, path.join(config.outputDir, "relacionados_to_upload.csv"));
-  writeCsv(facturasDiff.changedRows, path.join(config.outputDir, "facturas_to_upload.csv"));
+  if (config.shouldUpload.pagos) writeCsv(pagosDiff.changedRows, path.join(config.outputDir, "pagos_to_upload.csv"));
+  if (config.shouldUpload.relacionados) writeCsv(relacionadosDiff.changedRows, path.join(config.outputDir, "relacionados_to_upload.csv"));
+  if (config.shouldUpload.facturas) writeCsv(facturasDiff.changedRows, path.join(config.outputDir, "facturas_to_upload.csv"));
 
   const summary = {
     ok: true,
@@ -1603,19 +1673,21 @@ async function runCasaleyJob(options = {}) {
 }
 
 export async function syncCasaleyNative(options = {}) {
-  if (isRunning) {
+  const scope = resolveExecutionScope(options.uploadTarget);
+
+  if (!canStartScope(scope)) {
     return {
       ok: true,
       skipped: true,
-      message: "Sync de CasaLey ya en ejecucion, se omite una nueva corrida.",
+      message: `Sync de CasaLey ya en ejecucion para el alcance ${scope}, se omite una nueva corrida.`,
     };
   }
 
-  isRunning = true;
+  markScopeStarted(scope);
   try {
     return await runCasaleyJob(options);
   } finally {
-    isRunning = false;
+    markScopeFinished(scope);
   }
 }
 

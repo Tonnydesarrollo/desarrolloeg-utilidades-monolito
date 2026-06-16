@@ -7,6 +7,9 @@ import { exportCasaleyAllNative, syncCasaleyNative } from '../native/casaley/syn
 const nativeHandlers = {
   'casaley-export-all': exportCasaleyAllNative,
   'casaley-sync-appsheet': syncCasaleyNative,
+  'pagos-ley': () => syncCasaleyNative({ uploadTarget: 'pagos' }),
+  'cheques-ley': () => syncCasaleyNative({ uploadTarget: 'relacionados' }),
+  'facturas-ley': () => syncCasaleyNative({ uploadTarget: 'facturas' }),
   'facturas-appsheet-sync': syncFacturasNative,
   'facturas-native-sync': syncFacturasNative,
   'pedidos-native-sync': syncPedidosNative,

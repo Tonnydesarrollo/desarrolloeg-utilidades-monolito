@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",

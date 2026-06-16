@@ -18,6 +18,37 @@ function parsePositiveMinutes(value, fallbackMinutes) {
   return parsed;
 }
 
+function parsePositiveSeconds(value, fallbackSeconds) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallbackSeconds;
+  return parsed;
+}
+
+function resolveTargetBoolean(targetEnvName, legacyEnvName, fallback, allowLegacy = true) {
+  if (process.env[targetEnvName] !== undefined && process.env[targetEnvName] !== null && String(process.env[targetEnvName]).trim() !== "") {
+    return parseBoolean(process.env[targetEnvName], fallback);
+  }
+  if (
+    allowLegacy &&
+    process.env[legacyEnvName] !== undefined &&
+    process.env[legacyEnvName] !== null &&
+    String(process.env[legacyEnvName]).trim() !== ""
+  ) {
+    return parseBoolean(process.env[legacyEnvName], fallback);
+  }
+  return fallback;
+}
+
+function resolveTargetSeconds(targetEnvName, legacyEnvName, fallbackSeconds) {
+  if (process.env[targetEnvName] !== undefined && process.env[targetEnvName] !== null && String(process.env[targetEnvName]).trim() !== "") {
+    return parsePositiveSeconds(process.env[targetEnvName], fallbackSeconds);
+  }
+  if (process.env[legacyEnvName] !== undefined && process.env[legacyEnvName] !== null && String(process.env[legacyEnvName]).trim() !== "") {
+    return parsePositiveSeconds(process.env[legacyEnvName], fallbackSeconds);
+  }
+  return fallbackSeconds;
+}
+
 function ensureJobsRegistered() {
   if (schedulerState.initialized) return;
   schedulerState.initialized = true;
@@ -26,23 +57,68 @@ function ensureJobsRegistered() {
     jobId: "facturas-native-sync",
     label: "Facturas ClubFactura",
     enabled: parseBoolean(process.env.FACTURAS_SYNC_ENABLED, false),
-    intervalMinutes: parsePositiveMinutes(process.env.FACTURAS_SYNC_INTERVAL_MINUTES, 5),
+    intervalSeconds: parsePositiveSeconds(
+      process.env.FACTURAS_SYNC_INTERVAL_SECONDS,
+      parsePositiveMinutes(process.env.FACTURAS_SYNC_INTERVAL_MINUTES, 1) * 60
+    ),
     runOnStart: parseBoolean(process.env.FACTURAS_SYNC_RUN_ON_START, true),
   });
 
   registerIntervalJob({
     jobId: "casaley-sync-appsheet",
     label: "CasaLey AppSheet",
-    enabled: parseBoolean(process.env.CASALEY_SYNC_ENABLED, false),
-    intervalMinutes: parsePositiveMinutes(process.env.CASALEY_SYNC_INTERVAL_MINUTES, 5),
-    runOnStart: parseBoolean(process.env.CASALEY_SYNC_RUN_ON_START, true),
+    enabled: parseBoolean(process.env.CASALEY_SYNC_ALL_ENABLED, false),
+    intervalSeconds: parsePositiveSeconds(
+      process.env.CASALEY_SYNC_ALL_INTERVAL_SECONDS || process.env.CASALEY_SYNC_INTERVAL_SECONDS,
+      parsePositiveMinutes(process.env.CASALEY_SYNC_INTERVAL_MINUTES, 1) * 60
+    ),
+    runOnStart: parseBoolean(process.env.CASALEY_SYNC_ALL_RUN_ON_START, true),
+  });
+
+  registerIntervalJob({
+    jobId: "pagos-ley",
+    label: "CasaLey Pagos",
+    enabled: resolveTargetBoolean("CASALEY_PAGOS_LEY_ENABLED", "CASALEY_SYNC_ENABLED", false),
+    intervalSeconds: resolveTargetSeconds(
+      "CASALEY_PAGOS_LEY_INTERVAL_SECONDS",
+      "CASALEY_SYNC_INTERVAL_SECONDS",
+      30
+    ),
+    runOnStart: resolveTargetBoolean("CASALEY_PAGOS_LEY_RUN_ON_START", "CASALEY_SYNC_RUN_ON_START", true),
+  });
+
+  registerIntervalJob({
+    jobId: "cheques-ley",
+    label: "CasaLey Cheques",
+    enabled: resolveTargetBoolean("CASALEY_CHEQUES_LEY_ENABLED", "CASALEY_SYNC_ENABLED", false),
+    intervalSeconds: resolveTargetSeconds(
+      "CASALEY_CHEQUES_LEY_INTERVAL_SECONDS",
+      "CASALEY_SYNC_INTERVAL_SECONDS",
+      300
+    ),
+    runOnStart: resolveTargetBoolean("CASALEY_CHEQUES_LEY_RUN_ON_START", "CASALEY_SYNC_RUN_ON_START", false, false),
+  });
+
+  registerIntervalJob({
+    jobId: "facturas-ley",
+    label: "CasaLey Facturas",
+    enabled: resolveTargetBoolean("CASALEY_FACTURAS_LEY_ENABLED", "CASALEY_SYNC_ENABLED", false),
+    intervalSeconds: resolveTargetSeconds(
+      "CASALEY_FACTURAS_LEY_INTERVAL_SECONDS",
+      "CASALEY_SYNC_INTERVAL_SECONDS",
+      60
+    ),
+    runOnStart: resolveTargetBoolean("CASALEY_FACTURAS_LEY_RUN_ON_START", "CASALEY_SYNC_RUN_ON_START", false, false),
   });
 
   registerIntervalJob({
     jobId: "pedidos-native-sync",
     label: "Pedidos y Liberaciones",
     enabled: parseBoolean(process.env.PEDIDOS_SYNC_ENABLED, false),
-    intervalMinutes: parsePositiveMinutes(process.env.PEDIDOS_SYNC_INTERVAL_MINUTES, 5),
+    intervalSeconds: parsePositiveSeconds(
+      process.env.PEDIDOS_SYNC_INTERVAL_SECONDS,
+      parsePositiveMinutes(process.env.PEDIDOS_SYNC_INTERVAL_MINUTES, 5) * 60
+    ),
     runOnStart: parseBoolean(process.env.PEDIDOS_SYNC_RUN_ON_START, false),
   });
 }
@@ -90,13 +166,14 @@ async function executeScheduledJob(jobId) {
   }
 }
 
-function registerIntervalJob({ jobId, label, enabled, intervalMinutes, runOnStart }) {
-  const intervalMs = intervalMinutes * 60 * 1000;
+function registerIntervalJob({ jobId, label, enabled, intervalSeconds, runOnStart }) {
+  const intervalMs = intervalSeconds * 1000;
   const entry = {
     jobId,
     label,
     enabled,
-    intervalMinutes,
+    intervalSeconds,
+    intervalMinutes: Math.round((intervalSeconds / 60) * 100) / 100,
     intervalMs,
     runOnStart,
     running: false,
@@ -132,6 +209,7 @@ export function getJobSchedulerStatus() {
     jobId: entry.jobId,
     label: entry.label,
     enabled: entry.enabled,
+    intervalSeconds: entry.intervalSeconds,
     intervalMinutes: entry.intervalMinutes,
     runOnStart: entry.runOnStart,
     running: entry.running,

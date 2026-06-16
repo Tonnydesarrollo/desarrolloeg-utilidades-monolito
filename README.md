@@ -18,6 +18,13 @@ Base nueva para consolidar `DESARROLLOEG_UTILIDADES` en un solo proyecto, sin mo
 - Scheduler interno para sincronizaciones recurrentes
 - Servicio opcional de WhatsApp para capacitadores (`/whatsapp-capacitadores/health`)
 
+Para CasaLey y ClubFactura, el scheduler ya puede operar en modo de polling corto usando:
+
+- `CASALEY_SYNC_INTERVAL_SECONDS`
+- `FACTURAS_SYNC_INTERVAL_SECONDS`
+
+Con `runOnStart=1` y un intervalo bajo, el monolito queda revisando casi en tiempo real sin saturar AppSheet.
+
 ## Endpoints utiles
 
 - `GET /health`
@@ -35,7 +42,7 @@ Base nueva para consolidar `DESARROLLOEG_UTILIDADES` en un solo proyecto, sin mo
 
 ## Portal de acceso
 
-La portada de `apps.desarrolloeg.com` ahora funciona como portal de acceso por correo.
+La portada de `apps.desarrolloeg.com` funciona como portal de acceso por correo.
 
 - Los usuarios se validan contra la tabla `EMPLEADOS` de AppSheet.
 - `PUESTO` decide el rol:
@@ -89,7 +96,7 @@ Variables nuevas recomendadas:
 Notas:
 
 - El `redirect_uri` debe coincidir exactamente con lo que registras en Google Cloud, incluyendo `https` y la ruta.
-- El `client secret` de los clientes OAuth web solo se muestra al crearse, así que guárdalo en un lugar seguro.
+- El `client secret` de los clientes OAuth web solo se muestra al crearse, asi que guardalo en un lugar seguro.
 - Si usas un entorno local, puedes registrar un redirect URI adicional de `http://localhost:4100/auth/google/callback`.
 
 ## Docker
@@ -99,8 +106,13 @@ El repo ya incluye:
 - `Dockerfile`
 - `docker-compose.yml`
 - `.dockerignore`
+- `scripts/install-docker-monolith.ps1`
+- `scripts/update-docker-monolith.ps1`
 
 La imagen instala Node 22 y Chromium para poder correr `whatsapp-web.js` dentro del contenedor.
+El despliegue recomendado es siempre el mismo en cualquier servidor: clonar el repo, copiar el archivo de entorno y levantar `docker compose`.
+El host solo necesita Docker y Git; el resto de dependencias corre dentro del contenedor.
+Para CasaLey, el scheduler automatizado ahora separa tres corridas: `pagos-ley`, `cheques-ley` y `facturas-ley`. El job grande `casaley-sync-appsheet` queda como manual.
 
 ### 1. Crear el archivo de entorno para Docker
 
@@ -122,15 +134,16 @@ Si necesitas reponer facturas de ClubFactura que no quedaron en AppSheet, activa
 
 - `FACTURAS_FORCE_RESYNC=1`
 
-Eso hace que el job vuelva a enviar las filas del rango actual aunque la réplica local las marque como ya sincronizadas.
+Eso hace que el job vuelva a enviar las filas del rango actual aunque la replica local las marque como ya sincronizadas.
 
 Para el job de `PEDIDOS_LEY`, puedes activar una relectura completa con:
 
 - `PEDIDOS_FORCE_REFRESH=1`
 
-Ese modo vuelve a abrir los PDF aunque la fila ya tenga datos completos, lo que ayuda cuando sospechas que la información quedó desactualizada o el extractor mejoró y quieres reescribir valores existentes.
+Ese modo vuelve a abrir los PDF aunque la fila ya tenga datos completos, lo que ayuda cuando sospechas que la informacion quedo desactualizada o el extractor mejoro y quieres reescribir valores existentes.
 
 No pongas rutas locales de Windows en `.env.docker`; `docker-compose.yml` ya inyecta rutas Linux portables dentro del contenedor.
+Para CasaLey, si no defines fechas manuales, el sistema arma automaticamente el rango del primer dia al ultimo dia del mes actual.
 
 ### 2. Crear carpetas locales persistentes
 
@@ -140,6 +153,7 @@ Estas carpetas viven fuera de la imagen y se pueden copiar a otra maquina:
 runtime/
 secrets/
 publicimg/
+cloudflared/
 ```
 
 Estructura sugerida:
@@ -166,15 +180,61 @@ runtime/
     session/
     tmp/
     token.json
+
+cloudflared/
+  config.yml
+  desarrolloeg.json
 ```
 
-### 3. Levantar el contenedor
+El directorio `cloudflared/` queda dentro del compose y no depende de rutas del host. El tunnel usa el servicio `monolito` por red interna, asi que no importa desde que servidor se arranque mientras el stack tenga el mismo archivo de credenciales.
+
+### 3. Levantar el stack
 
 ```bash
 docker compose up -d --build
 ```
 
-### 4. Validar
+Ese compose levanta `monolito` y `cloudflared`.
+
+El tunnel corre dentro de Docker y apunta al servicio `monolito` por red interna.
+Si quieres forzar el arranque completo de CasaLey en una sola corrida, usa el job `casaley-sync-appsheet` desde `/jobs` o dale `CASALEY_SYNC_ALL_ENABLED=1`.
+
+### 4. Instalador y autoactualizacion
+
+Para dejar un nodo listo de una vez, ejecuta:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-docker-monolith.ps1
+```
+
+Ese instalador:
+
+- prepara `.env.docker` si falta
+- crea las carpetas persistentes
+- levanta el stack con Docker
+- registra una tarea de arranque
+- registra una tarea de actualizacion que consulta `origin/main` y reconstruye el stack cuando hay cambios
+
+Si quieres apuntar a otra rama o cambiar el intervalo de revision:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-docker-monolith.ps1 -Branch main -UpdateIntervalMinutes 15
+```
+
+### 5. Despliegue en mas de un servidor
+
+Si quieres alta disponibilidad, puedes desplegar el mismo stack en mas de una maquina:
+
+1. Copia el mismo repo y el mismo `.env.docker`.
+2. Copia `runtime/`, `secrets/`, `publicimg/` y `cloudflared/` a cada servidor.
+3. Asegura que todos los nodos usen el mismo tunnel de Cloudflare.
+4. Arranca el mismo `docker compose up -d --build` en cada maquina.
+
+Con eso, `cloudflared` puede abrir mas de una conexion al mismo tunnel y el acceso externo deja de depender de un solo host.
+
+Importante: el monolito ya tiene coordinacion de lider/standby para servicios singulares, pero no tiene un lock distribuido real para correr jobs identicos de forma activa-activa en varios nodos al mismo tiempo. Para evitar duplicidad, deja `CLUSTER_ENABLED=1` solo en el nodo que deba tomar liderazgo, o agrega un backend compartido de bloqueo si despues quieres ejecucion activa-activa de jobs.
+
+### 6. Validar
 
 ```bash
 curl http://localhost:7000/health
@@ -189,6 +249,7 @@ Para mover el monolito completo a otra PC:
 2. Copia `.env.docker`.
 3. Copia `secrets/`.
 4. Copia `runtime/` si quieres conservar snapshots, tokens y la sesion de WhatsApp.
-5. Ejecuta `docker compose up -d --build`.
+5. Copia `cloudflared/`.
+6. Ejecuta `docker compose up -d --build`.
 
 Si no copias `runtime/`, los jobs reconstruyen su estado local y WhatsApp pedira QR otra vez.
