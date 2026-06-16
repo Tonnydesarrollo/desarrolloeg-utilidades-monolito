@@ -19,7 +19,8 @@ RUN npm ci --omit=dev
 
 COPY src ./src
 COPY standalone/sucursales-docs ./standalone/sucursales-docs
-COPY README.md ./
+COPY ["POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf", "./POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf"]
+COPY README.md ./ 
 COPY .env.example ./
 
 RUN mkdir -p \

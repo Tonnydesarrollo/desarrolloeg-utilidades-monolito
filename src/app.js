@@ -14,6 +14,7 @@ import { separarPipcRouter } from "./modules/separar-pipc/separarPipc.router.js"
 import { whatsappCapacitadoresRouter } from "./modules/whatsapp-capacitadores/whatsappCapacitadores.router.js";
 import { solventacionesRouter } from "./modules/solventaciones/solventaciones.router.js";
 import { sucursalesDocsRouter } from "./modules/sucursales-docs/sucursalesDocs.router.js";
+import { polizaLeyRouter } from "./modules/poliza-ley/polizaLey.router.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
 import { getClusterCoordinatorStatus } from "./services/clusterCoordinator.js";
 
@@ -114,6 +115,8 @@ export function createApp() {
   app.use("/solventaciones", solventacionesRouter);
   app.use("/SUCURSALES-DOCS", sucursalesDocsRouter);
   app.use("/sucursales-docs", sucursalesDocsRouter);
+  app.use("/POLIZA_LEY", polizaLeyRouter);
+  app.use("/poliza-ley", polizaLeyRouter);
 
   app.get("/health", (_req, res) => {
     res.json({

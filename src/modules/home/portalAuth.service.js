@@ -114,6 +114,13 @@ const GENERAL_ROUTE_CARDS = [
     href: "/SOLVENTACIONES/html",
   },
   {
+    tone: "red",
+    label: "Póliza",
+    title: "Póliza Ley",
+    description: "Consulta por ubicación o domicilio y descarga la página en JPEG.",
+    href: "/POLIZA_LEY/",
+  },
+  {
     tone: "orange",
     label: "Constancias",
     title: "Constancias",

@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Póliza Ley | Desarrollo EG</title>
+    <style>
+      :root {
+        --bg-1: #0f172a;
+        --bg-2: #172554;
+        --bg-3: #5b21b6;
+        --paper: #ffffff;
+        --paper-soft: #f8fafc;
+        --text: #111827;
+        --muted: #64748b;
+        --line: #dbe3ee;
+        --accent: #b91c1c;
+        --accent-2: #1d4ed8;
+        --accent-3: #0f766e;
+        --shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 10% 10%, rgba(185, 28, 28, 0.20), transparent 30%),
+          radial-gradient(circle at 90% 20%, rgba(29, 78, 216, 0.18), transparent 28%),
+          radial-gradient(circle at 50% 100%, rgba(15, 118, 110, 0.16), transparent 34%),
+          linear-gradient(135deg, var(--bg-1), var(--bg-2) 45%, var(--bg-3));
+      }
+
+      body {
+        padding: 24px;
+      }
+
+      .shell {
+        max-width: 1440px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 370px minmax(0, 1fr);
+        gap: 20px;
+        min-height: calc(100vh - 48px);
+      }
+
+      .panel, .viewer {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .panel {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .hero {
+        padding: 22px;
+        background:
+          linear-gradient(135deg, rgba(185, 28, 28, 0.10), rgba(29, 78, 216, 0.08)),
+          linear-gradient(180deg, #ffffff, #f8fbff);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.22em;
+        font-size: 0.72rem;
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-size: 1.6rem;
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+      }
+
+      .hero p {
+        margin: 10px 0 0;
+        color: #334155;
+        line-height: 1.45;
+        font-size: 0.95rem;
+      }
+
+      .hero .meta {
+        margin-top: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        border: 1px solid #d7e1ee;
+        background: #fff;
+        padding: 8px 12px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #334155;
+      }
+
+      .chip.brand { color: var(--accent); border-color: rgba(185, 28, 28, 0.20); background: rgba(185, 28, 28, 0.06); }
+      .chip.blue { color: var(--accent-2); border-color: rgba(29, 78, 216, 0.18); background: rgba(29, 78, 216, 0.06); }
+      .chip.teal { color: var(--accent-3); border-color: rgba(15, 118, 110, 0.18); background: rgba(15, 118, 110, 0.06); }
+
+      .search-box {
+        position: relative;
+        padding: 18px 22px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .search-label {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+        margin-bottom: 10px;
+      }
+
+      .search-label strong {
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+      }
+
+      .search-label span {
+        color: var(--muted);
+        font-size: 0.76rem;
+      }
+
+      .field {
+        width: 100%;
+        border-radius: 16px;
+        border: 1px solid #cfd9e6;
+        background: #fff;
+        padding: 14px 16px;
+        outline: none;
+        font-size: 0.98rem;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .field:focus {
+        border-color: rgba(29, 78, 216, 0.55);
+        box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.10);
+      }
+
+      .suggestions {
+        margin-top: 12px;
+        display: grid;
+        gap: 8px;
+        max-height: 340px;
+        overflow: auto;
+      }
+
+      .suggestion {
+        border: 1px solid #dde6f1;
+        background: linear-gradient(180deg, #fff, #f8fbff);
+        border-radius: 16px;
+        padding: 12px 14px;
+        text-align: left;
+        cursor: pointer;
+        transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .suggestion:hover {
+        transform: translateY(-1px);
+        border-color: rgba(29, 78, 216, 0.42);
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+      }
+
+      .suggestion .top {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .suggestion .page {
+        font-size: 0.76rem;
+        font-weight: 800;
+        color: var(--accent-2);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .suggestion .score {
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+
+      .suggestion .snippet {
+        margin-top: 8px;
+        font-size: 0.88rem;
+        line-height: 1.45;
+        color: #334155;
+      }
+
+      .toolbar {
+        padding: 18px 22px 22px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .small-field {
+        width: 100%;
+        border: 1px solid #d6dfeb;
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: #fff;
+        font-size: 0.95rem;
+      }
+
+      .buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 14px;
+        font-size: 0.82rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.10em;
+        cursor: pointer;
+      }
+
+      .btn-primary { background: var(--accent); color: #fff; }
+      .btn-secondary { background: #eaf1fb; color: var(--accent-2); }
+      .btn-ghost { background: #f4f7fb; color: #334155; }
+      .btn-teal { background: var(--accent-3); color: #fff; }
+
+      .hint {
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.45;
+      }
+
+      .viewer {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        min-width: 0;
+      }
+
+      .viewer-head {
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .viewer-head h2 {
+        margin: 0;
+        font-size: 1.05rem;
+      }
+
+      .viewer-head p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .page-controls {
+        padding: 14px 22px;
+        display: grid;
+        grid-template-columns: auto auto 1fr auto;
+        gap: 10px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .pager-btn {
+        min-width: 110px;
+      }
+
+      .page-input {
+        width: 100px;
+      }
+
+      .page-info {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .canvas-wrap {
+        position: relative;
+        overflow: auto;
+        background:
+          radial-gradient(circle at top left, rgba(29, 78, 216, 0.08), transparent 34%),
+          linear-gradient(180deg, #f5f8fc, #eef3f9);
+        padding: 22px;
+      }
+
+      .canvas-shell {
+        width: min(100%, 1040px);
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12);
+        border: 1px solid #e1e8f2;
+        overflow: hidden;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #fff;
+      }
+
+      .loader {
+        position: absolute;
+        inset: 22px;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+      }
+
+      .loader > div {
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid #dce6f1;
+        border-radius: 18px;
+        padding: 18px 20px;
+        box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+        color: #334155;
+        font-weight: 700;
+      }
+
+      .error {
+        display: none;
+        margin: 0 22px 22px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(185, 28, 28, 0.24);
+        background: rgba(185, 28, 28, 0.06);
+        color: #991b1b;
+        font-size: 0.92rem;
+      }
+
+      .empty {
+        padding: 16px 14px;
+        border: 1px dashed #c9d6e6;
+        border-radius: 16px;
+        color: var(--muted);
+        background: #fff;
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 1120px) {
+        body { padding: 14px; }
+        .shell {
+          grid-template-columns: 1fr;
+          min-height: calc(100vh - 28px);
+        }
+      }
+
+      @media (max-width: 700px) {
+        .grid, .buttons, .page-controls {
+          grid-template-columns: 1fr;
+        }
+
+        .page-input, .pager-btn {
+          width: 100%;
+          min-width: 0;
+        }
+
+        .status-row {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+    <script src="/POLIZA_LEY/vendor/pdfjs/pdf.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <header class="hero">
+          <p class="eyebrow">Ruta admin /POLIZA_LEY</p>
+          <h1>Póliza Seguro Carta Ley</h1>
+          <p>
+            Busca por ubicación, colonia o domicilio para ubicar la página correcta y descárgala en JPEG.
+            Si ya sabes la hoja, también puedes moverte manualmente por número.
+          </p>
+          <div class="meta">
+            <span class="chip brand">Búsqueda inteligente</span>
+            <span class="chip blue">Salida JPEG</span>
+            <span class="chip teal" id="pageCountChip">Cargando PDF...</span>
+          </div>
+        </header>
+
+        <div class="search-box">
+          <div class="search-label">
+            <strong>Buscar coincidencias</strong>
+            <span>Ej. Miramar, Bugambilias o Ley Express</span>
+          </div>
+          <input id="searchInput" class="field" type="text" placeholder="Escribe una ubicación o domicilio..." autocomplete="off" />
+          <div id="searchResults" class="suggestions"></div>
+        </div>
+
+        <div class="toolbar">
+          <div class="grid">
+            <input id="pageInput" class="small-field" type="number" min="1" step="1" value="1" />
+            <input id="zoomInput" class="small-field" type="number" min="0.75" max="3" step="0.05" value="1.4" />
+          </div>
+
+          <div class="buttons">
+            <button id="prevBtn" class="btn-secondary" type="button">Anterior</button>
+            <button id="nextBtn" class="btn-secondary" type="button">Siguiente</button>
+            <button id="downloadBtn" class="btn-primary" type="button">Descargar JPEG</button>
+            <button id="clearBtn" class="btn-ghost" type="button">Limpiar búsqueda</button>
+          </div>
+
+          <div class="hint">
+            Tip: escribe solo una parte del nombre o del domicilio. Por ejemplo,
+            <strong>Miramar</strong>, <strong>Bugambilias</strong> o <strong>Ley Express</strong>.
+            Al seleccionar un resultado, la vista se posiciona en esa hoja.
+          </div>
+        </div>
+      </section>
+
+      <section class="viewer">
+        <div class="viewer-head">
+          <div>
+            <h2>Vista de la página</h2>
+            <p id="viewerSubtitle">Cargando el documento...</p>
+          </div>
+          <div class="status-row">
+            <span class="chip brand" id="currentPageChip">Página 1</span>
+            <span class="chip blue" id="renderSizeChip">-</span>
+          </div>
+        </div>
+
+        <div class="page-controls">
+          <button id="firstBtn" class="btn-ghost pager-btn" type="button">Primera</button>
+          <button id="lastBtn" class="btn-ghost pager-btn" type="button">Última</button>
+          <div class="page-info" id="pageInfo">Página 1 de 1</div>
+          <button id="refreshBtn" class="btn-teal pager-btn" type="button">Re-render</button>
+        </div>
+
+        <div class="canvas-wrap">
+          <div class="canvas-shell">
+            <canvas id="pdfCanvas"></canvas>
+          </div>
+          <div class="loader" id="loader"><div>Cargando vista previa...</div></div>
+        </div>
+
+        <div class="error" id="errorBox"></div>
+      </section>
+    </main>
+
+    <script>
+      const manifestUrl = "/POLIZA_LEY/api/manifest";
+      const searchUrl = "/POLIZA_LEY/api/search";
+      const pdfUrl = "/POLIZA_LEY/documento.pdf";
+
+      const els = {
+        searchInput: document.getElementById("searchInput"),
+        searchResults: document.getElementById("searchResults"),
+        pageInput: document.getElementById("pageInput"),
+        zoomInput: document.getElementById("zoomInput"),
+        prevBtn: document.getElementById("prevBtn"),
+        nextBtn: document.getElementById("nextBtn"),
+        firstBtn: document.getElementById("firstBtn"),
+        lastBtn: document.getElementById("lastBtn"),
+        refreshBtn: document.getElementById("refreshBtn"),
+        downloadBtn: document.getElementById("downloadBtn"),
+        clearBtn: document.getElementById("clearBtn"),
+        canvas: document.getElementById("pdfCanvas"),
+        loader: document.getElementById("loader"),
+        errorBox: document.getElementById("errorBox"),
+        currentPageChip: document.getElementById("currentPageChip"),
+        renderSizeChip: document.getElementById("renderSizeChip"),
+        pageInfo: document.getElementById("pageInfo"),
+        pageCountChip: document.getElementById("pageCountChip"),
+        viewerSubtitle: document.getElementById("viewerSubtitle"),
+      };
+
+      const state = {
+        pdf: null,
+        pageCount: 0,
+        currentPage: 1,
+        zoom: Number(els.zoomInput.value) || 1.4,
+        renderToken: 0,
+        searchTimer: null,
+      };
+
+      function setError(message = "") {
+        els.errorBox.style.display = message ? "block" : "none";
+        els.errorBox.textContent = message;
+      }
+
+      function toggleLoader(visible) {
+        els.loader.style.display = visible ? "grid" : "none";
+      }
+
+      function normalizeSearch(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      async function fetchJson(url) {
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+          throw new Error(payload?.error || `Error HTTP ${response.status}`);
+        }
+        return payload;
+      }
+
+      function updatePageUi() {
+        const total = Math.max(1, state.pageCount || 1);
+        const current = Math.min(Math.max(1, Number(state.currentPage) || 1), total);
+        state.currentPage = current;
+        els.pageInput.value = String(current);
+        els.currentPageChip.textContent = `Página ${current}`;
+        els.pageInfo.textContent = `Página ${current} de ${total}`;
+        els.prevBtn.disabled = current <= 1;
+        els.firstBtn.disabled = current <= 1;
+        els.nextBtn.disabled = current >= total;
+        els.lastBtn.disabled = current >= total;
+      }
+
+      function clearSuggestions() {
+        els.searchResults.innerHTML = "";
+      }
+
+      function renderSuggestions(results, query) {
+        if (!query) {
+          clearSuggestions();
+          return;
+        }
+
+        if (!results.length) {
+          els.searchResults.innerHTML = '<div class="empty">No encontré coincidencias. Prueba con otra parte del nombre o del domicilio.</div>';
+          return;
+        }
+
+        els.searchResults.innerHTML = results.map((item) => `
+          <button class="suggestion" type="button" data-page="${item.pageNumber}">
+            <div class="top">
+              <span class="page">Página ${item.pageNumber}</span>
+              <span class="score">${item.score} pts</span>
+            </div>
+            <div class="snippet">${escapeHtml(item.snippet || "Sin vista previa")}</div>
+          </button>
+        `).join("");
+
+        els.searchResults.querySelectorAll(".suggestion").forEach((button) => {
+          button.addEventListener("click", () => {
+            const page = Number(button.dataset.page);
+            if (page) {
+              state.currentPage = page;
+              updatePageUi();
+              renderPage(page);
+            }
+          });
+        });
+      }
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      async function renderPage(pageNumber) {
+        if (!state.pdf) return;
+        const currentToken = ++state.renderToken;
+        setError("");
+        toggleLoader(true);
+
+        try {
+          const page = await state.pdf.getPage(pageNumber);
+          if (currentToken !== state.renderToken) return;
+
+          // PDF.js v2 uses the legacy getViewport(scale) signature.
+          const viewport = page.getViewport(state.zoom);
+          const context = els.canvas.getContext("2d", { alpha: false });
+          const ratio = window.devicePixelRatio || 1;
+          const canvasWidth = Math.max(1, Math.floor(viewport.width));
+          const canvasHeight = Math.max(1, Math.floor(viewport.height));
+          els.canvas.width = Math.floor(canvasWidth * ratio);
+          els.canvas.height = Math.floor(canvasHeight * ratio);
+          els.canvas.style.width = `${canvasWidth}px`;
+          els.canvas.style.height = `${canvasHeight}px`;
+
+          context.setTransform(ratio, 0, 0, ratio, 0, 0);
+          context.clearRect(0, 0, canvasWidth, canvasHeight);
+
+          await page.render({
+            canvasContext: context,
+            viewport,
+          }).promise;
+
+          if (currentToken !== state.renderToken) return;
+          els.renderSizeChip.textContent = `${Math.round(viewport.width)}×${Math.round(viewport.height)} px`;
+          els.viewerSubtitle.textContent = `Documento listo. Puedes moverte entre páginas o descargar la hoja actual en JPEG.`;
+          updatePageUi();
+        } catch (error) {
+          setError(error?.message || "No se pudo renderizar la página.");
+        } finally {
+          if (currentToken === state.renderToken) {
+            toggleLoader(false);
+          }
+        }
+      }
+
+      async function downloadCurrentPage() {
+        const canvas = els.canvas;
+        const page = state.currentPage;
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.96));
+        if (!blob) {
+          throw new Error("No se pudo generar la imagen JPEG.");
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `POLIZA_LEY_pagina_${String(page).padStart(2, "0")}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+      }
+
+      async function searchPages(query) {
+        const normalized = normalizeSearch(query);
+        if (!normalized) {
+          clearSuggestions();
+          return;
+        }
+
+        const payload = await fetchJson(`${searchUrl}?q=${encodeURIComponent(query)}&limit=8`);
+        renderSuggestions(payload.results || [], query);
+      }
+
+      async function gotoPage(pageNumber) {
+        if (!state.pageCount) return;
+        const nextPage = Math.min(Math.max(1, Number(pageNumber) || 1), state.pageCount);
+        state.currentPage = nextPage;
+        updatePageUi();
+        await renderPage(nextPage);
+      }
+
+      function scheduleSearch(query) {
+        window.clearTimeout(state.searchTimer);
+        state.searchTimer = window.setTimeout(() => {
+          searchPages(query).catch((error) => {
+            setError(error?.message || "No se pudo buscar en el PDF.");
+          });
+        }, 220);
+      }
+
+      async function init() {
+        try {
+          setError("");
+          toggleLoader(true);
+          if (!window.pdfjsLib) {
+            throw new Error("No se pudo cargar PDF.js.");
+          }
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = "/POLIZA_LEY/vendor/pdfjs/pdf.worker.js";
+
+          const manifest = await fetchJson(manifestUrl);
+          state.pageCount = Number(manifest.pageCount) || 0;
+          els.pageCountChip.textContent = `${state.pageCount} páginas`;
+          els.viewerSubtitle.textContent = `Archivo: ${manifest.fileName || "Póliza Ley"}`;
+
+          const loadingTask = window.pdfjsLib.getDocument({
+            url: pdfUrl,
+            withCredentials: true,
+          });
+          state.pdf = await loadingTask.promise;
+
+          state.pageCount = state.pdf.numPages || state.pageCount;
+          els.pageCountChip.textContent = `${state.pageCount} páginas`;
+          els.pageInput.max = String(state.pageCount || 1);
+          updatePageUi();
+          await renderPage(state.currentPage);
+        } catch (error) {
+          setError(error?.message || "No se pudo abrir el documento.");
+          els.viewerSubtitle.textContent = "Revisa que el PDF exista y que el navegador permita cargar el visor.";
+        } finally {
+          toggleLoader(false);
+        }
+      }
+
+      els.searchInput.addEventListener("input", (event) => {
+        const value = event.target.value;
+        scheduleSearch(value);
+      });
+
+      els.pageInput.addEventListener("change", () => {
+        gotoPage(els.pageInput.value).catch((error) => setError(error?.message || "No se pudo ir a la página."));
+      });
+
+      els.zoomInput.addEventListener("change", () => {
+        const nextZoom = Number(els.zoomInput.value) || 1.4;
+        state.zoom = Math.min(3, Math.max(0.75, nextZoom));
+        renderPage(state.currentPage);
+      });
+
+      els.prevBtn.addEventListener("click", () => gotoPage(state.currentPage - 1));
+      els.nextBtn.addEventListener("click", () => gotoPage(state.currentPage + 1));
+      els.firstBtn.addEventListener("click", () => gotoPage(1));
+      els.lastBtn.addEventListener("click", () => gotoPage(state.pageCount));
+      els.refreshBtn.addEventListener("click", () => renderPage(state.currentPage));
+      els.clearBtn.addEventListener("click", () => {
+        els.searchInput.value = "";
+        clearSuggestions();
+      });
+
+      els.downloadBtn.addEventListener("click", () => {
+        downloadCurrentPage().catch((error) => setError(error?.message || "No se pudo descargar la imagen."));
+      });
+
+      init();
+    </script>
+  </body>
+</html>
