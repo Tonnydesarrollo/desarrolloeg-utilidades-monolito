@@ -15,6 +15,7 @@ import { whatsappCapacitadoresRouter } from "./modules/whatsapp-capacitadores/wh
 import { solventacionesRouter } from "./modules/solventaciones/solventaciones.router.js";
 import { sucursalesDocsRouter } from "./modules/sucursales-docs/sucursalesDocs.router.js";
 import { polizaLeyRouter } from "./modules/poliza-ley/polizaLey.router.js";
+import { bolsaSyncRouter } from "./modules/bolsa-sync/bolsaSync.router.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
 import { getClusterCoordinatorStatus } from "./services/clusterCoordinator.js";
 
@@ -117,6 +118,7 @@ export function createApp() {
   app.use("/sucursales-docs", sucursalesDocsRouter);
   app.use("/POLIZA_LEY", polizaLeyRouter);
   app.use("/poliza-ley", polizaLeyRouter);
+  app.use("/bolsa-sync", bolsaSyncRouter);
 
   app.get("/health", (_req, res) => {
     res.json({
