@@ -189,6 +189,30 @@
   color: #1f4e79;
 }
 
+.forma-pago-card {
+  border: 1px solid #dbe4f0;
+  border-left: 5px solid #1f4e79;
+  background: #f8fafc;
+  padding: 12px 14px;
+  border-radius: 4px;
+  margin-top: 12px;
+}
+
+.forma-pago-card h2 {
+  margin: 0 0 10px;
+  color: #1f4e79;
+}
+
+.forma-pago-card select {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  background: #fff;
+}
+
 .info-section {
   margin-top: 22px;
   page-break-inside: avoid;
@@ -501,6 +525,14 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
             </label>
           </div>
         </div>
+
+        <div class="forma-pago-card">
+          <h2>Forma de pago</h2>
+          <select id="formaPagoSelect">
+            <option value="dos_pagos">Dos pagos</option>
+            <option value="una_exhibicion">Una sola exhibición</option>
+          </select>
+        </div>
       </div>
 
       <div class="header">
@@ -685,7 +717,7 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
       </li>
     </ul>
   </div>
-  <div class="info-box">
+  <div class="info-box" id="condicionesBlock">
     <h3>Condiciones Comerciales</h3>
 
     <p><strong>Precios:</strong> Todos los precios se expresan en moneda nacional (MXN).</p>
@@ -724,7 +756,9 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
         (function() {
           var desglosePipc = document.getElementById('desglosePipc');
           var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
+          var formaPagoSelect = document.getElementById('formaPagoSelect');
           var desglosePreview = document.getElementById('desglosePreview');
+          var condicionesBlock = document.getElementById('condicionesBlock');
           var preselectedDesglose = <%- JSON.stringify(desgloseSeleccionado || []) %>;
           var desgloseCatalogo = {
     pipc: {
@@ -751,6 +785,49 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
 
           function hasDesglose(key) {
             return preselectedDesglose.indexOf(key) !== -1;
+          }
+
+          function esPagoUnico(valor) {
+            var normalizado = String(valor || "")
+              .toLowerCase()
+              .trim()
+              .replace(/[_-]+/g, " ")
+              .replace(/\s+/g, " ");
+
+            return (
+              normalizado === "una exhibicion" ||
+              normalizado === "una sola exhibicion" ||
+              normalizado === "un pago" ||
+              normalizado === "un solo pago" ||
+              normalizado === "single" ||
+              normalizado === "1" ||
+              normalizado === "contado"
+            );
+          }
+
+          function renderCondiciones() {
+            var pagoUnico = esPagoUnico(formaPagoSelect.value);
+            var html = '';
+            html += '<h3>Condiciones Comerciales</h3>';
+            html += '<p><strong>Precios:</strong> Todos los precios se expresan en moneda nacional (MXN).</p>';
+            html += '<p><strong>Forma de pago:</strong></p>';
+            html += '<ul>';
+            if (pagoUnico) {
+              html += '<li>100 % de anticipo al aceptar la propuesta o conforme al acuerdo entre las partes.</li>';
+            } else {
+              html += '<li>50 % de anticipo al aceptar la propuesta.</li>';
+              html += '<li>50 % restante contra entrega o conforme a acuerdo entre las partes.</li>';
+            }
+            html += '</ul>';
+            html += '<p><strong>Inicio del servicio:</strong> El inicio se programará una vez efectuado el anticipo correspondiente o tras formalizar el acuerdo de pago.</p>';
+            html += '<p><strong>Tiempo de entrega:</strong> 30 días naturales, sujeto a necesidades operativas y a la disponibilidad de la información requerida.</p>';
+            html += '<p><strong>Duración del proyecto:</strong> La duración total no deberá exceder los 60 días naturales.</p>';
+            html += '<p><strong>Exclusiones:</strong></p>';
+            html += '<ul>';
+            html += '<li>No incluye fianzas de cumplimiento.</li>';
+            html += '<li>No se facturan ni comprueban pagos realizados por terceros.</li>';
+            html += '</ul>';
+            condicionesBlock.innerHTML = html;
           }
 
           function renderDesglose() {
@@ -796,9 +873,12 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
 
           desglosePipc.checked = hasDesglose('pipc');
           desgloseCapacitaciones.checked = hasDesglose('capacitaciones');
+          formaPagoSelect.value = <%- JSON.stringify((data && data.cotizacion && data.cotizacion.formaPago) ? data.cotizacion.formaPago : 'dos_pagos') %>;
           desglosePipc.addEventListener('change', renderDesglose);
           desgloseCapacitaciones.addEventListener('change', renderDesglose);
+          formaPagoSelect.addEventListener('change', renderCondiciones);
           renderDesglose();
+          renderCondiciones();
         })();
       </script>
 
