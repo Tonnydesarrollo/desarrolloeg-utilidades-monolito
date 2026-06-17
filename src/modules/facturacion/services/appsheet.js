@@ -246,6 +246,7 @@ export async function obtenerCotizacionCompleta(cotizacionId) {
   const proveedor = proveedores[cotizacion.PROVEEDOR] || null;
   const titulo = cotizacion.TITULO || cotizacion["TITULO"] || "";
   const centroDeTrabajoRaw = cotizacion.CENTRO_DE_TRABAJO || cotizacion["CENTRO_DE_TRABAJO"] || cotizacion["CENTRO DE TRABAJO"] || "";
+  const formaPago = cotizacion.formaPago || cotizacion["Forma pago"] || cotizacion["Forma Pago"] || cotizacion["FORMA PAGO"] || cotizacion.paymentTerms || "";
   const centroDeTrabajoIds = Array.isArray(centroDeTrabajoRaw) ? centroDeTrabajoRaw : String(centroDeTrabajoRaw).split(/[,;]+/g).map(v => v.trim()).filter(Boolean);
   const centroDeTrabajoCount = centroDeTrabajoIds.length;
   const centroDeTrabajoUnicoId = centroDeTrabajoCount === 1 ? centroDeTrabajoIds[0] : "";
@@ -290,6 +291,7 @@ export async function obtenerCotizacionCompleta(cotizacionId) {
       fecha: cotizacion.FECHA,
       proveedor,
       titulo,
+      formaPago,
       centroDeTrabajoIds,
       centroDeTrabajoCount,
       centroNombre: centroDeTrabajoUnico.nombre || centroDeTrabajoUnicoId || ""

@@ -23,6 +23,29 @@ function wrapEscudo(obj) {
   return { ...obj, escudo };
 }
 
+function normalizarFormaPago(valor) {
+  const texto = String(valor || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+
+  if (!texto) return "dos_pagos";
+  if (
+    texto === "una exhibicion" ||
+    texto === "una sola exhibicion" ||
+    texto === "un pago" ||
+    texto === "un solo pago" ||
+    texto === "single" ||
+    texto === "1" ||
+    texto === "contado"
+  ) {
+    return "una_exhibicion";
+  }
+
+  return "dos_pagos";
+}
+
 export function construirDataHTML(json) {
   if (!json) throw new Error("JSON vacÃ­o");
 
@@ -108,7 +131,14 @@ export function construirDataHTML(json) {
       proveedor: json.cotizacion?.proveedor || null,
       TITULO: json.cotizacion?.titulo || "",
       centroNombre: json.cotizacion?.centroNombre || "",
-      centroDeTrabajoCount: json.cotizacion?.centroDeTrabajoCount || 0
+      centroDeTrabajoCount: json.cotizacion?.centroDeTrabajoCount || 0,
+      formaPago: normalizarFormaPago(
+        json.cotizacion?.formaPago ||
+        json.cotizacion?.["Forma pago"] ||
+        json.cotizacion?.["Forma Pago"] ||
+        json.cotizacion?.["FORMA PAGO"] ||
+        json.cotizacion?.paymentTerms
+      )
     },
 
     centros,

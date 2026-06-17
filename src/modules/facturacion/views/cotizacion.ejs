@@ -102,6 +102,30 @@ if (data && data.centros) {
       ]
     }
   };
+
+  var formaPagoValor = (data && data.cotizacion && data.cotizacion.formaPago)
+    ? String(data.cotizacion.formaPago)
+    : "dos_pagos";
+
+  function esPagoUnico(valor) {
+    var normalizado = String(valor || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ");
+
+    return (
+      normalizado === "una exhibicion" ||
+      normalizado === "una sola exhibicion" ||
+      normalizado === "un pago" ||
+      normalizado === "un solo pago" ||
+      normalizado === "single" ||
+      normalizado === "1" ||
+      normalizado === "contado"
+    );
+  }
+
+  var pagoUnico = esPagoUnico(formaPagoValor);
 %>
 
 <!DOCTYPE html>
@@ -803,8 +827,12 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
 
     <p><strong>Forma de pago:</strong></p>
     <ul>
-      <li>50 % de anticipo al aceptar la propuesta.</li>
-      <li>50 % restante contra entrega o conforme a acuerdo entre las partes.</li>
+      <% if (pagoUnico) { %>
+        <li>100 % de anticipo al aceptar la propuesta o conforme al acuerdo entre las partes.</li>
+      <% } else { %>
+        <li>50 % de anticipo al aceptar la propuesta.</li>
+        <li>50 % restante contra entrega o conforme a acuerdo entre las partes.</li>
+      <% } %>
     </ul>
 
     <p><strong>Inicio del servicio:</strong> El inicio se programará una vez efectuado el anticipo

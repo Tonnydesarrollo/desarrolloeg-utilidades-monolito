@@ -128,6 +128,21 @@
       .desglose-preview {
         display: none;
       }
+      .condiciones-preview {
+        margin-top: 18px;
+      }
+      .condiciones-preview .card {
+        background: #fff;
+      }
+      .condiciones-preview h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+      }
+      .condiciones-preview p,
+      .condiciones-preview li {
+        font-size: 13px;
+        line-height: 1.5;
+      }
       .desglose-tag {
         display: inline-block;
         margin-bottom: 8px;
@@ -208,6 +223,14 @@
             <label>Subtotal</label>
             <input id="subtotalInput" type="number" step="0.01" min="0" value="0">
           </div>
+
+          <div class="row">
+            <label>Forma de pago</label>
+            <select id="formaPagoInput">
+              <option value="dos_pagos">Dos pagos</option>
+              <option value="una_exhibicion">Una sola exhibición</option>
+            </select>
+          </div>
         </div>
 
         <div class="card">
@@ -274,11 +297,13 @@
       </div>
 
       <div class="desglose-preview" id="desglosePreview"></div>
+      <div class="condiciones-preview" id="condicionesPreview"></div>
     </div>
 
     <script>
       (function() {
         var subtotalInput = document.getElementById('subtotalInput');
+        var formaPagoInput = document.getElementById('formaPagoInput');
         var subtotalLabel = document.getElementById('subtotalLabel');
         var ivaLabel = document.getElementById('ivaLabel');
         var totalLabel = document.getElementById('totalLabel');
@@ -289,6 +314,7 @@
         var desglosePipc = document.getElementById('desglosePipc');
         var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
         var desglosePreview = document.getElementById('desglosePreview');
+        var condicionesPreview = document.getElementById('condicionesPreview');
         var preselectedDesglose = <%- JSON.stringify((typeof desglose !== 'undefined' && Array.isArray(desglose)) ? desglose : []) %>;
         var desgloseCatalogo = {
     pipc: {
@@ -330,6 +356,54 @@
           subtotalLabel.textContent = fmt(val);
           ivaLabel.textContent = fmt(iva);
           totalLabel.textContent = fmt(total);
+        }
+
+        function esPagoUnico(valor) {
+          var normalizado = String(valor || '')
+            .toLowerCase()
+            .trim()
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ');
+
+          return (
+            normalizado === 'una exhibicion' ||
+            normalizado === 'una sola exhibicion' ||
+            normalizado === 'un pago' ||
+            normalizado === 'un solo pago' ||
+            normalizado === 'single' ||
+            normalizado === '1' ||
+            normalizado === 'contado'
+          );
+        }
+
+        function renderCondiciones() {
+          var pagoUnico = esPagoUnico(formaPagoInput.value);
+          var html = '';
+          html += '<div class="card">';
+          html += '<h2>Condiciones comerciales</h2>';
+          html += '<p><strong>Precios:</strong> Todos los precios se expresan en moneda nacional (MXN).</p>';
+          html += '<p><strong>Forma de pago:</strong></p>';
+          html += '<ul>';
+
+          if (pagoUnico) {
+            html += '<li>100 % de anticipo al aceptar la propuesta o conforme al acuerdo entre las partes.</li>';
+          } else {
+            html += '<li>50 % de anticipo al aceptar la propuesta.</li>';
+            html += '<li>50 % restante contra entrega o conforme a acuerdo entre las partes.</li>';
+          }
+
+          html += '</ul>';
+          html += '<p><strong>Inicio del servicio:</strong> El inicio se programará una vez efectuado el anticipo correspondiente o tras formalizar el acuerdo de pago.</p>';
+          html += '<p><strong>Tiempo de entrega:</strong> 30 días naturales, sujeto a necesidades operativas y a la disponibilidad de la información requerida.</p>';
+          html += '<p><strong>Duración del proyecto:</strong> La duración total no deberá exceder los 60 días naturales.</p>';
+          html += '<p><strong>Exclusiones:</strong></p>';
+          html += '<ul>';
+          html += '<li>No incluye fianzas de cumplimiento.</li>';
+          html += '<li>No se facturan ni comprueban pagos realizados por terceros.</li>';
+          html += '</ul>';
+          html += '</div>';
+
+          condicionesPreview.innerHTML = html;
         }
 
         function updateFirma() {
@@ -396,15 +470,18 @@
         }
 
         subtotalInput.addEventListener('input', calc);
+        formaPagoInput.addEventListener('change', renderCondiciones);
         firmaSelect.addEventListener('change', updateFirma);
         desglosePipc.addEventListener('change', renderDesglose);
         desgloseCapacitaciones.addEventListener('change', renderDesglose);
 
         desglosePipc.checked = hasDesglose('pipc');
         desgloseCapacitaciones.checked = hasDesglose('capacitaciones');
+        formaPagoInput.value = 'dos_pagos';
         calc();
         updateFirma();
         renderDesglose();
+        renderCondiciones();
       })();
     </script>
   </body>
