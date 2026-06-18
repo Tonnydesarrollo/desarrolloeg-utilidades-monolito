@@ -108,3 +108,21 @@ bolsaSyncRouter.get("/webhooks/appsheet/events", async (req, res) => {
     });
   }
 });
+
+bolsaSyncRouter.get("/local/solicitudes-vacantes", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const forwarded = await forwardToSyncService(req, "/local/solicitudes-vacantes");
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudieron consultar las solicitudes centrales de vacantes",
+      detail: error.message,
+    });
+  }
+});
