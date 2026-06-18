@@ -1,4 +1,7 @@
 import express from "express";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import { google } from "googleapis";
 
 export const bolsaSyncRouter = express.Router();
 
@@ -14,6 +17,55 @@ function getSharedSecret() {
 
 function sameSecret(left, right) {
   return left && right && String(left) === String(right);
+}
+
+function safeEqual(left, right) {
+  if (!left || !right) return false;
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function createDriveSignature(fileId) {
+  const secret = getSharedSecret();
+  if (!secret) return "";
+  return crypto.createHmac("sha256", secret).update(String(fileId)).digest("hex");
+}
+
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function createOAuthDriveClient(credentialsPath, tokenPath) {
+  const credentials = readJsonFile(credentialsPath);
+  const token = readJsonFile(tokenPath);
+  const oauthConfig = credentials.installed || credentials.web || credentials;
+  const client = new google.auth.OAuth2(
+    oauthConfig.client_id,
+    oauthConfig.client_secret,
+    oauthConfig.redirect_uris?.[0],
+  );
+  client.setCredentials(token);
+  return google.drive({ version: "v3", auth: client });
+}
+
+function getDriveClients() {
+  const candidates = [
+    [
+      process.env.FACTURACION_GOOGLE_CREDENTIALS_PATH,
+      process.env.FACTURACION_GOOGLE_TOKEN_PATH,
+    ],
+    [
+      process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS,
+      process.env.PEDIDOS_GOOGLE_TOKEN_PATH,
+    ],
+  ];
+
+  return candidates
+    .filter(([credentialsPath, tokenPath]) => credentialsPath && tokenPath)
+    .map(([credentialsPath, tokenPath]) =>
+      createOAuthDriveClient(credentialsPath, tokenPath),
+    );
 }
 
 function isAuthorized(req) {
@@ -125,4 +177,40 @@ bolsaSyncRouter.get("/local/solicitudes-vacantes", async (req, res) => {
       detail: error.message,
     });
   }
+});
+
+bolsaSyncRouter.get("/drive-image/:fileId", async (req, res) => {
+  const fileId = String(req.params.fileId || "").trim();
+  const expectedSignature = createDriveSignature(fileId);
+
+  if (!fileId || !safeEqual(req.query.sig, expectedSignature)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  for (const drive of getDriveClients()) {
+    try {
+      const metadata = await drive.files.get({
+        fileId,
+        fields: "name,mimeType,size",
+      });
+      const media = await drive.files.get(
+        { fileId, alt: "media" },
+        { responseType: "stream" },
+      );
+
+      res.setHeader("Content-Type", metadata.data.mimeType || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      if (metadata.data.size) {
+        res.setHeader("Content-Length", metadata.data.size);
+      }
+      media.data.pipe(res);
+      return;
+    } catch {
+      // Try the next configured Drive identity.
+    }
+  }
+
+  res.status(404).json({ ok: false, error: "Logo no encontrado" });
 });
