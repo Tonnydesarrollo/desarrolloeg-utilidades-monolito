@@ -16,6 +16,10 @@ constanciasV2Router.get("/capacitaciones/:capacitacionId/HTML", (req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
+constanciasV2Router.get(["/plantilla-blanca/HTML", "/blanco/HTML", "/constancia-blanca/HTML"], (_req, res) => {
+  res.sendFile(path.join(publicDir, "constancia_blanca.html"));
+});
+
 constanciasV2Router.use(express.static(publicDir));
 constanciasV2Router.get("/", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));

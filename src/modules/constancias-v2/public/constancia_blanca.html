@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Constancia en Blanco</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #111827;
+    }
+    .wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .sheet {
+      width: 11in;
+      height: 8.5in;
+      background: #fff;
+      border: 1px solid #d1d5db;
+      box-shadow: 0 12px 30px rgba(0,0,0,.08);
+      padding: 0.45in 0.6in;
+      position: relative;
+      overflow: hidden;
+    }
+    .toolbar {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+    }
+    .btn {
+      border: 1px solid #1f2937;
+      background: #111827;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .title {
+      text-align: center;
+      margin: 0 0 0.55in;
+    }
+    .title h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .title p {
+      margin: 10px 0 0;
+      font-size: 12px;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .content {
+      margin-top: 0.85in;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 2.3in;
+    }
+    .blank-line {
+      width: 7.4in;
+      border-bottom: 1px solid #111827;
+      height: 1.1in;
+    }
+    .signature {
+      position: absolute;
+      left: 0.6in;
+      right: 0.6in;
+      bottom: 0.6in;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: end;
+    }
+    .sig-block {
+      text-align: center;
+    }
+    .sig-line {
+      border-top: 1px solid #111827;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .sig-name {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sig-role {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+    .note {
+      position: absolute;
+      left: 0.6in;
+      right: 0.6in;
+      bottom: 1.4in;
+      text-align: center;
+      font-size: 12px;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+    @media print {
+      body { background: #fff; }
+      .wrap { padding: 0; }
+      .sheet {
+        border: none;
+        box-shadow: none;
+        width: 11in;
+        height: 8.5in;
+      }
+      .toolbar { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="sheet">
+      <div class="toolbar">
+        <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      </div>
+
+      <div class="title">
+        <h1>Constancia</h1>
+        <p>Formato en blanco</p>
+      </div>
+
+      <div class="content" aria-label="Linea para nombre del participante">
+        <div class="blank-line"></div>
+      </div>
+
+      <div class="note">Espacio reservado para el nombre del participante</div>
+
+      <div class="signature">
+        <div></div>
+        <div class="sig-block">
+          <div class="sig-line"></div>
+          <div class="sig-name">Morelos Enrique Perez Picos</div>
+          <div class="sig-role">Firmado por</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
