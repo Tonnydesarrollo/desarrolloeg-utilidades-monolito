@@ -168,7 +168,8 @@ bolsaSyncRouter.get("/local/solicitudes-vacantes", async (req, res) => {
   }
 
   try {
-    const forwarded = await forwardToSyncService(req, "/local/solicitudes-vacantes");
+    const status = req.query.status ? `?status=${encodeURIComponent(String(req.query.status))}` : "";
+    const forwarded = await forwardToSyncService(req, `/local/solicitudes-vacantes${status}`);
     res.status(forwarded.status).json(forwarded.body);
   } catch (error) {
     res.status(502).json({
@@ -193,6 +194,25 @@ bolsaSyncRouter.post("/local/solicitudes-vacantes/:id/aprobar", async (req, res)
     res.status(502).json({
       ok: false,
       error: "No se pudo aprobar la solicitud central de vacante",
+      detail: error.message,
+    });
+  }
+});
+
+bolsaSyncRouter.post("/local/solicitudes-vacantes/:id/rechazar", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(req, `/local/solicitudes-vacantes/${id}/rechazar`);
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo rechazar la solicitud central de vacante",
       detail: error.message,
     });
   }
