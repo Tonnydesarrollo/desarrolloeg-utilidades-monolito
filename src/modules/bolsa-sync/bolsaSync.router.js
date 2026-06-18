@@ -179,6 +179,25 @@ bolsaSyncRouter.get("/local/solicitudes-vacantes", async (req, res) => {
   }
 });
 
+bolsaSyncRouter.post("/local/solicitudes-vacantes/:id/aprobar", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(req, `/local/solicitudes-vacantes/${id}/aprobar`);
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo aprobar la solicitud central de vacante",
+      detail: error.message,
+    });
+  }
+});
+
 bolsaSyncRouter.get("/drive-image/:fileId", async (req, res) => {
   const fileId = String(req.params.fileId || "").trim();
   const expectedSignature = createDriveSignature(fileId);
