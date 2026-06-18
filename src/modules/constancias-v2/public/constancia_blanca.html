@@ -5,153 +5,210 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Constancia en Blanco</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Montserrat:wght@400;700&family=Playfair+Display:ital,wght@1,600&display=swap');
+
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
       padding: 0;
-      background: #f3f4f6;
-      font-family: Arial, Helvetica, sans-serif;
-      color: #111827;
-    }
-    .wrap {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-    .sheet {
-      width: 11in;
-      height: 8.5in;
-      background: #fff;
-      border: 1px solid #d1d5db;
-      box-shadow: 0 12px 30px rgba(0,0,0,.08);
-      padding: 0.45in 0.6in;
-      position: relative;
-      overflow: hidden;
+      background: #2c3e50;
+      font-family: 'Montserrat', sans-serif;
+      color: #222;
     }
     .toolbar {
-      position: absolute;
-      top: 16px;
-      right: 16px;
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
     }
-    .btn {
-      border: 1px solid #1f2937;
-      background: #111827;
+    .btn-save {
+      background-color: #e74c3c;
       color: #fff;
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-weight: 700;
+      border: none;
+      padding: 12px 25px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 4px;
       cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
-    .title {
-      text-align: center;
-      margin: 0 0 0.55in;
+    .diploma-canvas {
+      width: 1123px;
+      height: 794px;
+      background-color: #fff;
+      padding: 20px;
+      box-sizing: border-box;
+      position: relative;
+      overflow: hidden;
+      margin: 0 auto;
     }
-    .title h1 {
-      margin: 0;
-      font-size: 28px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-    }
-    .title p {
-      margin: 10px 0 0;
-      font-size: 12px;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.18em;
-    }
-    .content {
-      margin-top: 0.85in;
+    .border-frame {
+      width: 100%;
+      height: 100%;
+      border: 6px solid #1a2a3a;
+      outline: 2px solid #c0392b;
+      outline-offset: -12px;
+      padding: 25px 50px;
+      box-sizing: border-box;
       display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: #fff;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      height: 160px;
+    }
+    .header-spacer {
+      width: 260px;
+      height: 120px;
+    }
+    .center-info {
+      width: 520px;
+      text-align: center;
+      margin: 0 auto;
+    }
+    .title-constancia {
+      font-family: 'Cinzel', serif;
+      font-size: 60px;
+      color: #1a2a3a;
+      letter-spacing: 8px;
+      margin: 0;
+      text-align: center;
+    }
+    .subline {
+      margin: 8px 0 0;
+      font-size: 18px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #1a2a3a;
+      font-weight: 700;
+    }
+    .body {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
-      height: 2.3in;
+      text-align: center;
+      padding: 12px 0 18px;
     }
-    .blank-line {
+    .intro {
+      margin: 0;
+      font-size: 16px;
+      color: #222;
+    }
+    .recipient-label {
+      margin: 8px 0 12px;
+      font-size: 16px;
+      color: #222;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .recipient-line {
       width: 7.4in;
-      border-bottom: 1px solid #111827;
-      height: 1.1in;
+      min-height: 1.2in;
+      border-bottom: 2px solid #1a2a3a;
+      margin: 10px 0 18px;
     }
-    .signature {
-      position: absolute;
-      left: 0.6in;
-      right: 0.6in;
-      bottom: 0.6in;
+    .course-block {
+      margin-top: 8px;
+      width: 90%;
+      text-align: center;
+    }
+    .course-label {
+      margin: 0 0 10px;
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .course-text {
+      font-size: 22px;
+      line-height: 1.4;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .footer-signatures {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 24px;
       align-items: end;
+      gap: 24px;
+      margin-top: auto;
+      padding-bottom: 4px;
     }
     .sig-block {
       text-align: center;
     }
     .sig-line {
-      border-top: 1px solid #111827;
-      width: 100%;
-      margin-bottom: 8px;
+      width: 280px;
+      border-top: 2px solid #1a2a3a;
+      margin: 60px auto 5px;
     }
     .sig-name {
-      font-size: 14px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: bold;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      white-space: nowrap;
+      line-height: 1.5;
     }
     .sig-role {
-      margin-top: 4px;
-      font-size: 11px;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
-    .note {
-      position: absolute;
-      left: 0.6in;
-      right: 0.6in;
-      bottom: 1.4in;
-      text-align: center;
-      font-size: 12px;
-      color: #374151;
+      font-size: 10px;
+      color: #c0392b;
+      font-weight: bold;
       text-transform: uppercase;
       letter-spacing: 0.14em;
     }
     @media print {
+      @page { size: A4 landscape; margin: 0; }
       body { background: #fff; }
-      .wrap { padding: 0; }
-      .sheet {
-        border: none;
-        box-shadow: none;
-        width: 11in;
-        height: 8.5in;
-      }
       .toolbar { display: none; }
+      .diploma-canvas {
+        width: 1123px !important;
+        height: 794px !important;
+        padding: 0;
+      }
+      .border-frame {
+        box-shadow: none;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="sheet">
-      <div class="toolbar">
-        <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+  <div class="toolbar no-print">
+    <button class="btn-save" onclick="window.print()">IMPRIMIR / GUARDAR PDF</button>
+  </div>
+
+  <div class="diploma-canvas">
+    <div class="border-frame">
+      <div class="header">
+        <div class="header-spacer"></div>
+        <div class="center-info">
+          <h1 class="title-constancia">CONSTANCIA</h1>
+          <div class="subline">MULTIFUNCIONAL</div>
+        </div>
+        <div class="header-spacer"></div>
       </div>
 
-      <div class="title">
-        <h1>Constancia</h1>
-        <p>Formato en blanco</p>
+      <div class="body">
+        <p class="intro">Se otorga la presente</p>
+        <div class="recipient-label">a:</div>
+        <div class="recipient-line" aria-label="Linea para nombre del participante"></div>
+        <div class="course-block">
+          <p class="course-label">Por su participación en la capacitación:</p>
+          <div class="course-text">MULTIFUNCIONAL</div>
+        </div>
       </div>
 
-      <div class="content" aria-label="Linea para nombre del participante">
-        <div class="blank-line"></div>
-      </div>
-
-      <div class="note">Espacio reservado para el nombre del participante</div>
-
-      <div class="signature">
+      <div class="footer-signatures">
         <div></div>
         <div class="sig-block">
           <div class="sig-line"></div>
-          <div class="sig-name">Morelos Enrique Perez Picos</div>
-          <div class="sig-role">Firmado por</div>
+          <div class="sig-name">MORELOS ENRIQUE PEREZ PICOS</div>
+          <div class="sig-role">FIRMADO POR</div>
         </div>
       </div>
     </div>
