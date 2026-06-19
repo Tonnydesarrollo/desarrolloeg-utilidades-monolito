@@ -161,6 +161,51 @@ bolsaSyncRouter.get("/webhooks/appsheet/events", async (req, res) => {
   }
 });
 
+async function forwardAuthorizedLocalGet(req, res, path, errorMessage) {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const forwarded = await forwardToSyncService(req, path);
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: errorMessage,
+      detail: error.message,
+    });
+  }
+}
+
+bolsaSyncRouter.get("/local/empresas", async (req, res) => {
+  await forwardAuthorizedLocalGet(
+    req,
+    res,
+    "/local/empresas",
+    "No se pudieron consultar las empresas centrales",
+  );
+});
+
+bolsaSyncRouter.get("/local/vacantes", async (req, res) => {
+  await forwardAuthorizedLocalGet(
+    req,
+    res,
+    "/local/vacantes",
+    "No se pudieron consultar las vacantes centrales",
+  );
+});
+
+bolsaSyncRouter.get("/local/alumnos", async (req, res) => {
+  await forwardAuthorizedLocalGet(
+    req,
+    res,
+    "/local/alumnos",
+    "No se pudieron consultar los alumnos centrales",
+  );
+});
+
 bolsaSyncRouter.get("/local/solicitudes-vacantes", async (req, res) => {
   if (!isAuthorized(req)) {
     res.status(401).json({ ok: false, error: "No autorizado" });
