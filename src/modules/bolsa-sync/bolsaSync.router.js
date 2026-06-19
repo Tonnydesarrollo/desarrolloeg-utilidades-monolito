@@ -180,6 +180,82 @@ bolsaSyncRouter.get("/local/solicitudes-vacantes", async (req, res) => {
   }
 });
 
+bolsaSyncRouter.get("/local/solicitudes-empresas", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const status = req.query.status ? `?status=${encodeURIComponent(String(req.query.status))}` : "";
+    const forwarded = await forwardToSyncService(req, `/local/solicitudes-empresas${status}`);
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudieron consultar las solicitudes centrales de empresas",
+      detail: error.message,
+    });
+  }
+});
+
+bolsaSyncRouter.post("/local/solicitudes-empresas/:id/aprobar", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(req, `/local/solicitudes-empresas/${id}/aprobar`);
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo aprobar la solicitud central de empresa",
+      detail: error.message,
+    });
+  }
+});
+
+bolsaSyncRouter.get("/local/solicitudes-alta", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const status = req.query.status ? `?status=${encodeURIComponent(String(req.query.status))}` : "";
+    const forwarded = await forwardToSyncService(req, `/local/solicitudes-alta${status}`);
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudieron consultar las solicitudes centrales de alta",
+      detail: error.message,
+    });
+  }
+});
+
+bolsaSyncRouter.post("/local/solicitudes-alta/:id/aprobar", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(req, `/local/solicitudes-alta/${id}/aprobar`);
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo aprobar la solicitud central de alta",
+      detail: error.message,
+    });
+  }
+});
+
 bolsaSyncRouter.post("/local/solicitudes-vacantes/:id/aprobar", async (req, res) => {
   if (!isAuthorized(req)) {
     res.status(401).json({ ok: false, error: "No autorizado" });
