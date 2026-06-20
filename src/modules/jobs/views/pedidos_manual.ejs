@@ -383,17 +383,19 @@
       }
 
       async function waitForJob(jobId) {
-        var attempts = 0;
-        while (attempts < 120) {
+        var startedAt = Date.now();
+        var timeoutMs = 30 * 60 * 1000;
+        while (Date.now() - startedAt < timeoutMs) {
+          var elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
           var response = await fetch('/jobs/pedidos/manual/status/' + encodeURIComponent(jobId));
           var data = await readResponseData(response);
           if (!response.ok || !data.ok) {
             return { ok: false, error: data.error || 'No se pudo consultar el estado.' };
           }
           if (data.status === 'queued' || data.status === 'running') {
-            setStatus('Procesando en segundo plano... ' + attempts + 's', 'muted');
-            await new Promise(function(resolve) { setTimeout(resolve, 1000); });
-            attempts++;
+            setStatus('Procesando en segundo plano... ' + elapsedSeconds + 's', 'muted');
+            var delay = elapsedSeconds < 60 ? 1000 : elapsedSeconds < 300 ? 2000 : 5000;
+            await new Promise(function(resolve) { setTimeout(resolve, delay); });
             continue;
           }
           if (data.status === 'failed') {
@@ -401,7 +403,7 @@
           }
           return data;
         }
-        return { ok: false, error: 'La importación sigue en proceso. Vuelve a consultar en unos segundos.' };
+        return { ok: false, error: 'La importación sigue en proceso. Déjala correr un poco más y vuelve a consultar.' };
       }
 
       async function importFile() {
