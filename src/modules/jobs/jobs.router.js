@@ -89,7 +89,7 @@ jobsRouter.post('/pedidos/manual/import', upload.single('file'), async (req, res
     }
 
     const result = await enviarPedidosManual(rows);
-    return res.json(result);
+    return res.status(result.ok ? 200 : 400).json(result);
   } catch (error) {
     return res.status(500).json({
       ok: false,

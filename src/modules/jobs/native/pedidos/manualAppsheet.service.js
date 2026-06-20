@@ -17,6 +17,34 @@ function formatLocalDate(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+function normalizeImporte(value) {
+  if (value === null || value === undefined) return "";
+  let text = String(value).trim();
+  if (!text) return "";
+
+  text = text.replace(/[$\s]/g, "");
+  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(text)) {
+    text = text.replace(/,/g, "");
+  } else if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(text)) {
+    text = text.replace(/\./g, "").replace(",", ".");
+  } else if (text.includes(",") && !text.includes(".")) {
+    text = text.replace(",", ".");
+  }
+
+  return text;
+}
+
+function toApiRow(row = {}) {
+  const apiRow = {};
+  for (const [key, value] of Object.entries(row || {})) {
+    if (value === undefined || value === null) continue;
+    const text = String(value).trim();
+    if (!text) continue;
+    apiRow[key] = text;
+  }
+  return apiRow;
+}
+
 function getUrl() {
   if (!APPSHEET_APP_ID || !APPSHEET_API_KEY) {
     throw new Error("Faltan variables PEDIDOS_APPSHEET_APP_ID o PEDIDOS_APPSHEET_API_KEY");
@@ -83,11 +111,13 @@ export function normalizePedidoRow(raw = {}) {
   const proveedor = raw.PROVEEDOR ?? raw["Proveedor"] ?? raw["NOMBRE PROVEEDOR"];
 
   if (establecimiento !== undefined) row.ESTABLECIMIENTO = String(establecimiento).trim();
-  if (importe !== undefined) row.IMPORTE = String(importe).trim();
+  if (importe !== undefined) row.IMPORTE = normalizeImporte(importe);
   if (pedido !== undefined) row.PEDIDO = String(pedido).trim();
   if (descripcion !== undefined) row.DESCRIPCION = String(descripcion).trim();
   if (proveedor !== undefined) row.PROVEEDOR = String(proveedor).trim();
-  if (!row.FECHA) row.FECHA = formatLocalDate();
+  if (raw.FECHA !== undefined && String(raw.FECHA).trim() !== "") {
+    row.FECHA = String(raw.FECHA).trim();
+  }
 
   return row;
 }
@@ -134,34 +164,64 @@ export async function enviarPedidosManual(rows = []) {
   const editRows = [];
   for (const row of normalized) {
     const keyValue = row?.[APPSHEET_KEY_COLUMN] ?? row?.PEDIDO ?? null;
+    const apiRow = toApiRow({
+      ESTABLECIMIENTO: row.ESTABLECIMIENTO,
+      IMPORTE: row.IMPORTE,
+      PEDIDO: row.PEDIDO,
+      DESCRIPCION: row.DESCRIPCION,
+      PROVEEDOR: row.PROVEEDOR,
+      ...(row.FECHA ? { FECHA: row.FECHA } : {}),
+    });
+
     if (APPSHEET_ACTION === "Add") {
-      addRows.push(row);
+      addRows.push(apiRow);
       continue;
     }
     if (APPSHEET_ACTION === "Edit") {
-      editRows.push(row);
+      editRows.push(apiRow);
       continue;
     }
     if (keyValue !== null && existingIds.has(String(keyValue))) {
-      editRows.push(row);
+      const existingRow = existingRows.find((candidate) => String(candidate?.[APPSHEET_KEY_COLUMN] ?? candidate?.PEDIDO ?? "") === String(keyValue));
+      editRows.push(existingRow?.["Row ID"] ? { ...apiRow, "Row ID": String(existingRow["Row ID"]) } : apiRow);
     } else {
-      addRows.push(row);
+      addRows.push(apiRow);
     }
   }
 
-  for (let i = 0; i < editRows.length; i += CHUNK_SIZE) {
-    await writeRows("Edit", editRows.slice(i, i + CHUNK_SIZE));
+  async function writeBatches(action, batchRows) {
+    const failed = [];
+    for (let i = 0; i < batchRows.length; i += CHUNK_SIZE) {
+      const chunk = batchRows.slice(i, i + CHUNK_SIZE);
+      try {
+        await writeRows(action, chunk);
+      } catch (error) {
+        for (const row of chunk) {
+          try {
+            await writeRows(action, [row]);
+          } catch (singleError) {
+            failed.push({
+              action,
+              row,
+              error: singleError?.response?.data || singleError?.message || "Error desconocido",
+            });
+          }
+        }
+      }
+    }
+    return failed;
   }
 
-  for (let i = 0; i < addRows.length; i += CHUNK_SIZE) {
-    await writeRows("Add", addRows.slice(i, i + CHUNK_SIZE));
-  }
+  const failedEdits = await writeBatches("Edit", editRows);
+  const failedAdds = await writeBatches("Add", addRows);
+  const failed = [...failedEdits, ...failedAdds];
 
   return {
-    ok: true,
+    ok: failed.length === 0,
     total: normalized.length,
     added: addRows.length,
     edited: editRows.length,
+    failed,
     errors,
     rows: normalized,
   };
