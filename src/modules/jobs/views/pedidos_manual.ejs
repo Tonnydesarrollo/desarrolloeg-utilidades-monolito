@@ -368,6 +368,20 @@
         });
       }
 
+      async function readResponseData(response) {
+        var text = await response.text();
+        if (!text) return {};
+        try {
+          return JSON.parse(text);
+        } catch (error) {
+          return {
+            ok: false,
+            error: 'Respuesta no JSON del servidor.',
+            raw: text.slice(0, 500)
+          };
+        }
+      }
+
       async function importFile() {
         var file = fileInput.files && fileInput.files[0];
         if (!file) {
@@ -383,9 +397,9 @@
           method: 'POST',
           body: formData
         });
-        var data = await response.json();
+        var data = await readResponseData(response);
         if (!response.ok || !data.ok) {
-          setStatus(data.error || 'No se pudo importar el archivo.', 'err');
+          setStatus((data.error || 'No se pudo importar el archivo.') + (data.raw ? '\n\n' + data.raw : ''), 'err');
           return;
         }
         setStatus('Importadas ' + data.total + ' fila(s). Agregadas: ' + data.added + '. Editadas: ' + data.edited + '.', 'ok');
@@ -402,9 +416,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rows: rows })
         });
-        var data = await response.json();
+        var data = await readResponseData(response);
         if (!response.ok || !data.ok) {
-          setStatus(data.error || 'No se pudo guardar la información.', 'err');
+          setStatus((data.error || 'No se pudo guardar la información.') + (data.raw ? '\n\n' + data.raw : ''), 'err');
           return;
         }
         setStatus('Guardadas ' + data.total + ' fila(s). Agregadas: ' + data.added + '. Editadas: ' + data.edited + '.', 'ok');
