@@ -382,6 +382,28 @@
         }
       }
 
+      async function waitForJob(jobId) {
+        var attempts = 0;
+        while (attempts < 120) {
+          var response = await fetch('/jobs/pedidos/manual/status/' + encodeURIComponent(jobId));
+          var data = await readResponseData(response);
+          if (!response.ok || !data.ok) {
+            return { ok: false, error: data.error || 'No se pudo consultar el estado.' };
+          }
+          if (data.status === 'queued' || data.status === 'running') {
+            setStatus('Procesando en segundo plano... ' + attempts + 's', 'muted');
+            await new Promise(function(resolve) { setTimeout(resolve, 1000); });
+            attempts++;
+            continue;
+          }
+          if (data.status === 'failed') {
+            return { ok: false, error: data.error || 'La importación falló.' };
+          }
+          return data;
+        }
+        return { ok: false, error: 'La importación sigue en proceso. Vuelve a consultar en unos segundos.' };
+      }
+
       async function importFile() {
         var file = fileInput.files && fileInput.files[0];
         if (!file) {
@@ -398,8 +420,24 @@
           body: formData
         });
         var data = await readResponseData(response);
-        if (!response.ok || !data.ok) {
+        if (!response.ok) {
           setStatus((data.error || 'No se pudo importar el archivo.') + (data.raw ? '\n\n' + data.raw : ''), 'err');
+          return;
+        }
+        if (data.queued && data.jobId) {
+          setStatus('Archivo recibido. Procesando en segundo plano...', 'muted');
+          var job = await waitForJob(data.jobId);
+          if (!job.ok) {
+            setStatus(job.error || 'No se pudo completar la importación.', 'err');
+            return;
+          }
+          var result = job.result || job;
+          var suffix = job.failed && job.failed.length ? '\nErrores: ' + job.failed.length : '';
+          setStatus('Importadas ' + (result.total || data.total || 0) + ' fila(s). Agregadas: ' + (result.added || 0) + '. Editadas: ' + (result.edited || 0) + '.' + suffix, 'ok');
+          return;
+        }
+        if (!data.ok) {
+          setStatus(data.error || 'No se pudo importar el archivo.', 'err');
           return;
         }
         setStatus('Importadas ' + data.total + ' fila(s). Agregadas: ' + data.added + '. Editadas: ' + data.edited + '.', 'ok');
@@ -417,8 +455,24 @@
           body: JSON.stringify({ rows: rows })
         });
         var data = await readResponseData(response);
-        if (!response.ok || !data.ok) {
+        if (!response.ok) {
           setStatus((data.error || 'No se pudo guardar la información.') + (data.raw ? '\n\n' + data.raw : ''), 'err');
+          return;
+        }
+        if (data.queued && data.jobId) {
+          setStatus('Filas recibidas. Procesando en segundo plano...', 'muted');
+          var job = await waitForJob(data.jobId);
+          if (!job.ok) {
+            setStatus(job.error || 'No se pudo completar la importación.', 'err');
+            return;
+          }
+          var result = job.result || job;
+          var suffix = job.failed && job.failed.length ? '\nErrores: ' + job.failed.length : '';
+          setStatus('Guardadas ' + (result.total || data.total || 0) + ' fila(s). Agregadas: ' + (result.added || 0) + '. Editadas: ' + (result.edited || 0) + '.' + suffix, 'ok');
+          return;
+        }
+        if (!data.ok) {
+          setStatus(data.error || 'No se pudo guardar la información.', 'err');
           return;
         }
         setStatus('Guardadas ' + data.total + ' fila(s). Agregadas: ' + data.added + '. Editadas: ' + data.edited + '.', 'ok');

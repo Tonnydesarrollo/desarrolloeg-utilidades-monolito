@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import XLSX from 'xlsx';
+import crypto from 'crypto';
 import { listJobs, runJob } from './services/jobRunner.js';
 import { getJobSchedulerStatus } from './services/jobScheduler.js';
 import { canRunSingletonServices, getClusterCoordinatorStatus } from '../../services/clusterCoordinator.js';
@@ -8,6 +9,7 @@ import { enviarPedidosManual, normalizePedidoRow } from './native/pedidos/manual
 
 export const jobsRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const manualPedidoJobs = new Map();
 
 function normalizeHeader(value) {
   return String(value || "")
@@ -56,6 +58,29 @@ function parseRowsFromCsvText(csvText) {
   });
 }
 
+function createManualPedidoJob() {
+  const jobId = crypto.randomUUID();
+  const job = {
+    jobId,
+    status: "queued",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    total: 0,
+    result: null,
+    error: null,
+  };
+  manualPedidoJobs.set(jobId, job);
+  return job;
+}
+
+function updateManualPedidoJob(jobId, patch) {
+  const current = manualPedidoJobs.get(jobId);
+  if (!current) return null;
+  const next = { ...current, ...patch, updatedAt: new Date().toISOString() };
+  manualPedidoJobs.set(jobId, next);
+  return next;
+}
+
 jobsRouter.get('/', (_req, res) => {
   res.json({
     jobs: listJobs(),
@@ -65,6 +90,14 @@ jobsRouter.get('/', (_req, res) => {
 
 jobsRouter.get('/pedidos/manual', (_req, res) => {
   res.render('pedidos_manual');
+});
+
+jobsRouter.get('/pedidos/manual/status/:jobId', (req, res) => {
+  const job = manualPedidoJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ ok: false, error: 'Job no encontrado.' });
+  }
+  return res.json({ ok: true, ...job });
 });
 
 jobsRouter.post('/pedidos/manual/import', upload.single('file'), async (req, res) => {
@@ -88,8 +121,32 @@ jobsRouter.post('/pedidos/manual/import', upload.single('file'), async (req, res
       return res.status(400).json({ ok: false, error: 'No se recibieron filas válidas.' });
     }
 
-    const result = await enviarPedidosManual(rows);
-    return res.status(result.ok ? 200 : 400).json(result);
+    const job = createManualPedidoJob();
+    res.status(202).json({
+      ok: true,
+      queued: true,
+      jobId: job.jobId,
+      total: rows.length,
+      message: 'La importación quedó en proceso.',
+    });
+
+    setImmediate(async () => {
+      updateManualPedidoJob(job.jobId, { status: 'running', total: rows.length });
+      try {
+        const result = await enviarPedidosManual(rows);
+        updateManualPedidoJob(job.jobId, {
+          status: result.ok ? 'done' : 'done_with_errors',
+          result,
+          error: null,
+          total: result.total ?? rows.length,
+        });
+      } catch (error) {
+        updateManualPedidoJob(job.jobId, {
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Error desconocido',
+        });
+      }
+    });
   } catch (error) {
     return res.status(500).json({
       ok: false,
