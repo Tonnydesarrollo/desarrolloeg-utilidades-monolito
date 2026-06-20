@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Carga Manual de Pedidos</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    .page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .sub {
+      margin: 6px 0 0;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .btn {
+      border: 0;
+      background: #111827;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn.secondary {
+      background: #fff;
+      color: #111827;
+      border: 1px solid #d1d5db;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .hint {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 0 0 12px;
+      line-height: 1.5;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6b7280;
+      margin-bottom: 5px;
+      font-weight: 700;
+    }
+    input, textarea {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      outline: none;
+      background: #fff;
+    }
+    input:focus, textarea:focus {
+      border-color: #2563eb;
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+    .row-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+      background: #fff;
+    }
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 10px;
+      text-align: left;
+      font-size: 13px;
+      vertical-align: top;
+    }
+    th {
+      background: #f9fafb;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 11px;
+      color: #6b7280;
+    }
+    td input {
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+    .muted {
+      color: #6b7280;
+      font-size: 12px;
+    }
+    .status {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      white-space: pre-wrap;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .status.ok {
+      background: #ecfdf5;
+      border-color: #bbf7d0;
+      color: #14532d;
+    }
+    .status.err {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #991b1b;
+    }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+      .row-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 700px) {
+      .row-grid { grid-template-columns: 1fr; }
+      .header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <h1>Pedidos manuales</h1>
+        <p class="sub">Carga por CSV o captura manual para guardar en la tabla de pedidos.</p>
+      </div>
+      <div class="actions">
+        <a class="btn secondary" href="/jobs">Volver a jobs</a>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>Importar CSV o Excel</h2>
+        <p class="hint">
+          Puedes subir un archivo con columnas como <strong>ESTABLECIMIENTO</strong>,
+          <strong>IMPORTE</strong>, <strong>PEDIDO</strong>, <strong>DESCRIPCION</strong> y
+          <strong>PROVEEDOR</strong>. Tambien acepta variantes como <strong>No. tienda</strong>
+          y <strong>Concepto</strong>.
+        </p>
+
+        <div style="margin-bottom: 12px;">
+          <label for="fileInput">Archivo</label>
+          <input id="fileInput" type="file" accept=".csv,.xlsx,.xls">
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="importFileBtn" type="button">Importar archivo</button>
+        </div>
+
+        <div style="margin-top: 18px;">
+          <label for="csvPaste">Pegar filas manualmente</label>
+          <textarea id="csvPaste" placeholder="ESTABLECIMIENTO,IMPORTE,PEDIDO,DESCRIPCION,PROVEEDOR"></textarea>
+          <div class="actions">
+            <button class="btn secondary" id="loadPasteBtn" type="button">Cargar pegado</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Captura manual</h2>
+        <p class="hint">Agrega una fila a la vez, revisa la tabla y luego envía todo a AppSheet.</p>
+
+        <div class="row-grid">
+          <div>
+            <label for="establecimiento">Establecimiento</label>
+            <input id="establecimiento" placeholder="No. tienda / establecimiento">
+          </div>
+          <div>
+            <label for="importe">Importe</label>
+            <input id="importe" placeholder="0.00">
+          </div>
+          <div>
+            <label for="pedido">Pedido</label>
+            <input id="pedido" placeholder="Numero de pedido">
+          </div>
+          <div>
+            <label for="descripcion">Descripcion</label>
+            <input id="descripcion" placeholder="Concepto">
+          </div>
+          <div>
+            <label for="proveedor">Proveedor</label>
+            <input id="proveedor" placeholder="Proveedor">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="addRowBtn" type="button">Agregar fila</button>
+          <button class="btn secondary" id="clearBtn" type="button">Limpiar tabla</button>
+          <button class="btn" id="sendBtn" type="button">Guardar en AppSheet</button>
+        </div>
+
+        <div style="margin-top: 16px;" class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Establecimiento</th>
+                <th>Importe</th>
+                <th>Pedido</th>
+                <th>Descripcion</th>
+                <th>Proveedor</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="rowsBody"></tbody>
+          </table>
+        </div>
+
+        <div id="status" class="status muted">Sin filas cargadas.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var rows = [];
+      var rowsBody = document.getElementById('rowsBody');
+      var statusBox = document.getElementById('status');
+      var fileInput = document.getElementById('fileInput');
+      var importFileBtn = document.getElementById('importFileBtn');
+      var csvPaste = document.getElementById('csvPaste');
+      var loadPasteBtn = document.getElementById('loadPasteBtn');
+      var addRowBtn = document.getElementById('addRowBtn');
+      var clearBtn = document.getElementById('clearBtn');
+      var sendBtn = document.getElementById('sendBtn');
+
+      var establecimiento = document.getElementById('establecimiento');
+      var importe = document.getElementById('importe');
+      var pedido = document.getElementById('pedido');
+      var descripcion = document.getElementById('descripcion');
+      var proveedor = document.getElementById('proveedor');
+
+      function setStatus(text, kind) {
+        statusBox.className = 'status ' + (kind || 'muted');
+        statusBox.textContent = text;
+      }
+
+      function esc(value) {
+        return String(value == null ? '' : value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      }
+
+      function render() {
+        if (!rows.length) {
+          rowsBody.innerHTML = '';
+          setStatus('Sin filas cargadas.', 'muted');
+          return;
+        }
+
+        rowsBody.innerHTML = rows.map(function(row, index) {
+          return '<tr>'
+            + '<td><input data-field="ESTABLECIMIENTO" data-index="' + index + '" value="' + esc(row.ESTABLECIMIENTO || '') + '"></td>'
+            + '<td><input data-field="IMPORTE" data-index="' + index + '" value="' + esc(row.IMPORTE || '') + '"></td>'
+            + '<td><input data-field="PEDIDO" data-index="' + index + '" value="' + esc(row.PEDIDO || '') + '"></td>'
+            + '<td><input data-field="DESCRIPCION" data-index="' + index + '" value="' + esc(row.DESCRIPCION || '') + '"></td>'
+            + '<td><input data-field="PROVEEDOR" data-index="' + index + '" value="' + esc(row.PROVEEDOR || '') + '"></td>'
+            + '<td><button type="button" class="btn secondary" data-remove="' + index + '">Quitar</button></td>'
+          + '</tr>';
+        }).join('');
+
+        rowsBody.querySelectorAll('input').forEach(function(input) {
+          input.addEventListener('input', function() {
+            var index = Number(input.getAttribute('data-index'));
+            var field = input.getAttribute('data-field');
+            rows[index][field] = input.value;
+          });
+        });
+
+        rowsBody.querySelectorAll('[data-remove]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var index = Number(btn.getAttribute('data-remove'));
+            rows.splice(index, 1);
+            render();
+          });
+        });
+
+        setStatus(rows.length + ' fila(s) listas para enviar.', 'muted');
+      }
+
+      function pushRow(row) {
+        rows.push({
+          ESTABLECIMIENTO: String(row.ESTABLECIMIENTO || '').trim(),
+          IMPORTE: String(row.IMPORTE || '').trim(),
+          PEDIDO: String(row.PEDIDO || '').trim(),
+          DESCRIPCION: String(row.DESCRIPCION || '').trim(),
+          PROVEEDOR: String(row.PROVEEDOR || '').trim()
+        });
+        render();
+      }
+
+      function parseLooseCsv(text) {
+        var lines = String(text || '').split(/\r?\n/).map(function(line) { return line.trim(); }).filter(Boolean);
+        if (!lines.length) return [];
+        var header = lines.shift().split(',').map(function(cell) { return cell.trim().toUpperCase(); });
+        return lines.map(function(line) {
+          var cells = line.split(',');
+          var out = {};
+          header.forEach(function(h, index) {
+            out[h] = (cells[index] || '').trim();
+          });
+          return {
+            ESTABLECIMIENTO: out.ESTABLECIMIENTO || out['NO. TIENDA'] || out['NO TIENDA'] || out.TIENDA || '',
+            IMPORTE: out.IMPORTE || '',
+            PEDIDO: out.PEDIDO || out['NO. PEDIDO'] || out['NO PEDIDO'] || '',
+            DESCRIPCION: out.DESCRIPCION || out.DESCRIPCION || out.CONCEPTO || '',
+            PROVEEDOR: out.PROVEEDOR || ''
+          };
+        });
+      }
+
+      async function importFile() {
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) {
+          setStatus('Selecciona un archivo CSV o Excel antes de importar.', 'err');
+          return;
+        }
+
+        var formData = new FormData();
+        formData.append('file', file);
+
+        setStatus('Procesando archivo...', 'muted');
+        var response = await fetch('/jobs/pedidos/manual/import', {
+          method: 'POST',
+          body: formData
+        });
+        var data = await response.json();
+        if (!response.ok || !data.ok) {
+          setStatus(data.error || 'No se pudo importar el archivo.', 'err');
+          return;
+        }
+        setStatus('Importadas ' + data.total + ' fila(s). Agregadas: ' + data.added + '. Editadas: ' + data.edited + '.', 'ok');
+      }
+
+      async function sendRows() {
+        if (!rows.length) {
+          setStatus('No hay filas para guardar.', 'err');
+          return;
+        }
+        setStatus('Guardando en AppSheet...', 'muted');
+        var response = await fetch('/jobs/pedidos/manual/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: rows })
+        });
+        var data = await response.json();
+        if (!response.ok || !data.ok) {
+          setStatus(data.error || 'No se pudo guardar la información.', 'err');
+          return;
+        }
+        setStatus('Guardadas ' + data.total + ' fila(s). Agregadas: ' + data.added + '. Editadas: ' + data.edited + '.', 'ok');
+      }
+
+      addRowBtn.addEventListener('click', function() {
+        if (!establecimiento.value && !importe.value && !pedido.value && !descripcion.value && !proveedor.value) {
+          setStatus('Llena al menos una fila antes de agregar.', 'err');
+          return;
+        }
+        pushRow({
+          ESTABLECIMIENTO: establecimiento.value,
+          IMPORTE: importe.value,
+          PEDIDO: pedido.value,
+          DESCRIPCION: descripcion.value,
+          PROVEEDOR: proveedor.value
+        });
+        establecimiento.value = '';
+        importe.value = '';
+        pedido.value = '';
+        descripcion.value = '';
+        proveedor.value = '';
+      });
+
+      clearBtn.addEventListener('click', function() {
+        rows = [];
+        render();
+      });
+
+      sendBtn.addEventListener('click', function() {
+        sendRows().catch(function(err) {
+          setStatus(err && err.message ? err.message : 'Error inesperado', 'err');
+        });
+      });
+
+      importFileBtn.addEventListener('click', function() {
+        importFile().catch(function(err) {
+          setStatus(err && err.message ? err.message : 'Error inesperado', 'err');
+        });
+      });
+
+      loadPasteBtn.addEventListener('click', function() {
+        try {
+          var pasted = parseLooseCsv(csvPaste.value);
+          if (!pasted.length) {
+            setStatus('No se encontraron filas válidas en el texto pegado.', 'err');
+            return;
+          }
+          pasted.forEach(pushRow);
+          csvPaste.value = '';
+          setStatus('Se cargaron ' + pasted.length + ' fila(s) desde el texto pegado.', 'ok');
+        } catch (err) {
+          setStatus(err && err.message ? err.message : 'No se pudo leer el texto.', 'err');
+        }
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>

@@ -84,7 +84,8 @@ export function createApp() {
   app.set("view engine", "ejs");
   app.set("views", [
     path.join(__dirname, "modules", "facturacion", "views"),
-    path.join(__dirname, "modules", "solventaciones", "views")
+    path.join(__dirname, "modules", "solventaciones", "views"),
+    path.join(__dirname, "modules", "jobs", "views")
   ]);
 
   const publicImgPath = process.env.PUBLICIMG_PATH;
