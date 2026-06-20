@@ -2642,6 +2642,91 @@
   {
     "row": 529,
     "liberacion": "5018004981",
-    "reason": "sin_cambios_desde_snapshot"
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 530,
+    "liberacion": "5018050326",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 531,
+    "liberacion": "5017906462",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 532,
+    "liberacion": "5017906463",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 533,
+    "liberacion": "5017906464",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 534,
+    "liberacion": "5017906465",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 535,
+    "liberacion": "5018050327",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 536,
+    "liberacion": "5018050329",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 537,
+    "liberacion": "5018050345",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 538,
+    "liberacion": "5018050440",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 539,
+    "liberacion": "5017906453",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 540,
+    "liberacion": "5017906454",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 541,
+    "liberacion": "5017906456",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 542,
+    "liberacion": "5017906457",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 543,
+    "liberacion": "5017906458",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 544,
+    "liberacion": "5017906459",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 545,
+    "liberacion": "5017906460",
+    "reason": "sin_actualizaciones"
+  },
+  {
+    "row": 546,
+    "liberacion": "5017906461",
+    "reason": "sin_actualizaciones"
   }
 ]
