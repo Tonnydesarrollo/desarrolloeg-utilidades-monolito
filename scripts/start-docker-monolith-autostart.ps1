@@ -1,7 +1,7 @@
 param(
   [int]$MaxAttempts = 90,
   [int]$SleepSeconds = 10,
-  [int]$CheckIntervalSeconds = 300
+  [int]$CheckIntervalSeconds = 30
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +37,8 @@ function Write-Log {
 }
 
 function Invoke-DockerComposeUp {
-  & $dockerExe --config $dockerConfigDir compose up -d >> $logPath 2>&1
+  $command = "`"$dockerExe`" --config `"$dockerConfigDir`" compose up -d >> `"$logPath`" 2>&1"
+  cmd.exe /d /c $command
   return $LASTEXITCODE
 }
 

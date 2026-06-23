@@ -1,4 +1,31 @@
 services:
+  appsheet-sync:
+    build:
+      context: ../appsheet_local_sync
+      dockerfile: Dockerfile
+    image: desarrolloeg-appsheet-local-sync:latest
+    container_name: desarrolloeg-appsheet-sync
+    restart: unless-stopped
+    env_file:
+      - ../appsheet_local_sync/.env.local
+    environment:
+      WEBHOOK_PORT: 8787
+      REPLICA_RECOVERY_INTERVAL_SECONDS: 300
+    ports:
+      - "127.0.0.1:8787:8787"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:8787/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - ../appsheet_local_sync/data:/app/data
+
   monolito:
     build:
       context: .
@@ -13,6 +40,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 7000
+      BOLSA_SYNC_WEBHOOK_TARGET: http://appsheet-sync:8787
       PUBLICIMG_PATH: /app/publicimg
       FACTURACION_GOOGLE_CREDENTIALS_PATH: /app/secrets/facturacion/credentials.json
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
@@ -26,6 +54,9 @@ services:
       WHATSAPP_CAP_CHROME_PATH: /usr/bin/chromium
       WHATSAPP_CAP_GOOGLE_SERVICE_ACCOUNT_JSON: /app/secrets/whatsapp/credentials.json
       WHATSAPP_CAP_GOOGLE_OAUTH_TOKEN_PATH: /app/runtime/whatsapp-capacitadores/token.json
+    depends_on:
+      appsheet-sync:
+        condition: service_started
     healthcheck:
       test:
         [

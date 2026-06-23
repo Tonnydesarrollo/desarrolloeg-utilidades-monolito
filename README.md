@@ -196,6 +196,11 @@ docker compose up -d --build
 
 Ese compose levanta `monolito` y `cloudflared`.
 
+El stack tambien levanta `appsheet-sync` desde el proyecto hermano
+`../appsheet_local_sync`. Este servicio mantiene la replica SQLite, usa AppSheet
+como fallback de lectura y se recupera automaticamente cuando falla el
+almacenamiento local.
+
 El tunnel corre dentro de Docker y apunta al servicio `monolito` por red interna.
 Si quieres forzar el arranque completo de CasaLey en una sola corrida, usa el job `casaley-sync-appsheet` desde `/jobs` o dale `CASALEY_SYNC_ALL_ENABLED=1`.
 
