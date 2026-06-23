@@ -125,7 +125,11 @@ function Invoke-ComposeBootstrap {
   try {
     $dockerService = Get-Service -Name $dockerServiceName -ErrorAction SilentlyContinue
     if ($dockerService -and $dockerService.Status -ne "Running") {
+      Set-Service -Name $dockerServiceName -StartupType Automatic
       Start-Service -Name $dockerServiceName
+    }
+    if ($dockerService) {
+      Set-Service -Name $dockerServiceName -StartupType Automatic
     }
   } catch {
   }
@@ -234,8 +238,8 @@ $startAction = New-ScheduledTaskAction -Execute $powershellExe -Argument $startA
 if (Get-ScheduledTask -TaskName $StartTaskName -ErrorAction SilentlyContinue) {
   Unregister-ScheduledTask -TaskName $StartTaskName -Confirm:$false
 }
-$startTrigger = New-ScheduledTaskTrigger -AtLogOn
-$startPrincipal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+$startTrigger = New-ScheduledTaskTrigger -AtStartup
+$startPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $startSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $StartTaskName -Action $startAction -Trigger $startTrigger -Principal $startPrincipal -Settings $startSettings -Description "Despliegue automatico del monolito Docker"
 

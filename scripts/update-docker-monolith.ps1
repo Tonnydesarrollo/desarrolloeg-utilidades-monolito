@@ -91,7 +91,11 @@ function Ensure-DockerReady {
     $dockerService = Get-Service -Name $dockerServiceName -ErrorAction SilentlyContinue
     if ($dockerService -and $dockerService.Status -ne "Running") {
       Write-Log "Iniciando servicio $dockerServiceName"
+      Set-Service -Name $dockerServiceName -StartupType Automatic
       Start-Service -Name $dockerServiceName
+    }
+    if ($dockerService) {
+      Set-Service -Name $dockerServiceName -StartupType Automatic
     }
   } catch {
     Write-Log "No fue posible iniciar servicio ${dockerServiceName}: $($_.Exception.Message)"
