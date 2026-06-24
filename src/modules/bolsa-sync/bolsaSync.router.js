@@ -206,6 +206,28 @@ bolsaSyncRouter.get("/local/alumnos", async (req, res) => {
   );
 });
 
+bolsaSyncRouter.patch("/local/postulaciones/:id", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(
+      req,
+      `/local/postulaciones/${id}`,
+    );
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo actualizar la postulacion central",
+      detail: error.message,
+    });
+  }
+});
+
 bolsaSyncRouter.get("/local/solicitudes-vacantes", async (req, res) => {
   if (!isAuthorized(req)) {
     res.status(401).json({ ok: false, error: "No autorizado" });
