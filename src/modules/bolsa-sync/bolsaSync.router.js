@@ -269,6 +269,68 @@ bolsaSyncRouter.patch("/local/postulaciones/:id", async (req, res) => {
   }
 });
 
+bolsaSyncRouter.post("/local/postulaciones", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const forwarded = await forwardToSyncService(req, "/local/postulaciones");
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo crear la postulacion central",
+      detail: error.message,
+    });
+  }
+});
+
+bolsaSyncRouter.delete("/local/postulaciones/:id", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(
+      req,
+      `/local/postulaciones/${id}`,
+    );
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo eliminar la postulacion central",
+      detail: error.message,
+    });
+  }
+});
+
+bolsaSyncRouter.delete("/local/postulaciones/:id/propuesta", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(
+      req,
+      `/local/postulaciones/${id}/propuesta`,
+    );
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo deshacer la propuesta central",
+      detail: error.message,
+    });
+  }
+});
+
 bolsaSyncRouter.get("/local/solicitudes-vacantes", async (req, res) => {
   if (!isAuthorized(req)) {
     res.status(401).json({ ok: false, error: "No autorizado" });
