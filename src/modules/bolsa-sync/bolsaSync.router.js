@@ -197,6 +197,28 @@ bolsaSyncRouter.get("/local/vacantes", async (req, res) => {
   );
 });
 
+bolsaSyncRouter.get("/local/vacantes/:id/talento", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(
+      req,
+      `/local/vacantes/${id}/talento`,
+    );
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo consultar el talento apto para la vacante",
+      detail: error.message,
+    });
+  }
+});
+
 bolsaSyncRouter.get("/local/alumnos", async (req, res) => {
   await forwardAuthorizedLocalGet(
     req,
