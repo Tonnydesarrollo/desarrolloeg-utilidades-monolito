@@ -326,6 +326,28 @@ bolsaSyncRouter.post("/local/solicitudes-empresas/:id/aprobar", async (req, res)
   }
 });
 
+bolsaSyncRouter.post("/local/solicitudes-empresas/:id/rechazar", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(
+      req,
+      `/local/solicitudes-empresas/${id}/rechazar`,
+    );
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo rechazar la solicitud central de empresa",
+      detail: error.message,
+    });
+  }
+});
+
 bolsaSyncRouter.get("/local/solicitudes-alta", async (req, res) => {
   if (!isAuthorized(req)) {
     res.status(401).json({ ok: false, error: "No autorizado" });
