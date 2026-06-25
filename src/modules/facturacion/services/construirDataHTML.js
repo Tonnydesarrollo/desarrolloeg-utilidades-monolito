@@ -69,6 +69,8 @@ export function construirDataHTML(json) {
       const sub = toNumber(c.subtotal);
       const iva = toNumber(c.iva);
       const tot = toNumber(c.total);
+      const codigo = String(c.concepto_id || "").trim();
+      const descripcionCatalogo = String(c.descripcion_catalogo || "").trim();
 
       subTotalGlobal += sub;
       ivaGlobal += iva;
@@ -77,6 +79,8 @@ export function construirDataHTML(json) {
       lineas.push({
         descripcion: c.concepto_nombre || "",
         tipo: c.tipo || "",
+        codigo,
+        catalogoDescripcion: descripcionCatalogo,
         cantidad: toNumber(c.cantidad),
         precioUnit: toNumber(c.precio),
         subLinea: sub,

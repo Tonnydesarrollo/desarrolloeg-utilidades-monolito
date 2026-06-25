@@ -197,7 +197,11 @@ export async function mapaCatalogo() {
   const rows = await leerTablaAppSheet("CATALOGO");
   const map = {};
   rows.forEach(r => {
-    map[r["Row ID"] || r.ID] = { nombre: r.NOMBRE || "", tipo: r.TIPO || "" };
+    map[r["Row ID"] || r.ID] = {
+      nombre: r.NOMBRE || "",
+      tipo: r.TIPO || "",
+      descripcion: r.DESCRIPCION || ""
+    };
   });
   return map;
 }

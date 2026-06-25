@@ -100,6 +100,15 @@ if (data && data.centros) {
         "Prevención y combate de incendios: Identificación de riesgos, clasificación de fuegos, manejo y uso adecuado de extintores, así como técnicas básicas para el control y supresión de incendios en su fase inicial.",
         "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
       ]
+    },
+    catalogo_detalle: {
+      tag: "Catálogo",
+      titulo: "Código y descripción del catálogo",
+      intro: "Muestra dentro de la tabla el código del concepto y la descripción extendida del catálogo sin alterar el orden ni la estructura de la cotización.",
+      detalles: [
+        "Usa el código del concepto y la descripción larga capturada en AppSheet.",
+        "Mantiene la información en un bloque compacto para no romper el formato."
+      ]
     }
   };
 
@@ -279,6 +288,31 @@ if (data && data.centros) {
 
 .desglose-preview .info-box h3 {
   color: #1f4e79;
+}
+
+.catalogo-detalle {
+  display: none;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dotted #cbd5e1;
+  color: #4b5563;
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+
+.catalogo-detalle .catalogo-codigo {
+  display: block;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.catalogo-detalle .catalogo-descripcion {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .forma-pago-card {
@@ -599,6 +633,13 @@ function shouldOmitLine(ln){
                 <p>Incluye capacitación multifuncional, constancias al término y temario en primeros auxilios, incendios y evacuación.</p>
               </div>
             </label>
+            <label class="desglose-option">
+              <input type="checkbox" id="desgloseCatalogoDetalle">
+              <div>
+                <strong>Código y descripción</strong>
+                <p>Muestra el código del concepto y la descripción larga del catálogo dentro de la tabla.</p>
+              </div>
+            </label>
           </div>
         </div>
 
@@ -715,6 +756,12 @@ for (var i = 0; i < (data.centros || []).length; i++) {
 
   <td class="desc-cell">
     <div><%= ln.descripcion || '' %></div>
+    <div class="catalogo-detalle">
+      <span class="catalogo-codigo">Código: <%= ln.codigo || '' %></span>
+      <% if (ln.catalogoDescripcion) { %>
+        <div class="catalogo-descripcion"><%= ln.catalogoDescripcion %></div>
+      <% } %>
+    </div>
     <% if (ln.tipo && String(ln.tipo).trim() !== '') { %>
       <div class="tipo-linea">Tipo: <%= ln.tipo %></div>
     <% } else if (ln.raw && ln.raw.TIPO) { %>
@@ -891,6 +938,7 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
         (function() {
           var desglosePipc = document.getElementById('desglosePipc');
           var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
+          var desgloseCatalogoDetalle = document.getElementById('desgloseCatalogoDetalle');
           var formaPagoSelect = document.getElementById('formaPagoSelect');
           var desglosePreview = document.getElementById('desglosePreview');
           var condicionesBlock = document.getElementById('condicionesBlock');
@@ -969,6 +1017,7 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
             var selected = [];
             if (desglosePipc.checked) selected.push('pipc');
             if (desgloseCapacitaciones.checked) selected.push('capacitaciones');
+            if (desgloseCatalogoDetalle.checked) selected.push('catalogo_detalle');
 
             if (!selected.length) {
               desglosePreview.innerHTML = '';
@@ -1004,13 +1053,24 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
             });
 
             desglosePreview.innerHTML = html;
+            toggleCatalogoDetalle();
+          }
+
+          function toggleCatalogoDetalle() {
+            var visible = !!(desgloseCatalogoDetalle && desgloseCatalogoDetalle.checked);
+            var nodes = document.querySelectorAll('.catalogo-detalle');
+            for (var i = 0; i < nodes.length; i++) {
+              nodes[i].style.display = visible ? 'block' : 'none';
+            }
           }
 
           desglosePipc.checked = hasDesglose('pipc');
           desgloseCapacitaciones.checked = hasDesglose('capacitaciones');
+          desgloseCatalogoDetalle.checked = hasDesglose('catalogo_detalle');
           formaPagoSelect.value = <%- JSON.stringify((data && data.cotizacion && data.cotizacion.formaPago) ? data.cotizacion.formaPago : 'dos_pagos') %>;
           desglosePipc.addEventListener('change', renderDesglose);
           desgloseCapacitaciones.addEventListener('change', renderDesglose);
+          desgloseCatalogoDetalle.addEventListener('change', renderDesglose);
           formaPagoSelect.addEventListener('change', renderCondiciones);
           renderDesglose();
           renderCondiciones();
