@@ -219,6 +219,25 @@ bolsaSyncRouter.get("/local/vacantes/:id/talento", async (req, res) => {
   }
 });
 
+bolsaSyncRouter.patch("/local/vacantes/:id", async (req, res) => {
+  if (!isAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "No autorizado" });
+    return;
+  }
+
+  try {
+    const id = encodeURIComponent(String(req.params.id || ""));
+    const forwarded = await forwardToSyncService(req, `/local/vacantes/${id}`);
+    res.status(forwarded.status).json(forwarded.body);
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: "No se pudo actualizar la vacante central",
+      detail: error.message,
+    });
+  }
+});
+
 bolsaSyncRouter.get("/local/alumnos", async (req, res) => {
   await forwardAuthorizedLocalGet(
     req,
