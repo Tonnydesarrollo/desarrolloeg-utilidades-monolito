@@ -117,6 +117,8 @@ function Invoke-ComposeBootstrap {
   $dockerDesktopExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
   $dockerServiceName = "com.docker.service"
   $dockerConfigDir = Join-Path $RepoRoot ".docker-runtime-config"
+  $dockerContext = "desktop-linux"
+  $env:DOCKER_CONTEXT = $dockerContext
 
   if (-not (Test-Path $dockerExe)) {
     throw "docker.exe no encontrado en $dockerExe"
@@ -145,7 +147,7 @@ function Invoke-ComposeBootstrap {
   $ready = $false
   for ($attempt = 1; $attempt -le 90; $attempt++) {
     try {
-      & $dockerExe --config $dockerConfigDir version | Out-Null
+      & $dockerExe --context $dockerContext --config $dockerConfigDir version | Out-Null
       if ($LASTEXITCODE -eq 0) {
         $ready = $true
         break
@@ -161,7 +163,7 @@ function Invoke-ComposeBootstrap {
   }
 
   Set-Location $RepoRoot
-  & $dockerExe --config $dockerConfigDir compose up -d --build
+  & $dockerExe --context $dockerContext --config $dockerConfigDir compose up -d --build
   if ($LASTEXITCODE -ne 0) {
     throw "docker compose up -d --build fallo con codigo $LASTEXITCODE"
   }

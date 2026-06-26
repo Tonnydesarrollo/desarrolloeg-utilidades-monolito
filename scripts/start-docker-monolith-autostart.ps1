@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $dockerExe = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+$dockerDesktopExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
 $dockerServiceName = "com.docker.service"
 $dockerConfigDir = Join-Path $repoRoot ".docker-runtime-config"
 $dockerConfigPath = Join-Path $dockerConfigDir "config.json"
@@ -15,6 +16,8 @@ $dockerSourceContexts = Join-Path $env:USERPROFILE ".docker\contexts"
 $dockerTargetContexts = Join-Path $dockerConfigDir "contexts"
 $logDir = Join-Path $repoRoot "runtime\logs"
 $logPath = Join-Path $logDir "docker-autostart.log"
+$dockerContext = "desktop-linux"
+$env:DOCKER_CONTEXT = $dockerContext
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 New-Item -ItemType Directory -Force -Path $dockerConfigDir | Out-Null
@@ -37,7 +40,7 @@ function Write-Log {
 }
 
 function Invoke-DockerComposeUp {
-  $command = "`"$dockerExe`" --config `"$dockerConfigDir`" compose up -d >> `"$logPath`" 2>&1"
+  $command = "`"$dockerExe`" --context $dockerContext --config `"$dockerConfigDir`" compose up -d >> `"$logPath`" 2>&1"
   cmd.exe /d /c $command
   return $LASTEXITCODE
 }
@@ -45,7 +48,7 @@ function Invoke-DockerComposeUp {
 function Test-DockerReady {
   for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
     try {
-      & $dockerExe --config $dockerConfigDir version | Out-Null
+      & $dockerExe --context $dockerContext --config $dockerConfigDir version | Out-Null
       if ($LASTEXITCODE -eq 0) {
         Write-Log "Docker listo en intento $attempt"
         return $true
@@ -63,6 +66,16 @@ function Test-DockerReady {
 if (-not (Test-Path $dockerExe)) {
   Write-Log "docker.exe no encontrado en $dockerExe"
   exit 1
+}
+
+try {
+  if ((Test-Path $dockerDesktopExe) -and -not (Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue)) {
+    Write-Log "Iniciando Docker Desktop"
+    Start-Process -FilePath $dockerDesktopExe
+    Start-Sleep -Seconds 5
+  }
+} catch {
+  Write-Log "No fue posible iniciar Docker Desktop: $($_.Exception.Message)"
 }
 
 Set-Location $repoRoot
