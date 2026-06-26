@@ -12,8 +12,8 @@ if (-not (Test-Path $scriptPath)) {
 $powershellExe = (Get-Command powershell.exe).Source
 $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
 $action = New-ScheduledTaskAction -Execute $powershellExe -Argument $arguments
-$trigger = New-ScheduledTaskTrigger -AtStartup
-$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$principal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 
 if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {

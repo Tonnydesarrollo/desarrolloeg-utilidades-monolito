@@ -236,8 +236,8 @@ $startAction = New-ScheduledTaskAction -Execute $powershellExe -Argument $startA
 if (Get-ScheduledTask -TaskName $StartTaskName -ErrorAction SilentlyContinue) {
   Unregister-ScheduledTask -TaskName $StartTaskName -Confirm:$false
 }
-$startTrigger = New-ScheduledTaskTrigger -AtStartup
-$startPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+  $startTrigger = New-ScheduledTaskTrigger -AtLogOn
+  $startPrincipal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -RunLevel Highest
 $startSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $StartTaskName -Action $startAction -Trigger $startTrigger -Principal $startPrincipal -Settings $startSettings -Description "Despliegue automatico del monolito Docker"
 
