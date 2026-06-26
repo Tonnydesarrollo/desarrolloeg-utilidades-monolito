@@ -45,15 +45,6 @@
         "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
       ]
     },
-    catalogo_detalle: {
-      tag: "Catálogo",
-      titulo: "Código y descripción del catálogo",
-      intro: "Muestra dentro de la tabla el código del concepto y la descripción extendida del catálogo sin alterar el orden ni la estructura de la cotización.",
-      detalles: [
-        "Usa el código del concepto y la descripción larga capturada en AppSheet.",
-        "Mantiene la información en un bloque compacto para no romper el formato."
-      ]
-    }
   };
 
   var formaPagoValor = (data && data.cotizacion && data.cotizacion.formaPago)
@@ -198,7 +189,8 @@
   color: #1f4e79;
 }
 
-.catalogo-detalle {
+.catalogo-codigo,
+.catalogo-descripcion {
   display: none;
   margin-top: 4px;
   padding-top: 4px;
@@ -208,18 +200,19 @@
   line-height: 1.2;
 }
 
-.catalogo-detalle .catalogo-codigo {
+.catalogo-codigo {
   display: block;
   font-weight: 700;
   text-transform: uppercase;
   margin-bottom: 2px;
 }
 
-.catalogo-detalle .catalogo-descripcion {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.catalogo-descripcion {
+  display: none;
+  padding-top: 0;
+  margin-top: 2px;
+  border-top: none;
+  overflow: visible;
   word-break: break-word;
 }
 
@@ -366,20 +359,19 @@
 
       col.tienda { width:8%; }
       col.sucursal { width:20%; }
-      col.desc { width:38%; }
+      col.desc { width:35%; }
       col.cantidad { width:6%; }
-      col.precioUnit { width:10%; }
-      col.subtotal { width:9%; }
-      col.iva { width:9%; }
+      col.precioUnit { width:9%; }
+      col.subtotal { width:8%; }
+      col.iva { width:8%; }
+      col.total { width:6%; }
       .desc-cell {
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        display: block;
+        overflow: visible;
+        text-overflow: clip;
         word-break:break-word;
         font-size:0.72rem;
-        line-height:1.1;
+        line-height:1.15;
       }
       .tienda-cell{font-weight:600;font-size:0.76rem}
       .sucursal-cell{font-weight:600;font-size:0.78rem}
@@ -558,10 +550,17 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
               </div>
             </label>
             <label class="desglose-option">
-              <input type="checkbox" id="desgloseCatalogoDetalle">
+              <input type="checkbox" id="desgloseCatalogoCodigo">
               <div>
-                <strong>Código y descripción</strong>
-                <p>Muestra el código del concepto y la descripción larga del catálogo dentro de la tabla.</p>
+                <strong>Código</strong>
+                <p>Muestra el código del catálogo en la línea del producto o servicio.</p>
+              </div>
+            </label>
+            <label class="desglose-option">
+              <input type="checkbox" id="desgloseCatalogoDescripcion">
+              <div>
+                <strong>Descripción</strong>
+                <p>Muestra la descripción extendida del catálogo debajo del producto o servicio.</p>
               </div>
             </label>
           </div>
@@ -668,12 +667,12 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
 
   <td class="desc-cell">
     <div><%= ln.descripcion || '' %></div>
-    <div class="catalogo-detalle">
-      <span class="catalogo-codigo">Código: <%= ln.codigo || '' %></span>
-      <% if (ln.catalogoDescripcion) { %>
-        <div class="catalogo-descripcion"><%= ln.catalogoDescripcion %></div>
-      <% } %>
-    </div>
+    <div class="catalogo-codigo">Código: <%= ln.codigo || '' %></div>
+    <% if (ln.catalogoDescripcion) { %>
+      <div class="catalogo-descripcion"><%= ln.catalogoDescripcion %></div>
+    <% } else { %>
+      <div class="catalogo-descripcion"></div>
+    <% } %>
     <% if(ln.tipo && String(ln.tipo).trim()!==''){ %>
       <div class="tipo-linea">Tipo: <%= ln.tipo %></div>
     <% } else if(ln.raw && ln.raw.TIPO){ %>
@@ -802,7 +801,8 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
         (function() {
           var desglosePipc = document.getElementById('desglosePipc');
           var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
-          var desgloseCatalogoDetalle = document.getElementById('desgloseCatalogoDetalle');
+          var desgloseCatalogoCodigo = document.getElementById('desgloseCatalogoCodigo');
+          var desgloseCatalogoDescripcion = document.getElementById('desgloseCatalogoDescripcion');
           var formaPagoSelect = document.getElementById('formaPagoSelect');
           var desglosePreview = document.getElementById('desglosePreview');
           var condicionesBlock = document.getElementById('condicionesBlock');
@@ -826,15 +826,6 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
         "Primeros auxilios: Evaluación primaria de la escena, soporte básico de vida (RCP), control de hemorragias, atención de lesiones comunes y estabilización inicial de personas lesionadas.",
         "Prevención y combate de incendios: Identificación de riesgos, clasificación de fuegos, manejo y uso adecuado de extintores, así como técnicas básicas para el control y supresión de incendios en su fase inicial.",
         "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
-      ]
-    },
-    catalogo_detalle: {
-      tag: "Catálogo",
-      titulo: "Código y descripción del catálogo",
-      intro: "Muestra dentro de la tabla el código del concepto y la descripción extendida del catálogo sin alterar el orden ni la estructura de la cotización.",
-      detalles: [
-        "Usa el código del concepto y la descripción larga capturada en AppSheet.",
-        "Mantiene la información en un bloque compacto para no romper el formato."
       ]
     }
   };
@@ -890,10 +881,10 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
             var selected = [];
             if (desglosePipc.checked) selected.push('pipc');
             if (desgloseCapacitaciones.checked) selected.push('capacitaciones');
-            if (desgloseCatalogoDetalle.checked) selected.push('catalogo_detalle');
 
             if (!selected.length) {
               desglosePreview.innerHTML = '';
+              toggleCatalogoPartes();
               return;
             }
 
@@ -926,26 +917,32 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
             });
 
             desglosePreview.innerHTML = html;
-            toggleCatalogoDetalle();
+            toggleCatalogoPartes();
           }
 
-          function toggleCatalogoDetalle() {
-            var visible = !!(desgloseCatalogoDetalle && desgloseCatalogoDetalle.checked);
-            var nodes = document.querySelectorAll('.catalogo-detalle');
-            for (var i = 0; i < nodes.length; i++) {
-              nodes[i].style.display = visible ? 'block' : 'none';
+          function toggleCatalogoPartes() {
+            var visibleCodigo = !!(desgloseCatalogoCodigo && desgloseCatalogoCodigo.checked);
+            var visibleDescripcion = !!(desgloseCatalogoDescripcion && desgloseCatalogoDescripcion.checked);
+            var codigos = document.querySelectorAll('.catalogo-codigo');
+            var descripciones = document.querySelectorAll('.catalogo-descripcion');
+            for (var i = 0; i < codigos.length; i++) {
+              codigos[i].style.display = visibleCodigo ? 'block' : 'none';
+            }
+            for (var j = 0; j < descripciones.length; j++) {
+              descripciones[j].style.display = visibleDescripcion ? 'block' : 'none';
             }
           }
 
           desglosePipc.checked = hasDesglose('pipc');
           desgloseCapacitaciones.checked = hasDesglose('capacitaciones');
-          desgloseCatalogoDetalle.checked = hasDesglose('catalogo_detalle');
           formaPagoSelect.value = <%- JSON.stringify((data && data.cotizacion && data.cotizacion.formaPago) ? data.cotizacion.formaPago : 'dos_pagos') %>;
           desglosePipc.addEventListener('change', renderDesglose);
           desgloseCapacitaciones.addEventListener('change', renderDesglose);
-          desgloseCatalogoDetalle.addEventListener('change', renderDesglose);
+          if (desgloseCatalogoCodigo) desgloseCatalogoCodigo.addEventListener('change', toggleCatalogoPartes);
+          if (desgloseCatalogoDescripcion) desgloseCatalogoDescripcion.addEventListener('change', toggleCatalogoPartes);
           formaPagoSelect.addEventListener('change', renderCondiciones);
           renderDesglose();
+          toggleCatalogoPartes();
           renderCondiciones();
         })();
       </script>

@@ -69,7 +69,7 @@ export function construirDataHTML(json) {
       const sub = toNumber(c.subtotal);
       const iva = toNumber(c.iva);
       const tot = toNumber(c.total);
-      const codigo = String(c.concepto_id || "").trim();
+      const codigo = String(c.catalogo_codigo || c.concepto_id || "").trim();
       const descripcionCatalogo = String(c.descripcion_catalogo || "").trim();
 
       subTotalGlobal += sub;

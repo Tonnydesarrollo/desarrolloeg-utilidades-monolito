@@ -101,15 +101,6 @@ if (data && data.centros) {
         "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
       ]
     },
-    catalogo_detalle: {
-      tag: "Catálogo",
-      titulo: "Código y descripción del catálogo",
-      intro: "Muestra dentro de la tabla el código del concepto y la descripción extendida del catálogo sin alterar el orden ni la estructura de la cotización.",
-      detalles: [
-        "Usa el código del concepto y la descripción larga capturada en AppSheet.",
-        "Mantiene la información en un bloque compacto para no romper el formato."
-      ]
-    }
   };
 
   var formaPagoValor = (data && data.cotizacion && data.cotizacion.formaPago)
@@ -290,7 +281,8 @@ if (data && data.centros) {
   color: #1f4e79;
 }
 
-.catalogo-detalle {
+.catalogo-codigo,
+.catalogo-descripcion {
   display: none;
   margin-top: 4px;
   padding-top: 4px;
@@ -300,18 +292,19 @@ if (data && data.centros) {
   line-height: 1.2;
 }
 
-.catalogo-detalle .catalogo-codigo {
+.catalogo-codigo {
   display: block;
   font-weight: 700;
   text-transform: uppercase;
   margin-bottom: 2px;
 }
 
-.catalogo-detalle .catalogo-descripcion {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.catalogo-descripcion {
+  display: none;
+  padding-top: 0;
+  margin-top: 2px;
+  border-top: none;
+  overflow: visible;
   word-break: break-word;
 }
 
@@ -396,7 +389,7 @@ button:hover{background:#b3202a;color:#fff}
       h2{margin:15px 0 8px;font-size:0.86rem;text-transform:uppercase;color:#333;letter-spacing:0.04em}
       
       /* TABLA DE DETALLES (Se mantienen igual) */
-      table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-bottom:15px;border:none;}
+      table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-bottom:15px;border:none;table-layout:fixed;}
       thead th{
         background:#f0f3f8;
         border:none;
@@ -412,23 +405,21 @@ button:hover{background:#b3202a;color:#fff}
       tbody tr:nth-child(odd){background:#f9f9f9}
       tbody td{border-bottom:1px solid #eee;}
 
-      col.sucursal { width:26%; }
-col.desc { width:42%; }
+      col.sucursal { width:24%; }
+col.desc { width:36%; }
 col.cantidad { width:6%; }
-col.precioUnit { width:8%; }
+col.precioUnit { width:10%; }
 col.subtotal { width:8%; }
-col.iva { width:5%; }
-col.total { width:5%; }
+col.iva { width:8%; }
+col.total { width:8%; }
 
       .desc-cell {
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        display: block;
+        overflow: visible;
+        text-overflow: clip;
         word-break:break-word;
         font-size:0.72rem;
-        line-height:1.1;
+        line-height:1.15;
       }
       .tienda-cell{font-weight:600;font-size:0.76rem}
       .sucursal-cell{font-weight:600;font-size:0.78rem}
@@ -634,10 +625,17 @@ function shouldOmitLine(ln){
               </div>
             </label>
             <label class="desglose-option">
-              <input type="checkbox" id="desgloseCatalogoDetalle">
+              <input type="checkbox" id="desgloseCatalogoCodigo">
               <div>
-                <strong>Código y descripción</strong>
-                <p>Muestra el código del concepto y la descripción larga del catálogo dentro de la tabla.</p>
+                <strong>Código</strong>
+                <p>Muestra el código del catálogo en la línea del producto o servicio.</p>
+              </div>
+            </label>
+            <label class="desglose-option">
+              <input type="checkbox" id="desgloseCatalogoDescripcion">
+              <div>
+                <strong>Descripción</strong>
+                <p>Muestra la descripción extendida del catálogo debajo del producto o servicio.</p>
               </div>
             </label>
           </div>
@@ -756,12 +754,12 @@ for (var i = 0; i < (data.centros || []).length; i++) {
 
   <td class="desc-cell">
     <div><%= ln.descripcion || '' %></div>
-    <div class="catalogo-detalle">
-      <span class="catalogo-codigo">Código: <%= ln.codigo || '' %></span>
-      <% if (ln.catalogoDescripcion) { %>
-        <div class="catalogo-descripcion"><%= ln.catalogoDescripcion %></div>
-      <% } %>
-    </div>
+    <div class="catalogo-codigo">Código: <%= ln.codigo || '' %></div>
+    <% if (ln.catalogoDescripcion) { %>
+      <div class="catalogo-descripcion"><%= ln.catalogoDescripcion %></div>
+    <% } else { %>
+      <div class="catalogo-descripcion"></div>
+    <% } %>
     <% if (ln.tipo && String(ln.tipo).trim() !== '') { %>
       <div class="tipo-linea">Tipo: <%= ln.tipo %></div>
     <% } else if (ln.raw && ln.raw.TIPO) { %>
@@ -938,7 +936,8 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
         (function() {
           var desglosePipc = document.getElementById('desglosePipc');
           var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
-          var desgloseCatalogoDetalle = document.getElementById('desgloseCatalogoDetalle');
+          var desgloseCatalogoCodigo = document.getElementById('desgloseCatalogoCodigo');
+          var desgloseCatalogoDescripcion = document.getElementById('desgloseCatalogoDescripcion');
           var formaPagoSelect = document.getElementById('formaPagoSelect');
           var desglosePreview = document.getElementById('desglosePreview');
           var condicionesBlock = document.getElementById('condicionesBlock');
@@ -1017,10 +1016,10 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
             var selected = [];
             if (desglosePipc.checked) selected.push('pipc');
             if (desgloseCapacitaciones.checked) selected.push('capacitaciones');
-            if (desgloseCatalogoDetalle.checked) selected.push('catalogo_detalle');
 
             if (!selected.length) {
               desglosePreview.innerHTML = '';
+              toggleCatalogoPartes();
               return;
             }
 
@@ -1053,26 +1052,32 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
             });
 
             desglosePreview.innerHTML = html;
-            toggleCatalogoDetalle();
+            toggleCatalogoPartes();
           }
 
-          function toggleCatalogoDetalle() {
-            var visible = !!(desgloseCatalogoDetalle && desgloseCatalogoDetalle.checked);
-            var nodes = document.querySelectorAll('.catalogo-detalle');
-            for (var i = 0; i < nodes.length; i++) {
-              nodes[i].style.display = visible ? 'block' : 'none';
+          function toggleCatalogoPartes() {
+            var visibleCodigo = !!(desgloseCatalogoCodigo && desgloseCatalogoCodigo.checked);
+            var visibleDescripcion = !!(desgloseCatalogoDescripcion && desgloseCatalogoDescripcion.checked);
+            var codigos = document.querySelectorAll('.catalogo-codigo');
+            var descripciones = document.querySelectorAll('.catalogo-descripcion');
+            for (var i = 0; i < codigos.length; i++) {
+              codigos[i].style.display = visibleCodigo ? 'block' : 'none';
+            }
+            for (var j = 0; j < descripciones.length; j++) {
+              descripciones[j].style.display = visibleDescripcion ? 'block' : 'none';
             }
           }
 
           desglosePipc.checked = hasDesglose('pipc');
           desgloseCapacitaciones.checked = hasDesglose('capacitaciones');
-          desgloseCatalogoDetalle.checked = hasDesglose('catalogo_detalle');
           formaPagoSelect.value = <%- JSON.stringify((data && data.cotizacion && data.cotizacion.formaPago) ? data.cotizacion.formaPago : 'dos_pagos') %>;
           desglosePipc.addEventListener('change', renderDesglose);
           desgloseCapacitaciones.addEventListener('change', renderDesglose);
-          desgloseCatalogoDetalle.addEventListener('change', renderDesglose);
+          if (desgloseCatalogoCodigo) desgloseCatalogoCodigo.addEventListener('change', toggleCatalogoPartes);
+          if (desgloseCatalogoDescripcion) desgloseCatalogoDescripcion.addEventListener('change', toggleCatalogoPartes);
           formaPagoSelect.addEventListener('change', renderCondiciones);
           renderDesglose();
+          toggleCatalogoPartes();
           renderCondiciones();
         })();
       </script>

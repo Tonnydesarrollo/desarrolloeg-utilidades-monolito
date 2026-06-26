@@ -70,15 +70,16 @@ Set-Location $repoRoot
 Write-Log "Iniciando vigilante del monolito"
 
 while ($true) {
-  try {
-    $dockerService = Get-Service -Name $dockerServiceName -ErrorAction SilentlyContinue
-    if ($dockerService -and $dockerService.Status -ne "Running") {
-      Write-Log "Iniciando servicio $dockerServiceName"
-      Start-Service -Name $dockerServiceName
-    }
-  } catch {
-    Write-Log "No fue posible iniciar servicio ${dockerServiceName}: $($_.Exception.Message)"
+try {
+  $dockerService = Get-Service -Name $dockerServiceName -ErrorAction SilentlyContinue
+  if ($dockerService -and $dockerService.Status -ne "Running") {
+    Write-Log "Iniciando servicio $dockerServiceName"
+    Set-Service -Name $dockerServiceName -StartupType Automatic
+    Start-Service -Name $dockerServiceName
   }
+} catch {
+  Write-Log "No fue posible iniciar servicio ${dockerServiceName}: $($_.Exception.Message)"
+}
 
   Write-Log "Esperando a que Docker responda"
   $dockerReady = Test-DockerReady

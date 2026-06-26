@@ -184,11 +184,9 @@ function Register-UpdateTask {
   }
 
   $startAt = (Get-Date).AddMinutes(2)
-  $trigger = New-ScheduledTaskTrigger -Once -At $startAt
-  $trigger.RepetitionInterval = New-TimeSpan -Minutes $IntervalMinutes
-  $trigger.RepetitionDuration = New-TimeSpan -Days 3650
+  $trigger = New-ScheduledTaskTrigger -Once -At $startAt -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
 
-  $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+  $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Actualizacion automatica del monolito Docker desde git"

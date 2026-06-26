@@ -9,10 +9,13 @@ const APPSHEET_MAX_CONCURRENCY = Number(process.env.APPSHEET_MAX_CONCURRENCY || 
 const APPSHEET_MAX_RETRIES = Number(process.env.APPSHEET_MAX_RETRIES || 3);
 const APPSHEET_RETRY_BASE_MS = Number(process.env.APPSHEET_RETRY_BASE_MS || 500);
 const APPSHEET_RETRY_MAX_MS = Number(process.env.APPSHEET_RETRY_MAX_MS || 5000);
+const APPSHEET_CACHE_TTL_MS = Number(process.env.APPSHEET_CACHE_TTL_MS || 5 * 60 * 1000);
 const appsheetAgent = new https.Agent({
   keepAlive: true,
   maxSockets: Math.max(APPSHEET_MAX_CONCURRENCY * 2, 8)
 });
+
+const cachedTables = new Map();
 
 let appsheetActive = 0;
 const appsheetQueue = [];
@@ -102,6 +105,23 @@ async function leerTablaAppSheet(nombreTabla) {
   return Array.isArray(data) ? data : (data.Rows || []);
 }
 
+async function leerTablaAppSheetCacheada(nombreTabla, ttlMs = APPSHEET_CACHE_TTL_MS) {
+  const now = Date.now();
+  const cached = cachedTables.get(nombreTabla);
+  if (cached && cached.expiraEn > now) {
+    return cached.promise;
+  }
+
+  const promise = leerTablaAppSheet(nombreTabla);
+  cachedTables.set(nombreTabla, { expiraEn: now + ttlMs, promise });
+  try {
+    return await promise;
+  } catch (err) {
+    cachedTables.delete(nombreTabla);
+    throw err;
+  }
+}
+
 export async function obtenerCotizacion(cotizacionId) {
   const rows = await leerTablaAppSheet("COTIZACIONES_VARIOS_CT");
   return rows.find(r => String(r["Row ID"] || r.ID) === String(cotizacionId)) || null;
@@ -113,7 +133,7 @@ export async function buscarConceptosPorCotizacion(cotizacionId) {
 }
 
 export async function mapaEmpresas() {
-  const rows = await leerTablaAppSheet("EMPRESAS");
+  const rows = await leerTablaAppSheetCacheada("EMPRESAS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = {
@@ -154,7 +174,7 @@ async function actualizarFilaAppSheet(nombreTabla, row) {
 }
 
 export async function mapaMunicipios() {
-  const rows = await leerTablaAppSheet("MUNICIPIOS");
+  const rows = await leerTablaAppSheetCacheada("MUNICIPIOS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = { nombre: r.NOMBRE || "", escudo: r.ESCUDO || "" };
@@ -163,7 +183,7 @@ export async function mapaMunicipios() {
 }
 
 export async function mapaEstados() {
-  const rows = await leerTablaAppSheet("ESTADOS");
+  const rows = await leerTablaAppSheetCacheada("ESTADOS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = { nombre: r.NOMBRE || "", escudo: r.ESCUDO || "" };
@@ -172,9 +192,8 @@ export async function mapaEstados() {
 }
 
 export async function mapaSucursales() {
-  const rows = await leerTablaAppSheet("SUCURSALES");
-  const municipios = await mapaMunicipios();
-  const estados = await mapaEstados();
+  const rows = await leerTablaAppSheetCacheada("SUCURSALES");
+  const [municipios, estados] = await Promise.all([mapaMunicipios(), mapaEstados()]);
   const map = {};
 
   rows.forEach(r => {
@@ -194,10 +213,12 @@ export async function mapaSucursales() {
 }
 
 export async function mapaCatalogo() {
-  const rows = await leerTablaAppSheet("CATALOGO");
+  const rows = await leerTablaAppSheetCacheada("CATALOGO");
   const map = {};
   rows.forEach(r => {
     map[r["Row ID"] || r.ID] = {
+      id: r["Row ID"] || r.ID || "",
+      codigo: r.CODIGO || r["CODIGO"] || r["CÓDIGO"] || r.CLAVE || r["CLAVE"] || r.ID || "",
       nombre: r.NOMBRE || "",
       tipo: r.TIPO || "",
       descripcion: r.DESCRIPCION || ""
@@ -207,7 +228,7 @@ export async function mapaCatalogo() {
 }
 
 export async function mapaProveedores() {
-  const rows = await leerTablaAppSheet("PROVEEDORES");
+  const rows = await leerTablaAppSheetCacheada("PROVEEDORES");
   const map = {};
   rows.forEach(r => {
     map[r["Row ID"] || r.ID] = {
@@ -279,6 +300,8 @@ export async function obtenerCotizacionCompleta(cotizacionId) {
       concepto_id: c.CONCEPTO,
       concepto_nombre: cat.nombre || c.CONCEPTO,
       tipo: cat.tipo || "",
+      catalogo_codigo: cat.codigo || cat.id || c.CONCEPTO || "",
+      descripcion_catalogo: cat.descripcion || "",
       cantidad: Number(c.CANTIDAD || 0),
       precio: Number(c.PRECIO || 0),
       subtotal: Number(c.SUBTOTAL || 0),

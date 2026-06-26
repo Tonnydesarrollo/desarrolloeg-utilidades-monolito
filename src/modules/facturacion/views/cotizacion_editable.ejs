@@ -292,13 +292,6 @@
                 <p>Incluye capacitación multifuncional, constancias al término y temario en primeros auxilios, incendios y evacuación.</p>
               </div>
             </label>
-            <label class="desglose-option">
-              <input type="checkbox" id="desgloseCatalogoDetalle">
-              <div>
-                <strong>Código y descripción</strong>
-                <p>Muestra el código del concepto y la descripción larga del catálogo sin alterar el formato de la cotización.</p>
-              </div>
-            </label>
           </div>
         </div>
       </div>
@@ -320,7 +313,6 @@
         var firmaPuesto = document.getElementById('firmaPuesto');
         var desglosePipc = document.getElementById('desglosePipc');
         var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
-        var desgloseCatalogoDetalle = document.getElementById('desgloseCatalogoDetalle');
         var desglosePreview = document.getElementById('desglosePreview');
         var condicionesPreview = document.getElementById('condicionesPreview');
         var preselectedDesglose = <%- JSON.stringify((typeof desglose !== 'undefined' && Array.isArray(desglose)) ? desglose : []) %>;
@@ -342,16 +334,7 @@
       temario: [
         "Primeros auxilios: Evaluación primaria de la escena, soporte básico de vida (RCP), control de hemorragias, atención de lesiones comunes y estabilización inicial de personas lesionadas.",
         "Prevención y combate de incendios: Identificación de riesgos, clasificación de fuegos, manejo y uso adecuado de extintores, así como técnicas básicas para el control y supresión de incendios en su fase inicial.",
-        "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
-      ]
-    },
-    catalogo_detalle: {
-      tag: "Catálogo",
-      titulo: "Código y descripción del catálogo",
-      intro: "Muestra el código del concepto y la descripción extendida del catálogo sin afectar el formato general de la cotización.",
-      detalles: [
-        "Usa la descripción larga capturada en AppSheet cuando exista.",
-        "Mantiene el bloque compacto para conservar la lectura del documento."
+      "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
       ]
     }
   };
@@ -444,7 +427,6 @@
           var selected = [];
           if (desglosePipc.checked) selected.push('pipc');
           if (desgloseCapacitaciones.checked) selected.push('capacitaciones');
-          if (desgloseCatalogoDetalle.checked) selected.push('catalogo_detalle');
 
           if (!selected.length) {
             desglosePreview.innerHTML = '';
@@ -492,11 +474,9 @@
         firmaSelect.addEventListener('change', updateFirma);
         desglosePipc.addEventListener('change', renderDesglose);
         desgloseCapacitaciones.addEventListener('change', renderDesglose);
-        desgloseCatalogoDetalle.addEventListener('change', renderDesglose);
 
         desglosePipc.checked = hasDesglose('pipc');
         desgloseCapacitaciones.checked = hasDesglose('capacitaciones');
-        desgloseCatalogoDetalle.checked = hasDesglose('catalogo_detalle');
         formaPagoInput.value = 'dos_pagos';
         calc();
         updateFirma();
