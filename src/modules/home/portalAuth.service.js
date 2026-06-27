@@ -26,6 +26,7 @@ const DEFAULT_CONFIG = {
   capacitaColumn: "CAPACITA",
   permisoColumn: "PERMISO",
   firmaColumn: "FIRMA",
+  birthdayColumn: "CUMPLEAÑOS",
   phoneColumn1: "TELEFONO",
   phoneColumn2: "TELEFONO 2",
   capacitacionesTable: "CAPACITACIONES",
@@ -40,6 +41,14 @@ const DEFAULT_CONFIG = {
   capacitacionesStatusColumn: "STATUS",
   capacitacionesDiplomasColumn: "DIPLOMAS",
   capacitacionesNotesColumn: "NOTAS",
+  calendarNotesTable: "CALENDARIO",
+  calendarNotesKeyColumn: "ID",
+  calendarNotesDateColumn: "FECHA",
+  calendarNotesIconColumn: "ICONO",
+  calendarNotesTitleColumn: "TITULO",
+  calendarNotesNotesColumn: "NOTAS",
+  calendarNotesEmployeesColumn: "EMPLEADOS",
+  calendarNotesColorColumn: "COLOR",
   sucursalesTable: "SUCURSALES",
   sucursalesKeyColumn: "ID",
   sucursalesLabelColumn: "LABEL",
@@ -53,6 +62,10 @@ const EMPLOYEE_CACHE = {
 };
 
 const CAPACITACION_CACHE = {
+  entries: new Map(),
+};
+
+const CALENDAR_NOTE_CACHE = {
   entries: new Map(),
 };
 
@@ -212,6 +225,138 @@ function hasTruthyValue(value) {
   return true;
 }
 
+function parseDateValue(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const isoLike = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoLike) {
+    const parsed = new Date(Number(isoLike[1]), Number(isoLike[2]) - 1, Number(isoLike[3]));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const slashMatch = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (slashMatch) {
+    const first = Number(slashMatch[1]);
+    const second = Number(slashMatch[2]);
+    let year = Number(slashMatch[3]);
+    if (year < 100) year += 2000;
+    let month = first;
+    let day = second;
+    if (first > 12 && second <= 12) {
+      day = first;
+      month = second;
+    }
+    const parsed = new Date(year, month - 1, day);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function toLocalDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getReadableTextColor(backgroundColor) {
+  const text = String(backgroundColor || "").trim();
+  const hex = text.startsWith("#") ? text.slice(1) : "";
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return "#ffffff";
+  }
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+  return luminance > 160 ? "#1a2a3a" : "#ffffff";
+}
+
+function hashStringToInt(value) {
+  const text = String(value ?? "").trim();
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash << 5) - hash + text.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function hslToHex(hue, saturation, lightness) {
+  const h = ((Number(hue) % 360) + 360) % 360 / 360;
+  const s = Math.max(0, Math.min(100, Number(saturation))) / 100;
+  const l = Math.max(0, Math.min(100, Number(lightness))) / 100;
+  const hue2rgb = (p, q, t) => {
+    let nextT = t;
+    if (nextT < 0) nextT += 1;
+    if (nextT > 1) nextT -= 1;
+    if (nextT < 1 / 6) return p + (q - p) * 6 * nextT;
+    if (nextT < 1 / 2) return q;
+    if (nextT < 2 / 3) return p + (q - p) * (2 / 3 - nextT) * 6;
+    return p;
+  };
+
+  let r;
+  let g;
+  let b;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+
+  const toHex = (value) => Math.round(value * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function getCalendarColorSeed(row = {}) {
+  return String(row.rowId || row.correo || row.nombre || row.puesto || "").trim();
+}
+
+function normalizeCalendarHexColor(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text;
+  if (/^#[0-9a-f]{3}$/i.test(text)) {
+    return `#${text.slice(1).split("").map((char) => `${char}${char}`).join("")}`;
+  }
+  return text;
+}
+
+function pickCalendarColor(seed, fallback = "#1e3a8a") {
+  const normalizedSeed = String(seed || "").trim();
+  if (normalizedSeed) {
+    const hash = hashStringToInt(normalizedSeed);
+    const hue = hash % 360;
+    const saturation = 72;
+    const lightness = 42 + (hash % 2) * 4;
+    return hslToHex(hue, saturation, lightness);
+  }
+  const normalizedFallback = String(fallback || "").trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(normalizedFallback) && normalizedFallback !== "#6b7280") {
+    return normalizedFallback;
+  }
+  const hash = hashStringToInt(normalizedFallback || "calendar");
+  return hslToHex(hash % 360, 72, 42 + (hash % 2) * 4);
+}
+
+function normalizeBirthdayValue(rawValue, targetYear = new Date().getFullYear()) {
+  const parsed = parseDateValue(rawValue);
+  if (!parsed) return { value: "", parsed: null };
+  const birthday = new Date(targetYear, parsed.getMonth(), parsed.getDate());
+  return {
+    value: toLocalDateKey(birthday),
+    parsed,
+  };
+}
+
 function buildInitialsFromName(value) {
   return String(value ?? "")
     .trim()
@@ -318,6 +463,7 @@ function getConfig() {
     capacitaColumn: firstEnv(["PORTAL_EMPLEADOS_CAPACITA_COL"], DEFAULT_CONFIG.capacitaColumn),
     permisoColumn: firstEnv(["PORTAL_EMPLEADOS_PERMISO_COL"], DEFAULT_CONFIG.permisoColumn),
     firmaColumn: firstEnv(["PORTAL_EMPLEADOS_FIRMA_COL"], DEFAULT_CONFIG.firmaColumn),
+    birthdayColumn: firstEnv(["PORTAL_EMPLEADOS_BIRTHDAY_COL"], DEFAULT_CONFIG.birthdayColumn),
     phoneColumn1: firstEnv(["PORTAL_EMPLEADOS_PHONE_COL1", "WHATSAPP_CAP_EMPLEADOS_PHONE_COL1"], DEFAULT_CONFIG.phoneColumn1),
     phoneColumn2: firstEnv(["PORTAL_EMPLEADOS_PHONE_COL2", "WHATSAPP_CAP_EMPLEADOS_PHONE_COL2"], DEFAULT_CONFIG.phoneColumn2),
     capacitacionesTable: firstEnv(["PORTAL_APPSHEET_TABLE_CAPACITACIONES", "WHATSAPP_CAP_TABLE_CAPACITACIONES", "APPSHEET_TABLE_CAPACITACIONES"], DEFAULT_CONFIG.capacitacionesTable),
@@ -328,6 +474,14 @@ function getConfig() {
     capacitacionesCedeColumn: firstEnv(["PORTAL_CAPACITACIONES_CEDE_COL", "WHATSAPP_CAP_CAPACITACIONES_CEDE_COL"], DEFAULT_CONFIG.capacitacionesCedeColumn),
     capacitacionesStatusColumn: firstEnv(["PORTAL_CAPACITACIONES_STATUS_COL", "WHATSAPP_CAP_CAPACITACIONES_STATUS_COL"], DEFAULT_CONFIG.capacitacionesStatusColumn),
     capacitacionesDiplomasColumn: firstEnv(["PORTAL_CAPACITACIONES_DIPLOMAS_COL", "WHATSAPP_CAP_CAPACITACIONES_DIPLOMAS_COL"], DEFAULT_CONFIG.capacitacionesDiplomasColumn),
+    calendarNotesTable: firstEnv(["PORTAL_APPSHEET_TABLE_CALENDARIO", "WHATSAPP_CAP_TABLE_CALENDARIO", "APPSHEET_TABLE_CALENDARIO"], DEFAULT_CONFIG.calendarNotesTable),
+    calendarNotesKeyColumn: firstEnv(["PORTAL_CALENDAR_NOTES_KEY_COL", "WHATSAPP_CAP_CALENDAR_NOTES_KEY_COL"], DEFAULT_CONFIG.calendarNotesKeyColumn),
+    calendarNotesDateColumn: firstEnv(["PORTAL_CALENDAR_NOTES_DATE_COL", "WHATSAPP_CAP_CALENDAR_NOTES_DATE_COL"], DEFAULT_CONFIG.calendarNotesDateColumn),
+    calendarNotesIconColumn: firstEnv(["PORTAL_CALENDAR_NOTES_ICON_COL", "WHATSAPP_CAP_CALENDAR_NOTES_ICON_COL"], DEFAULT_CONFIG.calendarNotesIconColumn),
+    calendarNotesTitleColumn: firstEnv(["PORTAL_CALENDAR_NOTES_TITLE_COL", "WHATSAPP_CAP_CALENDAR_NOTES_TITLE_COL"], DEFAULT_CONFIG.calendarNotesTitleColumn),
+    calendarNotesNotesColumn: firstEnv(["PORTAL_CALENDAR_NOTES_NOTES_COL", "WHATSAPP_CAP_CALENDAR_NOTES_NOTES_COL"], DEFAULT_CONFIG.calendarNotesNotesColumn),
+    calendarNotesEmployeesColumn: firstEnv(["PORTAL_CALENDAR_NOTES_EMPLOYEES_COL", "WHATSAPP_CAP_CALENDAR_NOTES_EMPLOYEES_COL"], DEFAULT_CONFIG.calendarNotesEmployeesColumn),
+    calendarNotesColorColumn: firstEnv(["PORTAL_CALENDAR_NOTES_COLOR_COL", "WHATSAPP_CAP_CALENDAR_NOTES_COLOR_COL"], DEFAULT_CONFIG.calendarNotesColorColumn),
     sucursalesTable: firstEnv(["PORTAL_SUCURSALES_TABLE", "WHATSAPP_CAP_TABLE_SUCURSALES", "APPSHEET_TABLE_SUCURSALES"], DEFAULT_CONFIG.sucursalesTable),
     sucursalesKeyColumn: firstEnv(["PORTAL_SUCURSALES_KEY_COL", "WHATSAPP_CAP_SUCURSALES_KEY_COL", "SUCURSALES_KEY_COL"], DEFAULT_CONFIG.sucursalesKeyColumn),
     sucursalesLabelColumn: firstEnv(["PORTAL_SUCURSALES_LABEL_COL", "WHATSAPP_CAP_SUCURSALES_LABEL_COL", "WHATSAPP_CAP_SUCURSALES_NAME_COL", "SUCURSALES_LABEL_COL", "SUCURSALES_NAME_COL"], DEFAULT_CONFIG.sucursalesLabelColumn),
@@ -572,22 +726,61 @@ async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
     runAsUserEmail,
   });
   const rows = Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
-  const normalized = rows.map(normalizeEmployee).filter((employee) => employee.rowId);
+  const currentYear = new Date().getFullYear();
+  const birthdayColumn = config.birthdayColumn || "CUMPLEAÑOS";
+  const birthdaySyncJobs = [];
+  const normalized = rows.map((row) => {
+    const employee = normalizeEmployee(row);
+    if (!employee.rowId) return null;
+
+    const rawBirthday = String(getFlexibleValue(row, [birthdayColumn, "CUMPLEAÑOS", "Cumpleaños", "Cumpleanos", "BIRTHDAY", "Birthday", "FECHA NACIMIENTO", "Fecha Nacimiento"]) ?? "").trim();
+    const normalizedBirthday = normalizeBirthdayValue(rawBirthday, currentYear);
+    employee.cumpleanos = normalizedBirthday.value;
+    employee.cumpleanosRaw = rawBirthday;
+    employee.cumpleanosDate = normalizedBirthday.parsed;
+    if (normalizedBirthday.value && normalizedBirthday.parsed && normalizedBirthday.parsed.getFullYear() !== currentYear) {
+      birthdaySyncJobs.push(
+        appsheetAction({
+          table: config.table,
+          action: "Edit",
+          rows: [
+            {
+              [config.keyColumn || "Row ID"]: employee.rowId,
+              [birthdayColumn]: normalizedBirthday.value,
+            },
+          ],
+        }).catch((error) => {
+          console.warn("No se pudo actualizar CUMPLEAÑOS en EMPLEADOS:", error instanceof Error ? error.message : error);
+        })
+      );
+    }
+
+    return employee;
+  }).filter(Boolean);
+
+  if (birthdaySyncJobs.length > 0) {
+    await Promise.allSettled(birthdaySyncJobs);
+  }
+
   const nameByKey = new Map();
   const initialsByKey = new Map();
+  const colorByKey = new Map();
   for (const employee of normalized) {
     nameByKey.set(employee.rowId, employee.nombre);
     initialsByKey.set(employee.rowId, employee.initials || buildInitialsFromName(employee.nombre));
+    colorByKey.set(employee.rowId, employee.calendarColor || employee.color || "");
   }
   const cacheEntry = {
     loadedAt: now,
     rows: normalized,
     nameByKey,
     initialsByKey,
+    colorByKey,
   };
   setCachedEntry(EMPLOYEE_CACHE, runAsUserEmail, cacheEntry);
   EMPLOYEE_CACHE.nameByKey = nameByKey;
   EMPLOYEE_CACHE.initialsByKey = initialsByKey;
+  EMPLOYEE_CACHE.colorByKey = colorByKey;
   return normalized;
 }
 
@@ -644,7 +837,9 @@ function normalizeEmployee(row = {}) {
   const initials = String(row[config.initialsColumn] ?? row.INICIALES ?? "").trim() || buildInitialsFromName(nombre);
   const puesto = String(row[config.puestoColumn] ?? row.PUESTO ?? "").trim();
   const correo = normalizeEmail(row[config.emailColumn] ?? row.CORREO ?? "");
-  const color = String(row[config.colorColumn] ?? row.COLOR ?? "").trim();
+  const rawColor = String(getFlexibleValue(row, [config.colorColumn, "COLOR", "Color", "color"])).trim();
+  const color = rawColor;
+  const calendarColor = rawColor || pickCalendarColor(getCalendarColorSeed({ rowId, correo, nombre, puesto }));
   const permiso = String(row[config.permisoColumn] ?? row.PERMISO ?? "").trim();
   const firma = String(row[config.firmaColumn] ?? row.FIRMA ?? "").trim();
   const telefono = String(row[config.phoneColumn1] ?? row.TELEFONO ?? "").trim();
@@ -659,11 +854,13 @@ function normalizeEmployee(row = {}) {
     puesto,
     correo,
     color,
+    calendarColor,
     permiso,
     firma,
     telefono,
     telefono2,
     capacita,
+    cumpleanos: "",
     role,
     raw: row,
   };
@@ -967,7 +1164,7 @@ function normalizeCapacitacion(row, employeeLookups, sucursalLookups) {
   const horaFin = String(row[config.capacitacionesHourEndColumn] ?? row["HORA FIN"] ?? "").trim();
   const notesColumn = resolveCapacitacionNotesColumn(row);
   const notas = String(getFlexibleValue(row, [notesColumn, config.capacitacionesNotesColumn, "NOTAS", "Notas", "OBSERVACIONES", "OBSERVACION", "NOTA", "COMMENT", "COMMENTS"])).trim();
-  const dateObject = new Date(dateValue);
+  const dateObject = parseDateValue(dateValue);
   const diplomasValue = row[config.capacitacionesDiplomasColumn]
     ?? row.DIPLOMAS
     ?? row.DIPLOMA
@@ -982,20 +1179,25 @@ function normalizeCapacitacion(row, employeeLookups, sucursalLookups) {
   const cedeResolved = resolveSucursalDisplay(cedeRaw, sucursalLookups);
   const sucursalesResolved = resolveSucursalDisplay(row[config.capacitacionesSucursalesColumn], sucursalLookups);
 
-  const capacitadores = assignedKeys.map((key) => {
+  const uniqueAssignedKeys = [...new Set(assignedKeys)].sort((a, b) => a.localeCompare(b, "es"));
+  const capacitadores = uniqueAssignedKeys.map((key) => {
     const nombre = employeeLookups.nameByKey.get(key) || key;
+    const color = employeeLookups.colorByKey?.get(key) || "";
     return {
       key,
       nombre,
       initials: employeeLookups.initialsByKey.get(key) || buildInitialsFromName(nombre),
+      color,
+      textColor: getReadableTextColor(color),
     };
   });
+  const primaryCapacitador = capacitadores.find((item) => String(item.color || "").trim()) || capacitadores[0] || null;
 
   return {
     rowId,
     id: capacitacionId || rowId,
     dateRaw: dateValue,
-    dateLabel: Number.isNaN(dateObject.getTime()) ? dateValue : dateObject.toLocaleDateString("es-MX"),
+    dateLabel: dateObject ? dateObject.toLocaleDateString("es-MX") : dateValue,
     horaInicio,
     horaFin,
     notas,
@@ -1012,7 +1214,223 @@ function normalizeCapacitacion(row, employeeLookups, sucursalLookups) {
     statusLabel: parsedStatus.suffix || (status ? status : "Sin estado"),
     hasDiplomas: hasTruthyValue(diplomasValue),
     capacitadores,
+    primaryCapacitadorColor: String(primaryCapacitador?.color || "").trim(),
     raw: row,
+  };
+}
+
+function buildBirthdayCalendarEvent(employee) {
+  const date = parseDateValue(employee?.cumpleanos || employee?.cumpleanosRaw);
+  if (!date) return null;
+
+  const calendarColor = String(employee?.calendarColor || employee?.color || "").trim() || pickCalendarColor(employee?.rowId || employee?.nombre || employee?.correo || "");
+  return {
+    id: `birthday-${employee.rowId}`,
+    capacitacionId: `birthday-${employee.rowId}`,
+    title: `Cumpleaños de ${employee.nombre || "Empleado"}`,
+    start: toLocalDateKey(date),
+    allDay: true,
+    backgroundColor: "#ffffff",
+    borderColor: "#d9e2ec",
+    textColor: "#1a2a3a",
+    classNames: ["fc-event-birthday"],
+    extendedProps: {
+      eventType: "birthday",
+      statusLabel: "Cumpleaños",
+      dateLabel: date.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }),
+      notes: "",
+      employeeName: employee.nombre || "",
+      employeeRole: employee.puesto || "",
+      employeeColor: calendarColor,
+      employeeColorText: getReadableTextColor(calendarColor),
+      employeeInitials: employee.initials || buildInitialsFromName(employee.nombre),
+      accentColor: calendarColor,
+    },
+  };
+}
+
+function resolveEmployeesFromTokens(tokens = [], employees = []) {
+  const normalizedTokens = Array.isArray(tokens) ? tokens : extractListTokens(tokens);
+  if (!normalizedTokens.length || !Array.isArray(employees) || !employees.length) {
+    return [];
+  }
+
+  const matches = [];
+  const seen = new Set();
+  for (const token of normalizedTokens) {
+    for (const employee of employees) {
+      if (!employee || !employee.rowId || seen.has(employee.rowId)) continue;
+      if (!employeeMatchesToken(token, employee, {
+        nameByKey: EMPLOYEE_CACHE.nameByKey,
+        initialsByKey: EMPLOYEE_CACHE.initialsByKey,
+      })) {
+        continue;
+      }
+      seen.add(employee.rowId);
+      matches.push(employee);
+    }
+  }
+  return matches;
+}
+
+function normalizeCalendarNote(row, employeeLookups, employees = []) {
+  const config = getConfig();
+  const rowId = String(getFlexibleValue(row, [
+    config.calendarNotesKeyColumn,
+    "Row ID",
+    "ROW ID",
+    "ID",
+    "Id",
+    "id",
+  ])).trim();
+  const dateValue = String(getFlexibleValue(row, [
+    config.calendarNotesDateColumn,
+    "FECHA",
+    "Fecha",
+    "DATE",
+    "Date",
+  ])).trim();
+  const title = String(getFlexibleValue(row, [
+    config.calendarNotesTitleColumn,
+    "TITULO",
+    "Titulo",
+    "TÍTULO",
+    "Título",
+    "ASUNTO",
+    "Asunto",
+    "TITLE",
+    "Title",
+    "NOMBRE",
+    "Nombre",
+  ])).trim();
+  const notes = String(getFlexibleValue(row, [
+    config.calendarNotesNotesColumn,
+    "NOTAS",
+    "Notas",
+    "OBSERVACIONES",
+    "Observaciones",
+    "OBSERVACION",
+    "Observacion",
+    "COMMENT",
+    "Comment",
+    "COMMENTS",
+    "Comments",
+  ])).trim();
+  const icon = String(getFlexibleValue(row, [
+    config.calendarNotesIconColumn,
+    "ICONO",
+    "Icono",
+    "ICON",
+    "Icon",
+    "EMOJI",
+    "Emoji",
+  ])).trim() || "📝";
+  const rawEmployees = getFlexibleValue(row, [
+    config.calendarNotesEmployeesColumn,
+    "EMPLEADOS",
+    "Empleados",
+    "CAPACITADORES",
+    "Capacitadores",
+    "USUARIOS",
+    "Usuarios",
+  ]);
+  const employeeTokens = extractListTokens(rawEmployees);
+  const hasGlobalAudience = employeeTokens.some((token) => {
+    const normalized = String(token || "").trim().toUpperCase();
+    return ["TODOS", "ALL", "TODAS", "*"].includes(normalized);
+  });
+  const taggedEmployees = hasGlobalAudience ? [] : resolveEmployeesFromTokens(employeeTokens, employees);
+  const resolvedAllEmployees = Array.isArray(employees) && employees.length > 0
+    ? resolveEmployeesFromTokens(employeeTokens, employees).length === employees.length
+    : false;
+  const audienceAll = hasGlobalAudience || resolvedAllEmployees;
+  const parsedDate = parseDateValue(dateValue);
+  const colorSeed = rowId || title || notes || employeeTokens.join("|");
+  const color = String(getFlexibleValue(row, [
+    config.calendarNotesColorColumn,
+    "COLOR",
+    "Color",
+  ])).trim() || pickCalendarColor(colorSeed, "#b45309");
+
+  return {
+    rowId,
+    id: rowId,
+    dateRaw: dateValue,
+    dateLabel: parsedDate ? parsedDate.toLocaleDateString("es-MX") : dateValue,
+    title: title || "Nota",
+    notes,
+    icon,
+    employeeTokens,
+    audienceAll,
+    employeeKeys: audienceAll ? [] : taggedEmployees.map((employee) => employee.rowId),
+    employeeNames: audienceAll
+      ? ["TODOS"]
+      : taggedEmployees.map((employee) => employee.nombre).filter(Boolean),
+    employeeSummaries: audienceAll
+      ? [{
+          rowId: "TODOS",
+          nombre: "TODOS",
+          initials: "TODOS",
+          color: "#b45309",
+          textColor: "#ffffff",
+        }]
+      : taggedEmployees.map((employee) => ({
+          rowId: employee.rowId,
+          nombre: employee.nombre,
+          initials: employee.initials || buildInitialsFromName(employee.nombre),
+          color: employee.calendarColor || employee.color || "",
+          textColor: getReadableTextColor(employee.calendarColor || employee.color || ""),
+        })),
+    color,
+    raw: row,
+  };
+}
+
+function calendarNoteMatchesEmployee(note, employee, employeeLookups) {
+  if (!employee) return true;
+  if (note?.audienceAll) return true;
+  const tokens = Array.isArray(note?.employeeTokens) ? note.employeeTokens : extractListTokens(note?.employeeTokens || note?.employeeNames || note?.employeeKeys || []);
+  const hasGlobalAudience = tokens.some((token) => {
+    const normalized = String(token || "").trim().toUpperCase();
+    return ["TODOS", "ALL", "TODAS", "*"].includes(normalized);
+  });
+  if (hasGlobalAudience) return true;
+  if (!tokens.length) return true;
+  return tokens.some((token) => employeeMatchesToken(token, employee, employeeLookups));
+}
+
+export function buildCalendarNoteEvent(note, selectedEmployeeId, returnPath) {
+  const parsedDate = parseDateValue(note.dateRaw || note.dateLabel);
+  if (!parsedDate) return null;
+  const textColor = getReadableTextColor(note.color);
+  return {
+    id: note.rowId,
+    capacitacionId: note.rowId,
+    title: note.title || "Nota",
+    start: toLocalDateKey(parsedDate),
+    allDay: true,
+    dateRaw: note.dateRaw || "",
+    backgroundColor: "#ffffff",
+    borderColor: "#d9e2ec",
+    textColor: "#1a2a3a",
+    classNames: ["fc-event-note"],
+    extendedProps: {
+      eventType: "calendar-note",
+      statusLabel: "Nota",
+      dateLabel: note.dateLabel || "",
+      dateRaw: note.dateRaw || "",
+      notes: note.notes || "",
+      noteTitle: note.title || "Nota",
+      noteIcon: note.icon || "📝",
+      noteId: note.rowId,
+      employeeTokens: Array.isArray(note.employeeTokens) ? note.employeeTokens : [],
+      employeeKeys: Array.isArray(note.employeeKeys) ? note.employeeKeys : [],
+      employeeNames: Array.isArray(note.employeeNames) ? note.employeeNames : [],
+      employeeSummaries: Array.isArray(note.employeeSummaries) ? note.employeeSummaries : [],
+      audienceAll: Boolean(note.audienceAll),
+      primaryColor: note.color,
+      accentColor: note.color,
+    },
   };
 }
 
@@ -1043,6 +1461,7 @@ async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "
   const employeeLookups = {
     nameByKey: EMPLOYEE_CACHE.nameByKey,
     initialsByKey: EMPLOYEE_CACHE.initialsByKey,
+    colorByKey: EMPLOYEE_CACHE.colorByKey,
   };
   const sucursalLookups = {
     labelByKey: SUCURSAL_CACHE.labelByKey,
@@ -1056,9 +1475,119 @@ async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "
   return normalized;
 }
 
+async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = "") {
+  const config = getConfig();
+  if (!config.appId || !config.accessKey) {
+    throw new Error("Faltan credenciales de AppSheet para el portal");
+  }
+
+  const now = Date.now();
+  const cached = getCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail);
+  if (!force && cached?.rows?.length > 0 && now - cached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+    return cached.rows;
+  }
+
+  if (!config.calendarNotesTable) {
+    setCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail, {
+      loadedAt: now,
+      rows: [],
+    });
+    return [];
+  }
+
+  const employees = await fetchEmployeesFromAppSheet(false, runAsUserEmail);
+  let normalized = [];
+  try {
+    const data = await appsheetAction({
+      table: config.calendarNotesTable,
+      action: "Find",
+      selector: `Filter(${config.calendarNotesTable}, true)`,
+      runAsUserEmail,
+    });
+    const rows = extractAppSheetDataRows(data);
+    const employeeLookups = {
+      nameByKey: EMPLOYEE_CACHE.nameByKey,
+      initialsByKey: EMPLOYEE_CACHE.initialsByKey,
+    };
+    normalized = rows
+      .map((row) => normalizeCalendarNote(row, employeeLookups, employees))
+      .filter((item) => item.rowId);
+  } catch (error) {
+    console.warn("No se pudieron leer las notas del calendario:", error instanceof Error ? error.message : error);
+    normalized = [];
+  }
+
+  setCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail, {
+    loadedAt: now,
+    rows: normalized,
+  });
+  return normalized;
+}
+
+async function saveCalendarNote(noteData, runAsUserEmail = "") {
+  const config = getConfig();
+  if (!config.calendarNotesTable) {
+    throw new Error("No hay una tabla de calendario configurada.");
+  }
+
+  const dateValue = String(noteData?.dateRaw || noteData?.dateLabel || noteData?.fecha || noteData?.fechaRaw || "").trim();
+  const parsedDate = parseDateValue(dateValue) || new Date();
+  const normalizedDate = toLocalDateKey(parsedDate);
+  const title = String(noteData?.title || noteData?.titulo || "Nota").trim() || "Nota";
+  const notes = String(noteData?.notes || noteData?.notas || "").trim();
+  const employeeValues = Array.isArray(noteData?.employees) ? noteData.employees : extractListTokens(noteData?.employees || noteData?.empleados || []);
+  const employees = await fetchEmployeesFromAppSheet(false, runAsUserEmail);
+  const normalizedEmployeeValues = employeeValues
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  const hasGlobalAudience = normalizedEmployeeValues.some((value) => ["TODOS", "ALL", "TODAS", "*"].includes(value.toUpperCase()));
+  const resolvedEmployees = hasGlobalAudience ? employees : resolveEmployeesFromTokens(normalizedEmployeeValues, employees);
+  const employeeFieldValue = resolvedEmployees.length
+    ? resolvedEmployees.map((employee) => employee.rowId).join(", ")
+    : hasGlobalAudience
+      ? "TODOS"
+      : normalizedEmployeeValues.length
+        ? normalizedEmployeeValues.join(", ")
+        : "";
+  const icon = String(noteData?.icon || noteData?.icono || noteData?.ICONO || "").trim() || "📝";
+  const color = String(noteData?.color || noteData?.COLOR || "").trim() || pickCalendarColor(title || notes || normalizedDate, "#b45309");
+  const currentRowId = String(noteData?.rowId || noteData?.id || "").trim();
+  const payload = {
+    [config.calendarNotesDateColumn || "FECHA"]: normalizedDate,
+    [config.calendarNotesIconColumn || "ICONO"]: icon,
+    [config.calendarNotesTitleColumn || "TITULO"]: title,
+    [config.calendarNotesNotesColumn || "NOTAS"]: notes,
+    [config.calendarNotesEmployeesColumn || "EMPLEADOS"]: employeeFieldValue,
+    [config.calendarNotesColorColumn || "COLOR"]: color,
+  };
+
+  if (currentRowId) {
+    payload[config.calendarNotesKeyColumn || "ID"] = currentRowId;
+    await appsheetAction({
+      table: config.calendarNotesTable,
+      action: "Edit",
+      rows: [payload],
+      runAsUserEmail,
+    });
+  } else {
+    payload[config.calendarNotesKeyColumn || "ID"] = crypto.randomUUID();
+    await appsheetAction({
+      table: config.calendarNotesTable,
+      action: "Add",
+      rows: [payload],
+      runAsUserEmail,
+    });
+  }
+
+  await fetchCalendarNotesFromAppSheet(true, runAsUserEmail);
+  return payload;
+}
+
 export async function getCapacitacionesDashboardData({ viewer = null, selectedEmployee = null } = {}) {
   const runAsUserEmail = normalizeEmail(viewer?.correo || selectedEmployee?.correo || "");
   const rows = await fetchCapacitacionesFromAppSheet(false, runAsUserEmail);
+  const employees = await fetchEmployeesFromAppSheet(false, runAsUserEmail);
+  const calendarNotesRows = await fetchCalendarNotesFromAppSheet(false, runAsUserEmail);
   const viewerRole = viewer?.role || "capacitador";
   const selectedRole = selectedEmployee?.role || viewerRole;
   const selectedRowId = String(selectedEmployee?.rowId || viewer?.rowId || "").trim();
@@ -1097,10 +1626,51 @@ export async function getCapacitacionesDashboardData({ viewer = null, selectedEm
       return aDate - bDate;
     });
 
+  const calendarCapacitaciones = rows
+    .filter((row) => row.dateRaw)
+    .sort((a, b) => {
+      const aDate = new Date(a.dateRaw || 0);
+      const bDate = new Date(b.dateRaw || 0);
+      return aDate - bDate;
+    });
+
+  const birthdayEvents = employees
+    .map(buildBirthdayCalendarEvent)
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aDate = new Date(a.start || 0);
+      const bDate = new Date(b.start || 0);
+      const aName = String(a?.extendedProps?.employeeName || a?.title || "");
+      const bName = String(b?.extendedProps?.employeeName || b?.title || "");
+      const byDate = aDate - bDate;
+      return byDate !== 0 ? byDate : aName.localeCompare(bName, "es");
+    });
+
+  const calendarNotes = calendarNotesRows
+    .filter((note) => {
+      if (!selectedRowId) return viewerRole === "admin";
+      const employeeMatches = calendarNoteMatchesEmployee(note, selectedEmployee, {
+        nameByKey: EMPLOYEE_CACHE.nameByKey,
+        initialsByKey: EMPLOYEE_CACHE.initialsByKey,
+      });
+      if (viewerRole === "admin" && selectedRole !== "capacitador") {
+        return true;
+      }
+      return employeeMatches;
+    })
+    .sort((a, b) => {
+      const aDate = parseDateValue(a.dateRaw || a.dateLabel)?.getTime() || 0;
+      const bDate = parseDateValue(b.dateRaw || b.dateLabel)?.getTime() || 0;
+      return aDate - bDate;
+    });
+
   return {
     visible,
     programadas,
     finalizadasSinDiplomas,
+    birthdayEvents,
+    calendarCapacitaciones,
+    calendarNotes,
   };
 }
 
@@ -1219,6 +1789,34 @@ export async function updateCapacitacionNotas(rowId, notas, runAsUserEmail = "")
   return String(notas ?? "").trim();
 }
 
+export async function upsertCalendarNote(noteData, runAsUserEmail = "") {
+  return saveCalendarNote(noteData, runAsUserEmail);
+}
+
+export async function deleteCalendarNote(noteData, runAsUserEmail = "") {
+  const config = getConfig();
+  if (!config.calendarNotesTable) {
+    throw new Error("No hay una tabla de calendario configurada.");
+  }
+
+  const rowId = String(noteData?.rowId || noteData?.id || "").trim();
+  if (!rowId) {
+    throw new Error("No se pudo identificar la nota a eliminar.");
+  }
+
+  await appsheetAction({
+    table: config.calendarNotesTable,
+    action: "Delete",
+    rows: [{
+      [config.calendarNotesKeyColumn || "ID"]: rowId,
+    }],
+    runAsUserEmail,
+  });
+
+  await fetchCalendarNotesFromAppSheet(true, runAsUserEmail);
+  return { rowId };
+}
+
 export function getRouteCardsForRole(role) {
   return role === "admin" ? GENERAL_ROUTE_CARDS : CAPACITADOR_ROUTE_CARDS;
 }
@@ -1230,10 +1828,12 @@ export function getEmployeeSummary(employee) {
     puesto: employee.puesto || "(Sin puesto)",
     correo: employee.correo || "(Sin correo)",
     color: employee.color || "",
+    calendarColor: employee.calendarColor || employee.color || "",
     permiso: employee.permiso || "",
     firma: employee.firma || "",
     telefono: employee.telefono || "",
     telefono2: employee.telefono2 || "",
+    cumpleanos: employee.cumpleanos || "",
     role: employee.role,
     capacita: employee.capacita,
     initials: employee.initials || buildInitialsFromName(employee.nombre),

@@ -314,6 +314,8 @@ function renderSplitPipcHtml() {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Separar PIPC</title>
+  <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+  <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
   <style>
     body { margin:0; font-family: Inter, system-ui, sans-serif; background: linear-gradient(180deg,#f9f5ef,#eef2f4); color:#17212b; }
     main { max-width: 1180px; margin: 0 auto; padding: 28px 18px 56px; }

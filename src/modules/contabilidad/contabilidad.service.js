@@ -92,6 +92,8 @@ export function renderContabilidadHtml(_data) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Contabilidad | DESARROLLOEG</title>
+  <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+  <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
   <style>
     :root{--surface:#ffffffec;--line:#d7ccb8;--text:#1f2937;--muted:#667085;--ok:#0b6e4f;--ok2:#114b5f;--okbg:#dff5eb;--gold:#8d5b00;--goldbg:#fff0c8;--danger:#b42318;--dangerbg:#fee4e2;--shadow:0 20px 50px rgba(20,33,61,.08)}
     *{box-sizing:border-box}

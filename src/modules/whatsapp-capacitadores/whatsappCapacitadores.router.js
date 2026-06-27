@@ -40,6 +40,8 @@ whatsappCapacitadoresRouter.get("/qr", (_req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="refresh" content="10" />
     <title>${title}</title>
+    <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+    <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
     <style>
       body {
         font-family: system-ui, sans-serif;

@@ -823,6 +823,8 @@ export function renderDashboardHtml(data) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Estado de Servicios | DESARROLLOEG</title>
+  <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+  <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
   <style>
     :root {
       --bg: #f4efe8;
