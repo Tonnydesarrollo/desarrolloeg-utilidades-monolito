@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pedidos sin liberacion</title>
+    <style>
+      :root {
+        --bg: #09111f;
+        --panel: rgba(10, 18, 32, 0.86);
+        --panel-2: rgba(18, 28, 48, 0.9);
+        --line: rgba(148, 163, 184, 0.18);
+        --text: #e5eefb;
+        --muted: #94a3b8;
+        --accent: #68d391;
+        --accent-2: #60a5fa;
+        --danger: #f87171;
+        --warning: #fbbf24;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Aptos", "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(96, 165, 250, 0.22), transparent 36%),
+          radial-gradient(circle at top right, rgba(104, 211, 145, 0.16), transparent 28%),
+          linear-gradient(180deg, #06101d, #0b1322 42%, #050a12);
+        min-height: 100vh;
+      }
+      .wrap {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .status {
+        position: sticky;
+        top: 12px;
+        z-index: 30;
+        margin-bottom: 16px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(14px);
+        color: var(--muted);
+        white-space: pre-wrap;
+      }
+      .status.ok {
+        color: #bbf7d0;
+        border-color: rgba(34, 197, 94, 0.35);
+        background: rgba(34, 197, 94, 0.12);
+      }
+      .status.err {
+        color: #fecaca;
+        border-color: rgba(248, 113, 113, 0.35);
+        background: rgba(248, 113, 113, 0.12);
+      }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-end;
+        margin-bottom: 18px;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(26px, 3vw, 42px);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .hero p {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+      .card {
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 22px 70px rgba(0, 0, 0, 0.35);
+      }
+      .toolbar {
+        display: grid;
+        grid-template-columns: 1.2fr 0.9fr 0.8fr auto;
+        gap: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .field label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .field input,
+      .field select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        padding: 12px 14px;
+        font-size: 14px;
+        outline: none;
+      }
+      .field input:focus,
+      .field select:focus {
+        border-color: rgba(96, 165, 250, 0.55);
+        box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.14);
+      }
+      .btn {
+        border: 0;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform .12s ease, opacity .12s ease, box-shadow .12s ease;
+      }
+      .btn:hover { transform: translateY(-1px); }
+      .btn.primary {
+        background: linear-gradient(135deg, var(--accent-2), var(--accent));
+        color: #08111d;
+        box-shadow: 0 10px 30px rgba(96, 165, 250, 0.22);
+      }
+      .btn.secondary {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+      .btn.danger {
+        background: rgba(248, 113, 113, 0.16);
+        color: #fecaca;
+        border: 1px solid rgba(248, 113, 113, 0.28);
+      }
+      .meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 0 16px 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .pill {
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--line);
+      }
+      .table-wrap {
+        overflow: auto;
+        border-top: 1px solid var(--line);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1200px;
+      }
+      th, td {
+        border-bottom: 1px solid var(--line);
+        padding: 12px;
+        vertical-align: top;
+        font-size: 13px;
+      }
+      th {
+        position: sticky;
+        top: 0;
+        background: rgba(7, 13, 24, 0.98);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 11px;
+        color: var(--muted);
+        z-index: 1;
+      }
+      .row-title {
+        font-weight: 800;
+      }
+      .muted { color: var(--muted); }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--line);
+      }
+      .badge.ok { color: #b7f7d0; }
+      .badge.warn { color: #fde68a; }
+      .badge.err { color: #fecaca; }
+      .badge.neutral { color: #dbeafe; }
+      .files {
+        display: grid;
+        gap: 8px;
+        min-width: 320px;
+      }
+      .file {
+        display: grid;
+        grid-template-columns: 18px 1fr auto;
+        gap: 10px;
+        align-items: start;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .file small { color: var(--muted); display: block; margin-top: 3px; }
+      .file a {
+        color: #9ecbff;
+        text-decoration: none;
+      }
+      .file a:hover { text-decoration: underline; }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .actions-cell {
+        display: grid;
+        gap: 8px;
+        min-width: 190px;
+      }
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.72);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        z-index: 100;
+      }
+      .modal-backdrop.open {
+        display: flex;
+      }
+      .modal {
+        width: min(520px, 100%);
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(9, 17, 31, 0.98));
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+        padding: 20px;
+      }
+      .modal h2 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+      .modal p {
+        margin: 0 0 14px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+      @media (max-width: 1200px) {
+        .toolbar { grid-template-columns: 1fr 1fr; }
+      }
+      @media (max-width: 760px) {
+        .toolbar { grid-template-columns: 1fr; }
+        .hero { flex-direction: column; align-items: flex-start; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="status" class="status">Cargando...</div>
+
+      <div class="hero">
+        <div>
+          <h1>Pedidos sin liberacion</h1>
+          <p>Selecciona archivos por pedido, envia por correo y marca el registro como enviado en AppSheet.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div class="field">
+            <label for="toEmail">Correo destino</label>
+            <input id="toEmail" type="email" placeholder="destino@correo.com">
+          </div>
+          <div class="field">
+            <label for="facturadorFilter">Filtrar por facturador</label>
+            <select id="facturadorFilter"></select>
+          </div>
+          <div class="field">
+            <label for="backendBaseUrl">Backend</label>
+            <input id="backendBaseUrl" type="text" readonly>
+          </div>
+          <div class="actions" style="align-self:end;">
+            <button class="btn primary" id="reloadBtn" type="button">Recargar</button>
+            <button class="btn secondary" id="sendAllBtn" type="button">Enviar visibles</button>
+            <button class="btn secondary" id="selectAllVisibleBtn" type="button">Seleccionar todos visibles</button>
+            <button class="btn secondary" id="reconcileBtn" type="button">Marcar enviados sin BD</button>
+          </div>
+        </div>
+
+        <div class="meta" id="meta"></div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Pedido</th>
+                <th>Establecimiento</th>
+                <th>Facturador</th>
+                <th>Enviado</th>
+                <th>Archivos encontrados</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody id="rowsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="resendModalBackdrop" class="modal-backdrop" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="resendModalTitle">
+        <h2 id="resendModalTitle">Pedido ya enviado</h2>
+        <p id="resendModalMessage">Este pedido ya fue enviado. Si continúas, se reenviará con el mismo correo destino.</p>
+        <div class="modal-actions">
+          <button class="btn secondary" id="resendCancelBtn" type="button">CANCELAR</button>
+          <button class="btn danger" id="resendConfirmBtn" type="button">REENVIAR</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const FACTURADORES = [
+        { id: '', label: 'Todos' },
+        { id: 'EiHiUQ9YHf4mA-C7L_ziyc', label: 'SERGIO GONZALEZ CASTILLO' },
+        { id: 'xwDqa6Mt6a42iqKHzJG9L6', label: 'GONZALEZ GAMEZ Y ASOCIADOS' },
+      ];
+
+      const FACTURADOR_LABELS = FACTURADORES.reduce((acc, item) => {
+        if (item.id) acc[item.id] = item.label;
+        return acc;
+      }, {});
+
+      const state = {
+        rows: [],
+        backendBaseUrl: '',
+        mailQuotaRemaining: null,
+        sentIndex: {},
+        busy: new Set(),
+        selected: new Map(),
+      };
+
+      const rowsBody = document.getElementById('rowsBody');
+      const statusBox = document.getElementById('status');
+      const metaBox = document.getElementById('meta');
+      const toEmail = document.getElementById('toEmail');
+      const facturadorFilter = document.getElementById('facturadorFilter');
+      const backendBaseUrl = document.getElementById('backendBaseUrl');
+      const reloadBtn = document.getElementById('reloadBtn');
+      const sendAllBtn = document.getElementById('sendAllBtn');
+      const selectAllVisibleBtn = document.getElementById('selectAllVisibleBtn');
+      const reconcileBtn = document.getElementById('reconcileBtn');
+      const resendModalBackdrop = document.getElementById('resendModalBackdrop');
+      const resendModalMessage = document.getElementById('resendModalMessage');
+      const resendCancelBtn = document.getElementById('resendCancelBtn');
+      const resendConfirmBtn = document.getElementById('resendConfirmBtn');
+
+      let resendModalResolve = null;
+
+      function esc(value) {
+        return String(value == null ? '' : value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      }
+
+      facturadorFilter.innerHTML = FACTURADORES.map((item) => '<option value="' + esc(item.id) + '">' + esc(item.label) + '</option>').join('');
+
+      function setStatus(message, kind) {
+        statusBox.className = 'status ' + (kind || '');
+        statusBox.textContent = message;
+      }
+
+      function setMeta(items) {
+        metaBox.innerHTML = items.map((item) => '<span class="pill">' + esc(item) + '</span>').join('');
+      }
+
+      function openResendConfirm(message) {
+        resendModalMessage.textContent = message;
+        resendModalBackdrop.classList.add('open');
+        resendModalBackdrop.setAttribute('aria-hidden', 'false');
+        return new Promise((resolve) => {
+          resendModalResolve = resolve;
+        });
+      }
+
+      function closeResendConfirm(result) {
+        resendModalBackdrop.classList.remove('open');
+        resendModalBackdrop.setAttribute('aria-hidden', 'true');
+        if (resendModalResolve) {
+          const resolve = resendModalResolve;
+          resendModalResolve = null;
+          resolve(result);
+        }
+      }
+
+      function mailQuotaLabel() {
+        if (state.mailQuotaRemaining === null || state.mailQuotaRemaining === undefined) {
+          return 'Cuota correo: sin dato';
+        }
+        return 'Cuota correo restante: ' + state.mailQuotaRemaining;
+      }
+
+      function sentStateForRow(row) {
+        const sent = state.sentIndex[String(row.pedido || '').trim()];
+        if (row.enviadoBool) return { kind: 'db', label: 'YA EN BD' };
+        if (sent) return { kind: 'local', label: 'ENVIADO SIN MARCAR' };
+        return { kind: 'pending', label: 'PENDIENTE' };
+      }
+
+      function currentRows() {
+        const filter = facturadorFilter.value.trim();
+        if (!filter) return state.rows;
+        return state.rows.filter((row) => String(row.facturadorId || row.facturador || '').trim() === filter);
+      }
+
+      function collectSelectedFiles(row) {
+        const rowId = row.pedido + '::' + row.establecimiento;
+        const selectedPaths = state.selected.get(rowId) || [];
+        const files = Array.isArray(row.matchedFiles) ? row.matchedFiles : [];
+        return files.filter((file) => selectedPaths.includes(file.relativePath));
+      }
+
+      function render() {
+        const rows = currentRows();
+        setMeta([
+          'Pedidos: ' + rows.length,
+          'Configurado para: ' + (state.backendBaseUrl || 'sin configurar'),
+          mailQuotaLabel(),
+          'Vista: SIN LIBERACION',
+        ]);
+
+        if (!rows.length) {
+          rowsBody.innerHTML = '<tr><td colspan="6" class="muted">No hay registros para mostrar.</td></tr>';
+          return;
+        }
+
+        rowsBody.innerHTML = rows.map((row, index) => {
+          const rowId = row.pedido + '::' + row.establecimiento;
+          const busy = state.busy.has(rowId);
+          const sentState = sentStateForRow(row);
+          const files = Array.isArray(row.matchedFiles) ? row.matchedFiles : [];
+          const fileHtml = files.length
+            ? '<div class="files">' + files.map((file, fileIndex) => {
+                const checkboxId = 'file-' + index + '-' + fileIndex;
+                const selected = (state.selected.get(rowId) || []).includes(file.relativePath);
+                return '<label class="file" for="' + checkboxId + '">'
+                  + '<input id="' + checkboxId + '" type="checkbox" data-row="' + rowId + '" data-path="' + esc(file.relativePath) + '" data-file="' + esc(JSON.stringify(file)) + '"' + (selected ? ' checked' : '') + '>'
+                  + '<span>'
+                  + '<span class="row-title">' + esc(file.name) + '</span>'
+                  + '<small>' + esc(file.mimeType || '') + ' · ' + esc(file.size || 0) + ' bytes</small>'
+                  + '</span>'
+                  + '<a href="' + esc(state.backendBaseUrl + file.downloadUrl) + '" target="_blank" rel="noreferrer">Abrir</a>'
+                  + '</label>';
+              }).join('') + '</div>'
+            : '<span class="badge warn">Sin coincidencias</span>';
+
+          return '<tr data-row="' + rowId + '">'
+            + '<td><div class="row-title">' + esc(row.pedido) + '</div></td>'
+            + '<td>' + esc(row.establecimiento) + '</td>'
+            + '<td>' + esc(row.facturadorNombre || FACTURADOR_LABELS[String(row.facturadorId || row.facturador || '').trim()] || row['facturador.nombre'] || '') + '</td>'
+            + '<td>' + (sentState.kind === 'db' ? '<span class="badge ok">YA EN BD</span>' : (sentState.kind === 'local' ? '<span class="badge err">ENVIADO SIN MARCAR</span>' : '<span class="badge warn">PENDIENTE</span>')) + '</td>'
+            + '<td>' + fileHtml + '</td>'
+            + '<td>'
+            + '<div class="actions-cell">'
+            + '<button class="btn primary" type="button" data-send="' + rowId + '"' + (busy ? ' disabled' : '') + '>' + (sentState.kind === 'pending' ? 'Enviar' : 'Reenviar') + '</button>'
+            + '<button class="btn secondary" type="button" data-select-all="' + rowId + '"' + (busy ? ' disabled' : '') + '>Seleccionar todos</button>'
+            + '</div>'
+            + '</td>'
+            + '</tr>';
+        }).join('');
+
+        rowsBody.querySelectorAll('[data-send]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const rowId = button.getAttribute('data-send');
+            const row = rows.find((candidate) => (candidate.pedido + '::' + candidate.establecimiento) === rowId);
+            if (row) sendRow(row).catch((error) => setStatus(error && error.message ? error.message : 'Error inesperado', 'err'));
+          });
+        });
+
+        rowsBody.querySelectorAll('[data-select-all]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const rowId = button.getAttribute('data-select-all');
+            const row = rows.find((candidate) => (candidate.pedido + '::' + candidate.establecimiento) === rowId);
+            if (!row) return;
+            const files = Array.isArray(row.matchedFiles) ? row.matchedFiles : [];
+            state.selected.set(rowId, files.map((file) => file.relativePath));
+            render();
+          });
+        });
+
+        rowsBody.querySelectorAll('input[type="checkbox"][data-row]').forEach((input) => {
+          input.addEventListener('change', () => {
+            const rowId = input.getAttribute('data-row');
+            const path = input.getAttribute('data-path');
+            const current = state.selected.get(rowId) || [];
+            const next = input.checked
+              ? Array.from(new Set(current.concat([path])))
+              : current.filter((candidate) => candidate !== path);
+            if (next.length) {
+              state.selected.set(rowId, next);
+            } else {
+              state.selected.delete(rowId);
+            }
+          });
+        });
+      }
+
+      function setBusy(row, busy) {
+        const rowId = row.pedido + '::' + row.establecimiento;
+        if (busy) state.busy.add(rowId);
+        else state.busy.delete(rowId);
+        render();
+      }
+
+      function runServer(fn, arg) {
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)[fn](arg);
+        });
+      }
+
+      function selectAllFilesForVisibleRows() {
+        const rows = currentRows();
+        rows.forEach((row) => {
+          const rowId = row.pedido + '::' + row.establecimiento;
+          const files = Array.isArray(row.matchedFiles) ? row.matchedFiles : [];
+          if (files.length) {
+            state.selected.set(rowId, files.map((file) => file.relativePath));
+          }
+        });
+        render();
+      }
+
+      async function loadRows() {
+        setStatus('Cargando pedidos...', '');
+        state.backendBaseUrl = await runServer('getBackendBaseUrl');
+        const quota = await runServer('getMailQuotaInfo');
+        state.mailQuotaRemaining = quota && quota.remaining !== undefined ? quota.remaining : null;
+        const sentIndex = await runServer('getPedidosLeySentIndex', 45);
+        state.sentIndex = sentIndex && sentIndex.index ? sentIndex.index : {};
+        backendBaseUrl.value = state.backendBaseUrl || '';
+        const data = await runServer('getPedidosLeyData', facturadorFilter.value);
+        state.rows = Array.isArray(data.rows) ? data.rows : [];
+        state.busy.clear();
+        state.selected.clear();
+        render();
+        setStatus('Listo. Registros: ' + state.rows.length + '.', 'ok');
+      }
+
+      async function sendRow(row, options) {
+        const refreshAfter = !options || options.refreshAfter !== false;
+        const to = String(toEmail.value || '').trim();
+        if (!to) {
+          setStatus('Captura el correo destino antes de enviar.', 'err');
+          return;
+        }
+        if (state.mailQuotaRemaining !== null && state.mailQuotaRemaining <= 0) {
+          setStatus('La cuota diaria de correo ya se agoto.', 'err');
+          return;
+        }
+        const selectedFiles = collectSelectedFiles(row);
+        if (!selectedFiles.length) {
+          setStatus('Selecciona al menos un archivo para el pedido ' + row.pedido + '.', 'err');
+          return;
+        }
+
+        const sentState = sentStateForRow(row);
+        if (sentState.kind !== 'pending') {
+          const confirmed = await openResendConfirm(
+            'El pedido ' + row.pedido + ' ya fue enviado. Si continúas, se reenviará al correo: ' + to + '.'
+          );
+          if (!confirmed) {
+            setStatus('Reenvio cancelado para el pedido ' + row.pedido + '.', '');
+            return;
+          }
+        }
+
+        setBusy(row, true);
+        setStatus((sentState.kind === 'pending' ? 'Enviando' : 'Reenviando') + ' pedido ' + row.pedido + '...', '');
+        try {
+          const result = await runServer('sendPedidoLeyEmail', {
+            pedido: row.pedido,
+            rowId: row.rowId || '',
+            to: to,
+            facturadorNombre: row.facturadorNombre || FACTURADOR_LABELS[String(row.facturadorId || row.facturador || '').trim()] || row['facturador.nombre'] || '',
+            files: selectedFiles,
+          });
+          const extraError = [result && result.logError ? result.logError : '', result && result.markError ? result.markError : ''].filter(Boolean).join(' | ');
+          setStatus('Pedido ' + row.pedido + ' enviado correctamente.' + (extraError ? ' ' + extraError : ''), result && result.marked ? 'ok' : 'err');
+          state.sentIndex[String(row.pedido || '').trim()] = {
+            pedido: String(row.pedido || '').trim(),
+            sentAt: new Date().toISOString(),
+            to: to,
+            subject: 'Pedido ' + row.pedido,
+          };
+          if (state.mailQuotaRemaining !== null) {
+            state.mailQuotaRemaining = Math.max(0, Number(state.mailQuotaRemaining) - 1);
+          }
+          if (refreshAfter) {
+            await loadRows();
+          }
+          return result;
+        } finally {
+          setBusy(row, false);
+        }
+      }
+
+      async function sendVisible() {
+        const rows = currentRows();
+        const queue = rows
+          .map((row) => {
+            const selectedFiles = collectSelectedFiles(row);
+            const files = selectedFiles.length ? selectedFiles : (Array.isArray(row.matchedFiles) ? row.matchedFiles : []);
+            return { row: row, files: files };
+          })
+          .filter((entry) => entry.files.length);
+
+        if (!queue.length) {
+          setStatus('No hay pedidos visibles con archivos disponibles para enviar.', 'err');
+          return;
+        }
+
+        for (const entry of queue) {
+          const row = entry.row;
+          if (state.busy.has(row.pedido + '::' + row.establecimiento)) continue;
+          state.selected.set(row.pedido + '::' + row.establecimiento, entry.files.map((file) => file.relativePath));
+          await sendRow(row, { refreshAfter: false });
+        }
+        await loadRows();
+      }
+
+      reloadBtn.addEventListener('click', () => {
+        loadRows().catch((error) => setStatus(error && error.message ? error.message : 'No se pudo cargar la informacion', 'err'));
+      });
+
+      sendAllBtn.addEventListener('click', () => {
+        sendVisible().catch((error) => setStatus(error && error.message ? error.message : 'No se pudo enviar', 'err'));
+      });
+
+      selectAllVisibleBtn.addEventListener('click', () => {
+        selectAllFilesForVisibleRows();
+        setStatus('Se seleccionaron todos los archivos visibles.', 'ok');
+      });
+
+      reconcileBtn.addEventListener('click', () => {
+        setStatus('Reconciliando pedidos enviados sin marcar...', '');
+        runServer('reconcilePedidosLeyEnviados')
+          .then((result) => {
+            const updated = result && result.result && result.result.updated !== undefined ? result.result.updated : 0;
+            setStatus('Reconciliacion completada. Pedidos marcados: ' + updated + '.', 'ok');
+            return loadRows();
+          })
+          .catch((error) => setStatus(error && error.message ? error.message : 'No se pudo reconciliar', 'err'));
+      });
+
+      facturadorFilter.addEventListener('change', () => {
+        loadRows().catch((error) => setStatus(error && error.message ? error.message : 'No se pudo cargar la informacion', 'err'));
+      });
+
+      resendCancelBtn.addEventListener('click', () => closeResendConfirm(false));
+      resendConfirmBtn.addEventListener('click', () => closeResendConfirm(true));
+      resendModalBackdrop.addEventListener('click', (event) => {
+        if (event.target === resendModalBackdrop) closeResendConfirm(false);
+      });
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && resendModalBackdrop.classList.contains('open')) {
+          closeResendConfirm(false);
+        }
+      });
+
+      loadRows().catch((error) => {
+        setStatus(error && error.message ? error.message : 'No se pudo iniciar la pantalla', 'err');
+      });
+    </script>
+  </body>
+</html>
