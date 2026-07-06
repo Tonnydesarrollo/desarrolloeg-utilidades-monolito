@@ -33,6 +33,7 @@ const runtime = {
 const menuContext = new Map();
 const uploadContext = new Map();
 const storePhotosContext = new Map();
+const archivoContext = new Map();
 
 const employeesCache = {
   ts: 0,
@@ -41,8 +42,14 @@ const employeesCache = {
   nameByKey: new Map(),
 };
 
+const empresasCache = {
+  ts: 0,
+  rowsByKey: new Map(),
+};
+
 const sucursalesCache = {
   ts: 0,
+  rows: [],
   nameByKey: new Map(),
   keyByTienda: new Map(),
   driveByKey: new Map(),
@@ -79,6 +86,8 @@ function normalizePhone(raw) {
 function normalizeText(text) {
   return String(text || "")
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -88,6 +97,168 @@ function splitList(raw) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function splitWords(raw) {
+  return normalizeText(raw)
+    .split(" ")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function levenshteinDistance(a, b) {
+  const left = String(a || "");
+  const right = String(b || "");
+  if (!left.length) return right.length;
+  if (!right.length) return left.length;
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const current = new Array(right.length + 1).fill(0);
+
+  for (let i = 1; i <= left.length; i += 1) {
+    current[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const substitution = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + substitution
+      );
+    }
+    for (let j = 0; j <= right.length; j += 1) previous[j] = current[j];
+  }
+
+  return previous[right.length];
+}
+
+function stringSimilarity(left, right) {
+  const a = normalizeText(left);
+  const b = normalizeText(right);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) {
+    const shorter = Math.min(a.length, b.length);
+    const longer = Math.max(a.length, b.length);
+    return Math.min(0.98, 0.72 + (shorter / Math.max(longer, 1)) * 0.26);
+  }
+
+  const maxLen = Math.max(a.length, b.length);
+  if (!maxLen) return 0;
+  const distance = levenshteinDistance(a, b);
+  return Math.max(0, 1 - distance / maxLen);
+}
+
+function normalizeDisplay(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function getFirstFlexible(row, keys) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+    if (row && typeof row === "object") {
+      const normalizedKey = normalizeText(key);
+      const matchKey = Object.keys(row).find((candidateKey) => normalizeText(candidateKey) === normalizedKey);
+      const matchValue = matchKey ? row[matchKey] : undefined;
+      if (matchValue !== undefined && matchValue !== null && String(matchValue).trim() !== "") {
+        return matchValue;
+      }
+    }
+  }
+  return "";
+}
+
+function uniqueDisplayParts(values) {
+  const parts = [];
+  for (const value of values) {
+    const text = normalizeDisplay(value);
+    if (!text) continue;
+    if (!parts.some((part) => normalizeText(part) === normalizeText(text))) {
+      parts.push(text);
+    }
+  }
+  return parts;
+}
+
+function isLikelyIdentifier(value) {
+  const text = normalizeDisplay(value);
+  if (!text) return true;
+  if (/^\d+$/.test(text)) return true;
+  if (/^[A-Z0-9_-]{3,}$/.test(text) && !/\s/.test(text)) return true;
+  return false;
+}
+
+function getFieldValues(row, fields) {
+  return fields
+    .map((field) => normalizeDisplay(row[field]))
+    .filter(Boolean);
+}
+
+function scoreSucursalCandidate(query, candidate) {
+  const normalizedQuery = normalizeText(query);
+  const searchText = candidate.searchText || "";
+  if (!normalizedQuery || !searchText) return 0;
+
+  let score = 0;
+  const exactText = stringSimilarity(normalizedQuery, searchText);
+  score = Math.max(score, exactText * 0.8);
+
+  for (const token of splitWords(normalizedQuery)) {
+    if (!token) continue;
+    if (searchText.includes(token)) {
+      score += 0.16;
+      continue;
+    }
+
+    let bestTokenScore = 0;
+    for (const sourceToken of candidate.tokens) {
+      const tokenScore = stringSimilarity(token, sourceToken);
+      if (tokenScore > bestTokenScore) bestTokenScore = tokenScore;
+    }
+
+    if (bestTokenScore >= 0.82) {
+      score += 0.14 * bestTokenScore;
+    } else if (bestTokenScore >= 0.65) {
+      score += 0.08 * bestTokenScore;
+    }
+  }
+
+  const normalizedTokens = splitWords(normalizedQuery);
+  if (normalizedTokens.length) {
+    const hits = normalizedTokens.filter((token) => searchText.includes(token)).length;
+    score += (hits / normalizedTokens.length) * 0.18;
+  }
+
+  if (candidate.tienda && normalizedQuery === normalizeText(candidate.tienda)) score = Math.max(score, 1);
+  if (candidate.key && normalizedQuery === normalizeText(candidate.key)) score = Math.max(score, 0.98);
+
+  return Math.max(0, Math.min(score, 1));
+}
+
+function buildSucursalDisplay(candidate) {
+  const label = normalizeDisplay(candidate.label || candidate.nombreComercial || candidate.tienda || candidate.key || "");
+  const leftSide = uniqueDisplayParts([
+    candidate.empresa,
+    candidate.razonSocial,
+  ])
+    .filter((part) => !label || normalizeText(part) !== normalizeText(label))
+    .join(" / ");
+  const fallbackLeft = uniqueDisplayParts([candidate.name, candidate.tienda, candidate.key])
+    .filter((part) => !label || normalizeText(part) !== normalizeText(label))
+    .join(" / ");
+  if (leftSide && label) return `${leftSide} | ${label}`;
+  if (fallbackLeft && label) return `${fallbackLeft} | ${label}`;
+  if (leftSide) return leftSide;
+  if (fallbackLeft) return fallbackLeft;
+  if (label) return label;
+  return normalizeDisplay(candidate.name || candidate.tienda || candidate.key || "");
+}
+
+function isStrongSucursalMatch(best, second) {
+  if (!best) return false;
+  if (best.score >= 0.93 && (!second || best.score - second.score >= 0.12)) return true;
+  if (best.score >= 0.98) return true;
+  return false;
 }
 
 function getDefaultChromePath() {
@@ -149,6 +320,8 @@ function getConfig() {
         "SUBIR IMAGENES DE CAPACITACION"
       )
     ),
+    keywordArchivo: normalizeText(readEnv(["WHATSAPP_CAP_KEYWORD_ARCHIVO", "KEYWORD_ARCHIVO"], "ARCHIVO")),
+    keywordArchivos: normalizeText(readEnv(["WHATSAPP_CAP_KEYWORD_ARCHIVOS", "KEYWORD_ARCHIVOS"], "ARCHIVOS")),
     keywordReintentar: normalizeText(
       readEnv(["WHATSAPP_CAP_KEYWORD_REINTENTAR", "KEYWORD_REINTENTAR"], "REINTENTAR")
     ),
@@ -178,6 +351,16 @@ function getConfig() {
     sucursalesTiendaCol: readEnv(["WHATSAPP_CAP_SUCURSALES_TIENDA_COL", "SUCURSALES_TIENDA_COL"], "TIENDA"),
     sucursalesNameCol: readEnv(["WHATSAPP_CAP_SUCURSALES_NAME_COL", "SUCURSALES_NAME_COL"], "NOMBRE"),
     sucursalesDriveCol: readEnv(["WHATSAPP_CAP_SUCURSALES_DRIVE_COL", "SUCURSALES_DRIVE_COL"], "DRIVE"),
+    sucursalesRazonSocialCol: readEnv(
+      ["WHATSAPP_CAP_SUCURSALES_RAZON_SOCIAL_COL", "SUCURSALES_RAZON_SOCIAL_COL"],
+      "RAZON SOCIAL"
+    ),
+    sucursalesEmpresaCol: readEnv(["WHATSAPP_CAP_SUCURSALES_EMPRESA_COL", "SUCURSALES_EMPRESA_COL"], "EMPRESA"),
+    sucursalesLabelCol: readEnv(["WHATSAPP_CAP_SUCURSALES_LABEL_COL", "SUCURSALES_LABEL_COL"], "LABEL"),
+    sucursalesNombreComercialCol: readEnv(
+      ["WHATSAPP_CAP_SUCURSALES_NOMBRE_COMERCIAL_COL", "SUCURSALES_NOMBRE_COMERCIAL_COL"],
+      "NOMBRE COMERCIAL"
+    ),
     capacitacionesDateCol,
     capacitacionesCapacitadoresCol,
     capacitacionesSucursalesCol,
@@ -296,32 +479,116 @@ async function loadEmployeesCache() {
   return employeesCache;
 }
 
+async function loadEmpresasCache() {
+  const config = ensureRuntimeConfig();
+  const ttlMs = 5 * 60 * 1000;
+  if (Date.now() - empresasCache.ts < ttlMs && empresasCache.rowsByKey.size) return empresasCache;
+
+  const data = await appsheetFind({
+    table: "EMPRESAS",
+    selector: "Filter(EMPRESAS, true)",
+  });
+
+  const rows = data.Rows || data;
+  const rowsByKey = new Map();
+
+  for (const row of rows || []) {
+    const key = String(
+      getFirstFlexible(row, ["ID", "Id", "id", "Row ID", "ROW ID", "RowId"]) ?? ""
+    ).trim();
+    if (!key) continue;
+    rowsByKey.set(key, row);
+  }
+
+  empresasCache.ts = Date.now();
+  empresasCache.rowsByKey = rowsByKey;
+  return empresasCache;
+}
+
 async function loadSucursalesCache() {
   const config = ensureRuntimeConfig();
   const ttlMs = 5 * 60 * 1000;
   if (Date.now() - sucursalesCache.ts < ttlMs) return sucursalesCache;
 
-  const data = await appsheetFind({
-    table: config.appsheetTableSucursales,
-    selector: `Filter(${config.appsheetTableSucursales}, true)`,
-  });
+  const [data, empresas] = await Promise.all([
+    appsheetFind({
+      table: config.appsheetTableSucursales,
+      selector: `Filter(${config.appsheetTableSucursales}, true)`,
+    }),
+    loadEmpresasCache(),
+  ]);
 
   const rows = data.Rows || data;
+  const searchableFields = [
+    config.sucursalesRazonSocialCol,
+    config.sucursalesEmpresaCol,
+    config.sucursalesLabelCol,
+    config.sucursalesTiendaCol,
+    config.sucursalesNameCol,
+    config.sucursalesNombreComercialCol,
+  ];
   const nameByKey = new Map();
   const keyByTienda = new Map();
   const driveByKey = new Map();
+  const indexedRows = [];
 
   for (const row of rows || []) {
     const key = row[config.sucursalesKeyCol];
     const name = row[config.sucursalesNameCol];
     const tienda = row[config.sucursalesTiendaCol];
     const drive = row[config.sucursalesDriveCol];
+    const empresaId = normalizeDisplay(getFirstFlexible(row, [config.sucursalesEmpresaCol, "ID EMPRESA", "Empresa", "EMPRESA", "empresa"]));
+    const empresaRow = empresaId ? empresas.rowsByKey.get(empresaId) || null : null;
+    const empresaDesdeFila = normalizeDisplay(
+      getFirstFlexible(row, [
+        config.sucursalesEmpresaCol,
+        "EMPRESA",
+        "Empresa",
+        "NOMBRE EMPRESA",
+        "Nombre Empresa",
+      ])
+    );
+    const empresaDesdeRelacion = normalizeDisplay(
+      getFirstFlexible(empresaRow, ["NOMBRE", "Nombre", "LABEL2", "Label2", "LABEL", "Label"])
+    );
+    const empresa = uniqueDisplayParts([
+      isLikelyIdentifier(empresaDesdeFila) ? "" : empresaDesdeFila,
+      empresaDesdeRelacion,
+    ]).join(" / ");
+    const razonSocial = normalizeDisplay(
+      getFirstFlexible(row, [
+        config.sucursalesRazonSocialCol,
+        "RAZON SOCIAL",
+        "Razón Social",
+        "Razon Social",
+        "razon social",
+      ]) || getFirstFlexible(empresaRow, ["RAZON SOCIAL", "Razón Social", "Razon Social", "razon social", "NOMBRE"])
+    );
+    const label = normalizeDisplay(row[config.sucursalesLabelCol]);
+    const nombreComercial = normalizeDisplay(row[config.sucursalesNombreComercialCol]);
+    const values = getFieldValues(row, searchableFields);
+    const searchText = normalizeText(values.join(" "));
+    const tokens = splitWords(searchText);
     if (key && name) nameByKey.set(String(key), String(name));
     if (tienda && key) keyByTienda.set(String(tienda).trim(), String(key));
     if (key && drive) driveByKey.set(String(key), String(drive).trim());
+    indexedRows.push({
+      key: key ? String(key) : "",
+      name: normalizeDisplay(name),
+      tienda: normalizeDisplay(tienda),
+      drive: normalizeDisplay(drive),
+      razonSocial,
+      empresa,
+      label,
+      nombreComercial,
+      searchText,
+      tokens,
+      raw: row,
+    });
   }
 
   sucursalesCache.ts = Date.now();
+  sucursalesCache.rows = indexedRows;
   sucursalesCache.nameByKey = nameByKey;
   sucursalesCache.keyByTienda = keyByTienda;
   sucursalesCache.driveByKey = driveByKey;
@@ -333,13 +600,25 @@ function extractDriveId(value) {
   if (!raw) return "";
   if (!raw.includes("/")) return raw;
 
+  try {
+    const url = new URL(raw);
+    const directId = url.searchParams.get("id");
+    if (directId) return directId.trim();
+  } catch {
+    // ignore invalid urls and continue with path parsing
+  }
+
   const match = raw.match(/\/folders\/([a-zA-Z0-9_-]+)/);
   if (match) return match[1];
 
   try {
     const url = new URL(raw);
     const parts = url.pathname.split("/").filter(Boolean);
-    return parts[parts.length - 1] || "";
+    const lastPart = parts[parts.length - 1] || "";
+    if (lastPart && lastPart.toLowerCase() !== "folders" && lastPart.toLowerCase() !== "open") {
+      return lastPart;
+    }
+    return "";
   } catch {
     return "";
   }
@@ -555,6 +834,25 @@ function createFlowContext() {
   };
 }
 
+function createArchivoFlowContext() {
+  return {
+    step: "query",
+    query: "",
+    matches: [],
+    selectedCandidate: null,
+    storeKey: null,
+    storeLabel: null,
+    storeDrive: null,
+    files: [],
+    failedFiles: [],
+    uploading: false,
+    retrying: false,
+    targetFolderId: "",
+    targetFolderName: "",
+    targetFolderLink: "",
+  };
+}
+
 async function beginUploadFlow(jid, client) {
   uploadContext.set(jid, createFlowContext());
   await client.sendMessage(jid, "Escribe el numero de tienda.");
@@ -563,6 +861,221 @@ async function beginUploadFlow(jid, client) {
 async function beginStorePhotosFlow(jid, client) {
   storePhotosContext.set(jid, createFlowContext());
   await client.sendMessage(jid, "Escribe el numero de tienda.");
+}
+
+async function beginArchivoFlow(jid, client) {
+  archivoContext.set(jid, createArchivoFlowContext());
+  await client.sendMessage(
+    jid,
+    "Escribe la tienda, nombre comercial o razon social para buscar la sucursal."
+  );
+}
+
+async function findSucursalCandidates(query) {
+  const cache = await loadSucursalesCache();
+  const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) return [];
+
+  const candidates = cache.rows
+    .map((row) => {
+      const candidate = {
+        key: row.key,
+        tienda: row.tienda,
+        name: row.name || cache.nameByKey.get(row.key) || "",
+        drive: row.drive || cache.driveByKey.get(row.key) || "",
+        razonSocial: row.razonSocial,
+        empresa: row.empresa,
+        label: row.label,
+        nombreComercial: row.nombreComercial,
+        searchText: row.searchText,
+        tokens: row.tokens || [],
+      };
+      return {
+        ...candidate,
+        score: scoreSucursalCandidate(normalizedQuery, candidate),
+      };
+    })
+    .filter((candidate) => candidate.score > 0.2)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      const leftLabel = buildSucursalDisplay(left);
+      const rightLabel = buildSucursalDisplay(right);
+      return leftLabel.localeCompare(rightLabel, "es");
+    });
+
+  return candidates.slice(0, 3);
+}
+
+function formatSucursalChoices(matches) {
+  return matches
+    .slice(0, 3)
+    .map((match, index) => {
+      const label = buildSucursalDisplay(match);
+      return `${index + 1}. ${label}`;
+    })
+    .join("\n");
+}
+
+function getArchivoContext(jid) {
+  return archivoContext.get(jid) || null;
+}
+
+function isArchivoFlowActive(jid) {
+  const context = getArchivoContext(jid);
+  if (!context) return false;
+  return ["query", "choose", "confirm", "collect", "retry"].includes(context.step);
+}
+
+async function cancelArchivoFlow(jid, client, message = "Proceso cancelado.") {
+  const context = getArchivoContext(jid);
+  if (!context) return false;
+  await clearFlowFiles(context);
+  archivoContext.delete(jid);
+  await client.sendMessage(jid, message);
+  return true;
+}
+
+async function failArchivoFlow(jid, client, message) {
+  await cancelArchivoFlow(jid, client, message);
+  return true;
+}
+
+async function handleArchivoSearch(jid, client, text) {
+  const context = getArchivoContext(jid);
+  if (!context || context.step !== "query") return false;
+
+  const query = String(text || "").trim();
+  if (!query) {
+    await client.sendMessage(jid, "Escribe la tienda, nombre comercial o razon social.");
+    return true;
+  }
+
+  context.query = query;
+  const candidates = await findSucursalCandidates(query);
+
+  if (!candidates.length) {
+    await client.sendMessage(
+      jid,
+      "No encontré coincidencias claras. Escribe otra referencia de la sucursal o una parte más específica."
+    );
+    return true;
+  }
+
+  const best = candidates[0];
+  const second = candidates[1] || null;
+  const strongMatch = isStrongSucursalMatch(best, second);
+
+  if (candidates.length === 1 || strongMatch) {
+    context.selectedCandidate = best;
+    context.storeKey = best.key || null;
+    context.storeLabel = best.name || best.label || best.tienda || best.key || "";
+    context.storeDrive = best.drive || "";
+    if (!context.storeDrive) {
+      return failArchivoFlow(
+        jid,
+        client,
+        `La sucursal ${buildSucursalDisplay(best)} no tiene Drive configurado. Termino el proceso.`
+      );
+    }
+    context.step = "confirm";
+    context.matches = [];
+    await client.sendMessage(jid, `Encontré: ${buildSucursalDisplay(best)}. ¿Confirmas? (SI/NO)`);
+    return true;
+  }
+
+  context.matches = candidates.slice(0, 3);
+  context.step = "choose";
+  await client.sendMessage(
+    jid,
+    `Encontré varias coincidencias. Responde 1, 2 o 3:\n${formatSucursalChoices(context.matches)}`
+  );
+  await client.sendMessage(jid, "4. Buscar otra tienda");
+  return true;
+}
+
+async function handleArchivoChoice(jid, client, text) {
+  const context = getArchivoContext(jid);
+  if (!context || context.step !== "choose") return false;
+
+  const normalized = normalizeText(text);
+  if (normalized === "cancelar") return false;
+
+  const index = Number(normalized);
+  if (!Number.isInteger(index)) {
+    context.step = "query";
+    return handleArchivoSearch(jid, client, text);
+  }
+
+  if (index === 4) {
+    context.step = "query";
+    context.matches = [];
+    context.selectedCandidate = null;
+    context.storeKey = null;
+    context.storeLabel = null;
+    context.storeDrive = null;
+    await client.sendMessage(jid, "Escribe la tienda, nombre comercial o razon social para buscar otra sucursal.");
+    return true;
+  }
+
+  if (index < 1 || index > (context.matches || []).length) {
+    await client.sendMessage(jid, "Responde con 1, 2 o 3, o 4 para buscar otra tienda.");
+    return true;
+  }
+
+  const selected = context.matches[index - 1];
+  if (!selected) {
+    context.step = "query";
+    await client.sendMessage(jid, "No pude entender la selección. Intenta de nuevo.");
+    return true;
+  }
+
+  context.selectedCandidate = selected;
+  context.storeKey = selected.key || null;
+  context.storeLabel = selected.name || selected.label || selected.tienda || selected.key || "";
+  context.storeDrive = selected.drive || "";
+  if (!context.storeDrive) {
+    return failArchivoFlow(
+      jid,
+      client,
+      `La sucursal ${buildSucursalDisplay(selected)} no tiene Drive configurado. Termino el proceso.`
+    );
+  }
+  context.step = "confirm";
+  context.matches = [];
+  await client.sendMessage(jid, `Seleccionaste: ${buildSucursalDisplay(selected)}. ¿Confirmas? (SI/NO)`);
+  return true;
+}
+
+async function handleArchivoConfirm(jid, client, text) {
+  const context = getArchivoContext(jid);
+  if (!context || context.step !== "confirm") return false;
+
+  const normalized = normalizeText(text);
+  if (normalized === "si" || normalized === "sí") {
+    context.step = "collect";
+    await client.sendMessage(
+      jid,
+      `OK. Envia el archivo y escribe "LISTO" al terminar.\nSi quieres cancelar, escribe "CANCELAR".`
+    );
+    return true;
+  }
+
+  if (normalized === "no") {
+    context.step = "query";
+    context.selectedCandidate = null;
+    context.storeKey = null;
+    context.storeLabel = null;
+    context.storeDrive = null;
+    context.matches = [];
+    await client.sendMessage(
+      jid,
+      "Escribe otra referencia de la sucursal. Puedes usar tienda, nombre comercial o razon social."
+    );
+    return true;
+  }
+
+  await client.sendMessage(jid, "Responde SI o NO.");
+  return true;
 }
 
 async function resolveStore(map, jid, client, text) {
@@ -614,14 +1127,15 @@ async function resolveFlowConfirmation(map, jid, client, text, collectMessage) {
   return true;
 }
 
-async function saveIncomingMedia(msg, context) {
+async function saveIncomingMedia(msg, context, options = {}) {
   if (!msg.hasMedia) return false;
   const media = await msg.downloadMedia();
   if (!media?.data) return false;
 
   const tmpDir = await ensureTmpDir();
   const extension = mime.extension(media.mimetype || "") || "jpg";
-  const filename = `img_${Date.now()}.${extension}`;
+  const prefix = options.prefix || "img_";
+  const filename = `${prefix}${Date.now()}.${extension}`;
   const localPath = path.join(tmpDir, filename);
   await fs.promises.writeFile(localPath, Buffer.from(media.data, "base64"));
   context.files.push(localPath);
@@ -645,6 +1159,7 @@ async function finalizeFlow(map, jid, client, options) {
   const logger = getLogger();
   const context = map.get(jid);
   if (!context || context.step !== "collect") return false;
+  const shouldNotify = options.notify !== false;
 
   if (context.uploading) {
     await client.sendMessage(jid, options.waitMessage);
@@ -741,7 +1256,7 @@ async function finalizeFlow(map, jid, client, options) {
     await client.sendMessage(jid, `Listo. Subidas: ${uploaded}/${total}`);
   }
 
-  if (config.notifyNumber) {
+  if (shouldNotify && config.notifyNumber) {
     const message = config.notifyMessage
       .replace("{SUCURSAL}", String(context.storeLabel || ""))
       .replace("{CARPETA}", folderName)
@@ -759,7 +1274,7 @@ async function finalizeFlow(map, jid, client, options) {
 
 async function retryFailedUploads(jid, client) {
   const logger = getLogger();
-  const contexts = [uploadContext, storePhotosContext];
+  const contexts = [uploadContext, storePhotosContext, archivoContext];
   const contextMap = contexts.find((map) => {
     const flow = map.get(jid);
     return flow && flow.step === "retry" && flow.failedFiles?.length;
@@ -889,7 +1404,7 @@ async function handleImage(msg) {
 }
 
 async function cancelFlow(jid, client) {
-  for (const map of [uploadContext, storePhotosContext]) {
+  for (const map of [uploadContext, storePhotosContext, archivoContext]) {
     const context = map.get(jid);
     if (!context) continue;
     await clearFlowFiles(context);
@@ -916,6 +1431,8 @@ async function handleText(client, jid, text) {
         `- ayuda\n` +
         `- ${config.keywordCapacitaciones}\n` +
         `- ${config.keywordSubirImagenes}\n` +
+        `- ${config.keywordArchivo}\n` +
+        `- ${config.keywordArchivos}\n` +
         `- ${config.keywordReintentar}`
     );
     return;
@@ -929,12 +1446,21 @@ async function handleText(client, jid, text) {
         "1.- Mis capacitaciones\n" +
         "2.- Proximas capacitaciones\n" +
         "3.- Subir imagenes de capacitacion\n" +
-        "4.- Subir fotos de la tienda"
+        "4.- Subir fotos de la tienda\n" +
+        "5.- Subir archivo"
     );
     return;
   }
 
-  if ((normalized === "1" || normalized === "2" || normalized === "3" || normalized === "4") && !hasMenuContext(jid)) {
+  if (
+    (normalized === "1" ||
+      normalized === "2" ||
+      normalized === "3" ||
+      normalized === "4" ||
+      normalized === "5") &&
+    !hasMenuContext(jid) &&
+    !isArchivoFlowActive(jid)
+  ) {
     await client.sendMessage(jid, `Escribe "${config.keywordCapacitaciones}" para ver el menu.`);
     return;
   }
@@ -943,6 +1469,15 @@ async function handleText(client, jid, text) {
     const handled = await cancelFlow(jid, client);
     if (handled) return;
   }
+
+  const handledArchivoSearch = await handleArchivoSearch(jid, client, text);
+  if (handledArchivoSearch) return;
+
+  const handledArchivoChoice = await handleArchivoChoice(jid, client, text);
+  if (handledArchivoChoice) return;
+
+  const handledArchivoConfirm = await handleArchivoConfirm(jid, client, text);
+  if (handledArchivoConfirm) return;
 
   if (normalized === "listo") {
     const finalizedUpload = await finalizeFlow(uploadContext, jid, client, {
@@ -962,6 +1497,16 @@ async function handleText(client, jid, text) {
         `${dateSafe}_${storeSafe}_${baseName}`.replace(/[^\w.\-]/g, "_"),
     });
     if (finalizedStorePhotos) return;
+
+    const finalizedArchivo = await finalizeFlow(archivoContext, jid, client, {
+      waitMessage: "Estoy subiendo el archivo, espera un momento.",
+      emptyMessage: "No recibi archivos. Envia un archivo o escribe \"CANCELAR\".",
+      buildFolderName: (label) => `ARCHIVOS ${label}`.trim(),
+      buildFilename: ({ dateSafe, storeSafe, baseName }) =>
+        `${dateSafe}_${storeSafe}_archivo_${baseName}`.replace(/[^\w.\-]/g, "_"),
+      notify: false,
+    });
+    if (finalizedArchivo) return;
   }
 
   if (normalized === config.keywordReintentar) {
@@ -973,6 +1518,8 @@ async function handleText(client, jid, text) {
   if (handledStore) return;
   const handledStorePhotosStore = await resolveStore(storePhotosContext, jid, client, normalized);
   if (handledStorePhotosStore) return;
+  const handledArchivoStore = await resolveStore(archivoContext, jid, client, normalized);
+  if (handledArchivoStore) return;
 
   const handledConfirm = await resolveFlowConfirmation(
     uploadContext,
@@ -1083,6 +1630,11 @@ async function handleText(client, jid, text) {
 
   if (normalized === "4") {
     await beginStorePhotosFlow(jid, client);
+    return;
+  }
+
+  if (normalized === "5" || normalized === config.keywordArchivo || normalized === config.keywordArchivos) {
+    await beginArchivoFlow(jid, client);
     return;
   }
 
@@ -1267,13 +1819,19 @@ async function handleIncomingMessage(msg) {
   if (msg.type === "image" || msg.hasMedia) {
     const uploadFlow = uploadContext.get(jid);
     if (uploadFlow?.step === "collect") {
-      await saveIncomingMedia(msg, uploadFlow);
+      await saveIncomingMedia(msg, uploadFlow, { prefix: "img_" });
       return;
     }
 
     const storeFlow = storePhotosContext.get(jid);
     if (storeFlow?.step === "collect") {
-      await saveIncomingMedia(msg, storeFlow);
+      await saveIncomingMedia(msg, storeFlow, { prefix: "img_" });
+      return;
+    }
+
+    const archivoFlow = archivoContext.get(jid);
+    if (archivoFlow?.step === "collect") {
+      await saveIncomingMedia(msg, archivoFlow, { prefix: "file_" });
       return;
     }
 
