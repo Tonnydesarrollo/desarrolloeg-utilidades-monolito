@@ -40,7 +40,7 @@ function Write-Log {
 }
 
 function Invoke-DockerComposeUp {
-  $command = "`"$dockerExe`" --context $dockerContext --config `"$dockerConfigDir`" compose up -d >> `"$logPath`" 2>&1"
+  $command = "`"$dockerExe`" --context $dockerContext --config `"$dockerConfigDir`" compose up -d --remove-orphans >> `"$logPath`" 2>&1"
   cmd.exe /d /c $command
   return $LASTEXITCODE
 }

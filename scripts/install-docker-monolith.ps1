@@ -163,7 +163,8 @@ function Invoke-ComposeBootstrap {
   }
 
   Set-Location $RepoRoot
-  & $dockerExe --context $dockerContext --config $dockerConfigDir compose up -d --build
+  & $dockerExe --context $dockerContext --config $dockerConfigDir compose down --remove-orphans
+  & $dockerExe --context $dockerContext --config $dockerConfigDir compose up -d --build --remove-orphans
   if ($LASTEXITCODE -ne 0) {
     throw "docker compose up -d --build fallo con codigo $LASTEXITCODE"
   }
@@ -188,7 +189,7 @@ function Register-UpdateTask {
   $startAt = (Get-Date).AddMinutes(2)
   $trigger = New-ScheduledTaskTrigger -Once -At $startAt -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
 
-  $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+  $principal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -RunLevel Highest
   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Actualizacion automatica del monolito Docker desde git"
