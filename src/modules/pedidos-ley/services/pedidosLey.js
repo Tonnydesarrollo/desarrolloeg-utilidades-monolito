@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import mime from 'mime-types';
+import { google } from 'googleapis';
 
 const APP_ID = (process.env.FINANZAS_APPSHEET_APP_ID || process.env.PEDIDOS_APPSHEET_APP_ID || process.env.APPSHEET_APP_ID || '').trim();
 const API_KEY = (process.env.FINANZAS_APPSHEET_API_KEY || process.env.PEDIDOS_APPSHEET_API_KEY || process.env.APPSHEET_API_KEY || '').trim();
@@ -8,6 +9,8 @@ const TABLE = (process.env.FINANZAS_APPSHEET_TABLE_PEDIDOS || process.env.PEDIDO
 const VIEW = (process.env.FINANZAS_APPSHEET_VIEW_SIN_LIBERACION || 'SIN LIBERACION').trim();
 const FILES_DIR = process.env.PEDIDOS_LEY_FILES_DIR || path.resolve(process.cwd(), 'runtime', 'pedidos-ley', 'files');
 const SENT_LOG_FILE = process.env.PEDIDOS_LEY_SENT_LOG_FILE || path.resolve(process.cwd(), 'runtime', 'pedidos-ley', 'sent-log.jsonl');
+const DRIVE_CREDENTIALS_PATH = process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS || process.env.FACTURACION_GOOGLE_CREDENTIALS_PATH || '';
+const DRIVE_TOKEN_PATH = process.env.PEDIDOS_GOOGLE_TOKEN_PATH || process.env.FACTURACION_GOOGLE_TOKEN_PATH || '';
 const CACHE_TTL_MS = Math.max(10_000, Number(process.env.PEDIDOS_LEY_CACHE_TTL_MS || 60_000));
 const FACTURADOR_OPTIONS = new Map([
   ['EiHiUQ9YHf4mA-C7L_ziyc', 'SERGIO GONZALEZ CASTILLO'],
@@ -20,6 +23,7 @@ let cache = {
   pending: null,
   filesAt: 0,
   files: null,
+  driveEntriesByRoot: new Map(),
 };
 
 ensureDir(FILES_DIR);
@@ -57,6 +61,10 @@ function normalizeScalarText(value) {
     return String(candidate || '').trim();
   }
   return String(value).trim();
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function extractFacturadorId(row = {}) {
@@ -108,6 +116,22 @@ function extractYear(value) {
   return null;
 }
 
+function extractDriveId(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const directPatterns = [
+    /\/folders\/([a-zA-Z0-9_-]+)/,
+    /\/d\/([a-zA-Z0-9_-]+)/,
+    /[?&]id=([a-zA-Z0-9_-]+)/,
+    /\/uc\?id=([a-zA-Z0-9_-]+)/,
+  ];
+  for (const pattern of directPatterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return /^[a-zA-Z0-9_-]{20,}$/.test(text) ? text : '';
+}
+
 function isTruthySent(value) {
   const text = normalizeText(value);
   if (!text) return false;
@@ -128,21 +152,62 @@ function getRowValue(row, keys) {
   return '';
 }
 
+function readCredentialsFile(filePath) {
+  if (!filePath) return null;
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function getDriveAuthClient() {
+  if (!DRIVE_CREDENTIALS_PATH || !DRIVE_TOKEN_PATH) {
+    return null;
+  }
+
+  const credentials = readCredentialsFile(DRIVE_CREDENTIALS_PATH);
+  const token = readCredentialsFile(DRIVE_TOKEN_PATH);
+  if (!credentials || !token) return null;
+
+  const oauthConfig = credentials.installed || credentials.web || credentials;
+  const clientId = oauthConfig.client_id;
+  const clientSecret = oauthConfig.client_secret;
+  const redirectUri = oauthConfig.redirect_uris?.[0];
+  if (!clientId || !clientSecret || !redirectUri) return null;
+
+  const auth = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  auth.setCredentials(token);
+  return auth;
+}
+
+function createDriveClient() {
+  const auth = getDriveAuthClient();
+  if (!auth) return null;
+  return google.drive({ version: 'v3', auth });
+}
+
 function normalizeRow(row = {}) {
   const rowId = normalizeScalarText(getRowValue(row, ['Row ID', 'ROW ID', 'RowId', 'ROWID', 'ID', 'Id', 'id']));
   const facturadorId = extractFacturadorId(row);
   const facturadorNombre = resolveFacturadorNombre(facturadorId, row);
-  const fecha = normalizeScalarText(getRowValue(row, ['FECHA', 'Fecha']));
+  const fecha = normalizeScalarText(getRowValue(row, ['FECHA', 'Fecha', 'fecha']));
   const status = normalizeScalarText(getRowValue(row, ['STATUS', 'Status', 'ESTATUS', 'Estatus']));
+  const pedido = normalizeScalarText(getRowValue(row, ['PEDIDO', 'NO. PEDIDO', 'NO PEDIDO', 'Pedido']));
+  const tiendaNombre = normalizeScalarText(getRowValue(row, ['tienda.nombre', 'TIENDA.NOMBRE', 'Tienda.Nombre', 'TIENDA', 'Tienda']));
+  const tiendaDrive = normalizeScalarText(getRowValue(row, ['tienda.drive', 'TIENDA.DRIVE', 'Tienda.Drive', 'DRIVE', 'Drive']));
+  const importe = normalizeScalarText(getRowValue(row, ['IMPORTE', 'Importe']));
+  const descripcion = normalizeScalarText(getRowValue(row, ['DESCRIPCION', 'Descripcion', 'DESCRIPTION']));
   return {
     rowId,
-    pedido: normalizeScalarText(getRowValue(row, ['PEDIDO', 'NO. PEDIDO', 'NO PEDIDO', 'Pedido'])),
-    establecimiento: normalizeScalarText(getRowValue(row, ['ESTABLECIMIENTO', 'TIENDA', 'No. Tienda', 'No. tienda', 'No tienda'])),
+    pedido,
+    tienda: tiendaNombre,
+    tiendaDrive,
+    establecimiento: tiendaNombre || normalizeScalarText(getRowValue(row, ['ESTABLECIMIENTO', 'TIENDA', 'No. Tienda', 'No. tienda', 'No tienda'])),
     facturadorId,
     facturadorNombre,
     fecha,
     fechaYear: extractYear(fecha),
     status,
+    importe,
+    descripcion,
     enviado: normalizeScalarText(getRowValue(row, ['ENVIADO', 'Enviado'])),
     raw: row,
   };
@@ -240,6 +305,7 @@ function appendSentLog(entry = {}) {
     pedido,
     rowId: String(entry.rowId || '').trim(),
     to: String(entry.to || '').trim(),
+    fromEmail: String(entry.fromEmail || '').trim(),
     facturadorId: String(entry.facturadorId || '').trim(),
     facturadorNombre: String(entry.facturadorNombre || '').trim(),
     subject: String(entry.subject || '').trim(),
@@ -288,6 +354,123 @@ function getCachedFiles(forceRefresh = false) {
   return files;
 }
 
+async function listDriveChildren(drive, folderId, pageToken = '') {
+  const response = await drive.files.list({
+    q: `'${folderId}' in parents and trashed=false`,
+    fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, size, webViewLink, webContentLink, parents)',
+    pageSize: 1000,
+    pageToken: pageToken || undefined,
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true,
+    corpora: 'allDrives',
+  });
+
+  return {
+    files: Array.isArray(response?.data?.files) ? response.data.files : [],
+    nextPageToken: response?.data?.nextPageToken || '',
+  };
+}
+
+async function collectDriveEntries(drive, rootId) {
+  if (!drive || !rootId) return [];
+  const queue = [rootId];
+  const visitedFolders = new Set();
+  const results = [];
+
+  while (queue.length) {
+    const folderId = queue.shift();
+    if (!folderId || visitedFolders.has(folderId)) continue;
+    visitedFolders.add(folderId);
+
+    let pageToken = '';
+    do {
+      const page = await listDriveChildren(drive, folderId, pageToken);
+      for (const file of page.files) {
+        const mimeType = String(file.mimeType || '').trim();
+        const normalizedName = normalizeLooseName(file.name);
+        const entry = {
+          id: String(file.id || '').trim(),
+          name: String(file.name || '').trim(),
+          mimeType,
+          modifiedTime: String(file.modifiedTime || '').trim(),
+          size: Number(file.size || 0),
+          webViewLink: String(file.webViewLink || '').trim(),
+          webContentLink: String(file.webContentLink || '').trim(),
+          normalizedName,
+        };
+
+        if (mimeType === 'application/vnd.google-apps.folder') {
+          queue.push(entry.id);
+        } else {
+          results.push(entry);
+        }
+      }
+      pageToken = page.nextPageToken || '';
+    } while (pageToken);
+  }
+
+  return results;
+}
+
+async function getDriveEntriesForRoot(rootId, forceRefresh = false) {
+  const normalizedRoot = String(rootId || '').trim();
+  if (!normalizedRoot) return [];
+
+  const driveClient = createDriveClient();
+  if (!driveClient) return [];
+
+  const cacheKey = normalizedRoot;
+  const cached = cache.driveEntriesByRoot.get(cacheKey);
+  const now = Date.now();
+  if (!forceRefresh && cached && now - cached.at < CACHE_TTL_MS) {
+    return cached.entries;
+  }
+
+  const entries = await collectDriveEntries(driveClient, normalizedRoot);
+  cache.driveEntriesByRoot.set(cacheKey, { at: now, entries });
+  return entries;
+}
+
+function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
+  const storeText = normalizeLooseName(tienda || '');
+  const driveText = String(tiendaDrive || '').trim();
+  const keywords = [
+    ['PIPC'],
+    ['PLAN DE CONTINGENCIAS', 'PLANES DE CONTINGENCIA'],
+  ];
+  const source = Array.isArray(entries) ? entries : [];
+  const matches = source.filter((entry) => {
+    const text = normalizeLooseName(entry.name || '');
+    if (!text) return false;
+    return keywords.some((group) => group.some((term) => text.includes(normalizeLooseName(term))));
+  });
+
+  matches.sort((a, b) => {
+    const score = (entry) => {
+      const text = normalizeLooseName(entry.name || '');
+      const exactStore = storeText && text.includes(storeText) ? 3 : 0;
+      const pipc = text.includes('PIPC') ? 2 : 0;
+      const contingency = text.includes('PLAN DE CONTINGENCIAS') || text.includes('PLANES DE CONTINGENCIA') ? 1 : 0;
+      const driveHint = driveText && text.includes(driveText) ? 1 : 0;
+      return exactStore + pipc + contingency + driveHint;
+    };
+    const diff = score(b) - score(a);
+    if (diff !== 0) return diff;
+    return a.name.localeCompare(b.name, 'es');
+  });
+
+  return matches.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    relativePath: entry.id,
+    size: entry.size,
+    mimeType: entry.mimeType,
+    mtimeMs: entry.modifiedTime ? Date.parse(entry.modifiedTime) : 0,
+    openUrl: entry.webViewLink || `https://drive.google.com/file/d/${entry.id}/view`,
+    downloadUrl: `/api/pedidos-ley/files?path=${encodeURIComponent(entry.id)}`,
+  }));
+}
+
 function matchFilesForStore(establecimiento, files) {
   const value = String(establecimiento || '').trim();
   if (!value) return [];
@@ -304,9 +487,8 @@ function matchFilesForStore(establecimiento, files) {
   return matches;
 }
 
-function buildResponse(rows, { facturadorId = '', includeSent = false, forceRefresh = false } = {}) {
+async function buildResponse(rows, { facturadorId = '', includeSent = false, forceRefresh = false } = {}) {
   const normalizedFacturador = normalizeText(facturadorId);
-  const files = getCachedFiles(forceRefresh);
   const sentLog = readSentLog();
   const sentByPedido = new Map();
   for (const entry of sentLog) {
@@ -316,28 +498,42 @@ function buildResponse(rows, { facturadorId = '', includeSent = false, forceRefr
 
   const filtered = (Array.isArray(rows) ? rows : [])
     .map(normalizeRow)
-    .filter((row) => row.pedido && row.establecimiento)
+    .filter((row) => row.pedido && (row.tienda || row.establecimiento))
     .filter((row) => includeSent || !isTruthySent(row.enviado))
     .filter((row) => !normalizedFacturador || normalizeText(row.facturadorId) === normalizedFacturador);
 
-  const enriched = filtered.map((row) => {
-    const matchedFiles = matchFilesForStore(row.establecimiento, files).map((file) => ({
-      name: file.name,
-      relativePath: file.relativePath,
-      size: file.size,
-      mimeType: file.mimeType,
-      mtimeMs: file.mtimeMs,
-      downloadUrl: `/api/pedidos-ley/files?path=${encodeURIComponent(file.relativePath)}`,
-    }));
+  const enriched = [];
+  for (const row of filtered) {
+    const driveRoot = extractDriveId(row.tiendaDrive);
+    let matchedFiles = [];
+    const driveClient = createDriveClient();
+    if (driveRoot && driveClient) {
+      const driveEntries = await getDriveEntriesForRoot(driveRoot, forceRefresh);
+      matchedFiles = matchStoreFiles(driveEntries, row.tienda || row.establecimiento || '', row.tiendaDrive);
+    } else {
+      const files = getCachedFiles(forceRefresh);
+      matchedFiles = matchFilesForStore(row.tienda || row.establecimiento, files).map((file) => ({
+        name: file.name,
+        relativePath: file.relativePath,
+        size: file.size,
+        mimeType: file.mimeType,
+        mtimeMs: file.mtimeMs,
+        downloadUrl: `/api/pedidos-ley/files?path=${encodeURIComponent(file.relativePath)}`,
+      }));
+    }
 
-    return {
+    enriched.push({
       pedido: row.pedido,
       rowId: row.rowId,
+      tienda: row.tienda,
+      tiendaDrive: row.tiendaDrive,
       establecimiento: row.establecimiento,
       facturadorId: row.facturadorId,
       fecha: row.fecha,
       fechaYear: row.fechaYear,
       status: row.status,
+      importe: row.importe,
+      descripcion: row.descripcion,
       'facturador.nombre': row.facturadorNombre,
       facturador: row.facturadorId,
       facturadorNombre: row.facturadorNombre,
@@ -346,10 +542,11 @@ function buildResponse(rows, { facturadorId = '', includeSent = false, forceRefr
       sentLocal: sentByPedido.has(row.pedido),
       sentLocalAt: sentByPedido.get(row.pedido)?.sentAt || '',
       sentLocalTo: sentByPedido.get(row.pedido)?.to || '',
+      sentLocalFrom: sentByPedido.get(row.pedido)?.fromEmail || '',
       matchedFiles,
       matchedCount: matchedFiles.length,
-    };
-  });
+    });
+  }
 
   return {
     ok: true,
@@ -399,22 +596,85 @@ export function resolvePedidoLeyFile(relativePath) {
   const filesDir = path.resolve(getFilesDir());
   const absolutePath = path.resolve(filesDir, safeRelative);
   if (!absolutePath.startsWith(filesDir + path.sep) && absolutePath !== filesDir) {
+    const driveId = extractDriveId(safeRelative);
+    if (driveId) {
+      return { kind: 'drive', fileId: driveId };
+    }
     throw new Error('Ruta de archivo no permitida');
   }
   if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
+    const driveId = extractDriveId(safeRelative);
+    if (driveId) {
+      return { kind: 'drive', fileId: driveId };
+    }
     throw new Error(`Archivo no encontrado: ${safeRelative}`);
   }
 
-  return absolutePath;
+  return { kind: 'local', absolutePath };
 }
 
 export function streamPedidoLeyFile(res, relativePath) {
-  const absolutePath = resolvePedidoLeyFile(relativePath);
-  const filename = path.basename(absolutePath);
+  const resolved = resolvePedidoLeyFile(relativePath);
+  if (resolved.kind === 'drive') {
+    const driveClient = createDriveClient();
+    if (!driveClient) {
+      throw new Error('No hay credenciales de Drive configuradas');
+    }
+
+    return driveClient.files.get(
+      {
+        fileId: resolved.fileId,
+        alt: 'media',
+        supportsAllDrives: true,
+      },
+      { responseType: 'stream' },
+    ).then((response) => {
+      const filename = String(response?.headers?.['content-disposition'] || '').match(/filename="?([^"]+)"?/i)?.[1] || resolved.fileId;
+      const contentType = String(response?.headers?.['content-type'] || '').trim() || 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `inline; filename="${String(filename).replace(/"/g, '\\"')}"`);
+      return response.data.pipe(res);
+    });
+  }
+
+  const filename = path.basename(resolved.absolutePath);
   const mimeType = mime.lookup(filename) || 'application/octet-stream';
   res.setHeader('Content-Type', mimeType);
-  res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '\\"')}"`);
-  return fs.createReadStream(absolutePath).pipe(res);
+  res.setHeader('Content-Disposition', `inline; filename="${filename.replace(/"/g, '\\"')}"`);
+  return fs.createReadStream(resolved.absolutePath).pipe(res);
+}
+
+export async function readPedidoLeyAttachment(relativePath) {
+  const resolved = resolvePedidoLeyFile(relativePath);
+  if (resolved.kind === 'drive') {
+    const driveClient = createDriveClient();
+    if (!driveClient) {
+      throw new Error('No hay credenciales de Drive configuradas');
+    }
+
+    const response = await driveClient.files.get(
+      {
+        fileId: resolved.fileId,
+        alt: 'media',
+        supportsAllDrives: true,
+      },
+      { responseType: 'arraybuffer' },
+    );
+
+    const filename = String(response?.headers?.['content-disposition'] || '').match(/filename="?([^"]+)"?/i)?.[1] || resolved.fileId;
+    const contentType = String(response?.headers?.['content-type'] || '').trim() || 'application/octet-stream';
+    return {
+      filename,
+      mimeType: contentType,
+      content: Buffer.from(response.data),
+    };
+  }
+
+  return {
+    filename: path.basename(resolved.absolutePath),
+    mimeType: mime.lookup(path.basename(resolved.absolutePath)) || 'application/octet-stream',
+    content: fs.readFileSync(resolved.absolutePath),
+  };
 }
 
 export async function markPedidoLeyEnviado({ pedido, rowId, enviado } = {}) {
@@ -425,7 +685,7 @@ export async function markPedidoLeyEnviado({ pedido, rowId, enviado } = {}) {
 
   const payload = {
     PEDIDO: pedidoValue,
-    ENVIADO: true,
+    ENVIADO: enviado === false ? false : true,
   };
 
   return appsheetAction('Edit', [payload]);
@@ -480,6 +740,7 @@ export function clearPedidosLeyCache() {
     pending: null,
     filesAt: 0,
     files: null,
+    driveEntriesByRoot: new Map(),
   };
 }
 

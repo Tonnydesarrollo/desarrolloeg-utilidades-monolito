@@ -120,6 +120,13 @@ const GENERAL_ROUTE_CARDS = [
     href: "/FALTANTES-LEY/",
   },
   {
+    tone: "blue",
+    label: "Pedidos",
+    title: "Pedidos sin liberacion",
+    description: "Envio de pedidos, archivos de Drive y control de enviados para admins.",
+    href: "/pedidos-sin-liberacion",
+  },
+  {
     tone: "teal",
     label: "Reporte",
     title: "Solventaciones",

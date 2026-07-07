@@ -24,6 +24,8 @@ import {
   updateCapacitacionNotas,
 } from "./portalAuth.service.js";
 import { getFaltantesLeyData } from "../faltantes-ley/faltantesLey.service.js";
+import { buildPedidosLeySenderAuthUrl, exchangePedidosLeySenderAuthCode } from "../pedidos-ley/services/pedidosLeyMail.js";
+import { renderPedidosSinLiberacionPage } from "../pedidos-ley/pedidosLey.page.js";
 
 export const homeRouter = express.Router();
 
@@ -4318,6 +4320,14 @@ homeRouter.get("/auth/google/callback", async (req, res) => {
   }
 
   try {
+    if (receivedState.startsWith("pedidos-ley-sender:")) {
+      const nextPath = decodeURIComponent(receivedState.split(":").slice(1).join(":") || "/pedidos-sin-liberacion");
+      await exchangePedidosLeySenderAuthCode(code);
+      res.setHeader("Set-Cookie", buildClearOAuthStateCookieHeader({ secure }));
+      res.redirect(nextPath.startsWith("/") ? nextPath : "/pedidos-sin-liberacion");
+      return;
+    }
+
     const profile = await exchangeGoogleAuthCode(code);
     const employee = await authenticateEmployeeByEmail(profile.email);
     const token = await createSessionForEmployee(employee);
@@ -4488,6 +4498,41 @@ homeRouter.get("/dashboard/general", async (req, res) => {
     calendarPath: req.path,
     calendarQuery: req.query,
   }));
+});
+
+homeRouter.get("/pedidos-sin-liberacion", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.redirect("/login");
+    return;
+  }
+
+  if (user.role !== "admin") {
+    res.status(403).type("html").send(renderLoginPage("Solo los administradores pueden abrir pedidos sin liberacion."));
+    return;
+  }
+
+  res.type("html").send(renderPedidosSinLiberacionPage({ user }));
+});
+
+homeRouter.get("/pedidos-sin-liberacion/sender/connect", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.redirect("/login");
+    return;
+  }
+
+  if (user.role !== "admin") {
+    res.status(403).type("html").send(renderLoginPage("Solo los administradores pueden conectar un remitente."));
+    return;
+  }
+
+  const nextPath = String(req.query.next || "/pedidos-sin-liberacion").trim();
+  const safeNext = nextPath.startsWith("/") ? nextPath : "/pedidos-sin-liberacion";
+  const state = `pedidos-ley-sender:${encodeURIComponent(safeNext)}`;
+  const secure = isRequestSecure(req);
+  res.setHeader("Set-Cookie", `${getOAuthStateCookieName()}=${encodeURIComponent(state)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secure ? "; Secure" : ""}`);
+  res.redirect(buildPedidosLeySenderAuthUrl(state));
 });
 
 homeRouter.post("/dashboard/capacitaciones/:rowId/status", async (req, res) => {
