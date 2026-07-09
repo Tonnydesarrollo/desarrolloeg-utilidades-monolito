@@ -18,11 +18,13 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
   <style>
     :root {
       --bg:#07111d; --panel:rgba(11,18,32,.92); --panel2:rgba(18,28,48,.92); --line:rgba(148,163,184,.18);
-      --text:#e7effc; --muted:#93a4bd; --accent:#67d391; --accent2:#60a5fa; --danger:#f87171; --warn:#fbbf24;
+      --text:#e7effc; --muted:#93a4bd; --accent:#67d391; --accent2:#60a5fa; --danger:#f87171;
     }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:Segoe UI, Aptos, sans-serif; color:var(--text);
-      background: radial-gradient(circle at top left, rgba(96,165,250,.16), transparent 35%), radial-gradient(circle at top right, rgba(103,211,145,.14), transparent 30%), linear-gradient(180deg, #06101d, #0b1322 42%, #050a12); }
+    body {
+      margin:0; font-family:Segoe UI, Aptos, sans-serif; color:var(--text);
+      background: radial-gradient(circle at top left, rgba(96,165,250,.16), transparent 35%), radial-gradient(circle at top right, rgba(103,211,145,.14), transparent 30%), linear-gradient(180deg, #06101d, #0b1322 42%, #050a12);
+    }
     .wrap { max-width: 1700px; margin:0 auto; padding:24px; }
     .status { position:sticky; top:12px; z-index:40; padding:14px 16px; margin-bottom:16px; border-radius:14px; border:1px solid var(--line); background:rgba(255,255,255,.05); backdrop-filter: blur(14px); color:var(--muted); white-space:pre-wrap; }
     .status.ok { color:#bbf7d0; border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.12); }
@@ -31,7 +33,7 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
     .hero h1 { margin:0; font-size:clamp(26px, 3vw, 42px); letter-spacing:.08em; text-transform:uppercase; }
     .hero p { margin:8px 0 0; color:var(--muted); }
     .card { background:linear-gradient(180deg,var(--panel),var(--panel2)); border:1px solid var(--line); border-radius:18px; box-shadow:0 22px 70px rgba(0,0,0,.35); }
-    .toolbar { display:grid; grid-template-columns: 1.1fr 1.1fr 1fr 1fr auto; gap:12px; padding:16px; }
+    .toolbar { display:grid; grid-template-columns: 1fr 1.2fr 1fr 1fr auto; gap:12px; padding:16px; }
     .field label { display:block; margin-bottom:8px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
     .field input, .field select, .field textarea { width:100%; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.04); color:var(--text); padding:12px 14px; font-size:14px; outline:none; }
     .field textarea { min-height:82px; resize:vertical; }
@@ -50,13 +52,12 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
     .group-head { padding:12px 14px; background:rgba(255,255,255,.04); display:flex; justify-content:space-between; gap:10px; align-items:center; }
     .group-head strong { font-size:13px; text-transform:uppercase; letter-spacing:.08em; }
     .group-head span { color:var(--muted); font-size:12px; }
-    table { width:100%; border-collapse:collapse; min-width: 1280px; }
+    table { width:100%; border-collapse:collapse; min-width: 1320px; }
     th, td { border-top:1px solid var(--line); padding:10px 12px; vertical-align:top; font-size:13px; }
     th { position:sticky; top:0; background:rgba(7,13,24,.98); text-transform:uppercase; letter-spacing:.08em; font-size:11px; color:var(--muted); z-index:1; }
     .badge { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 10px; font-size:11px; font-weight:700; background:rgba(255,255,255,.06); border:1px solid var(--line); }
     .badge.ok { color:#b7f7d0; }
     .badge.warn { color:#fde68a; }
-    .badge.err { color:#fecaca; }
     .row-title { font-weight:800; }
     .muted { color:var(--muted); }
     .files { display:grid; gap:8px; min-width:320px; }
@@ -72,7 +73,7 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
     .modal h2 { margin:0 0 10px; font-size:20px; }
     .modal p { margin:0 0 14px; color:var(--muted); line-height:1.45; }
     .modal-actions { display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
-    @media (max-width: 1200px) { .toolbar { grid-template-columns: 1fr 1fr; } table { min-width: 1120px; } }
+    @media (max-width: 1200px) { .toolbar { grid-template-columns: 1fr 1fr; } table { min-width: 1180px; } }
     @media (max-width: 760px) { .toolbar { grid-template-columns: 1fr; } .hero { flex-direction:column; align-items:flex-start; } }
   </style>
 </head>
@@ -140,8 +141,6 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       facturador: '',
       search: '',
       busy: new Set(),
-      quota: null,
-      backendBaseUrl: '',
     };
 
     const els = {
@@ -193,7 +192,15 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
         if (facturador && String(row.facturadorId || '').trim() !== facturador) return false;
         if (search) {
           const haystack = [
-            row.pedido, row.tienda, row.fecha, row.importe, row.descripcion, row.facturadorNombre,
+            row.pedido,
+            row.tiendaLabel,
+            row.tienda?.label,
+            row.fecha,
+            row.importe,
+            row.descripcion,
+            row.ultimoPipcEstatal,
+            row.ultimoPipcMunicipal,
+            row.facturadorNombre,
           ].map((v) => String(v || '').toLowerCase()).join(' ');
           if (!haystack.includes(search)) return false;
         }
@@ -242,19 +249,20 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
     function renderRow(row) {
       const busy = state.busy.has(row.pedido);
       const status = sentState(row);
-      const buttonLabel = status.kind === 'pending' ? 'Enviar' : 'Reenviar';
       const selectedCount = getSelectedFiles(row).length;
       return '<tr data-pedido="' + esc(row.pedido) + '">'
         + '<td><span class="row-title">' + esc(row.pedido) + '</span></td>'
-        + '<td>' + esc(row.tienda || row.establecimiento || '') + '</td>'
+        + '<td>' + esc(row.tiendaLabel || row.tienda?.label || row.establecimiento || '') + '</td>'
         + '<td>' + esc(row.fecha || '') + '</td>'
         + '<td>' + esc(row.importe || '') + '</td>'
         + '<td>' + esc(row.descripcion || '') + '</td>'
+        + '<td>' + esc(row.ultimoPipcEstatal || row.tienda?.ultimoPipcEstatal || '') + '</td>'
+        + '<td>' + esc(row.ultimoPipcMunicipal || row.tienda?.ultimoPipcMunicipal || '') + '</td>'
         + '<td><label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" data-toggle-enviado="' + esc(row.pedido) + '"' + (row.enviadoBool ? ' checked' : '') + '> <span class="badge ' + (row.enviadoBool ? 'ok' : 'warn') + '">' + esc(status.label) + '</span></label></td>'
         + '<td>' + renderFiles(row) + '</td>'
         + '<td>'
         + '<div class="actions-cell">'
-        + '<button class="btn primary" type="button" data-send="' + esc(row.pedido) + '"' + (busy ? ' disabled' : '') + '>' + buttonLabel + '</button>'
+        + '<button class="btn primary" type="button" data-send="' + esc(row.pedido) + '"' + (busy ? ' disabled' : '') + '>' + (status.kind === 'pending' ? 'Enviar' : 'Reenviar') + '</button>'
         + '<button class="btn secondary" type="button" data-select-all="' + esc(row.pedido) + '"' + (busy ? ' disabled' : '') + '>Seleccionar todos</button>'
         + '<div class="muted">' + esc(selectedCount) + ' seleccionados</div>'
         + '</div>'
@@ -281,7 +289,7 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
         + '<div class="group-head"><strong>' + esc(group.facturador) + '</strong><span>' + esc(group.items.length) + ' pedidos</span></div>'
         + '<div style="overflow:auto;">'
         + '<table><thead><tr>'
-        + '<th>Pedido</th><th>Tienda</th><th>Fecha</th><th>Importe</th><th>Descripcion</th><th>Enviado</th><th>Archivos</th><th>Acciones</th>'
+        + '<th>Pedido</th><th>Tienda</th><th>Fecha</th><th>Importe</th><th>Descripcion</th><th>Ultimo PIPC Estatal</th><th>Ultimo PIPC Municipal</th><th>Enviado</th><th>Archivos</th><th>Acciones</th>'
         + '</tr></thead><tbody>'
         + group.items.map(renderRow).join('')
         + '</tbody></table></div></section>').join('');
@@ -330,10 +338,10 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
             });
             row.enviadoBool = input.checked;
             setStatus('Pedido ' + row.pedido + ' actualizado.', 'ok');
-            await loadRows(false);
+            await loadRows(false, false);
           } catch (error) {
             setStatus(error.message || 'No se pudo actualizar el envio', 'err');
-            await loadRows(false);
+            await loadRows(false, false);
           }
         });
       });
@@ -368,7 +376,12 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       const text = await response.text();
       let data = {};
       if (text.trim()) {
-        try { data = JSON.parse(text); } catch { throw new Error('El backend no devolvio JSON valido.'); }
+        try {
+          data = JSON.parse(text);
+        } catch {
+          const snippet = text.trim().slice(0, 240);
+          throw new Error('El backend no devolvio JSON valido. ' + (snippet ? 'Respuesta: ' + snippet : ''));
+        }
       }
       if (!response.ok) {
         throw new Error(data.error || ('Backend fallo (' + response.status + ')'));
@@ -376,24 +389,30 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       return data;
     }
 
-    async function loadRows(showStatus = true) {
+    async function loadRows(showStatus = true, forceRefresh = false) {
       if (showStatus) setStatus('Cargando pedidos...', '');
+      const refreshParam = forceRefresh ? '&refresh=1' : '';
       const [config, senderStatus, data] = await Promise.all([
         api('/api/pedidos-ley/config'),
         api('/api/pedidos-ley/sender/status'),
-        api('/api/pedidos-ley/sin-liberacion?includeSent=1&refresh=1'),
+        api('/api/pedidos-ley/sin-liberacion?includeSent=1' + refreshParam),
       ]);
 
       state.rows = Array.isArray(data.rows) ? data.rows : [];
       state.senderStatus = senderStatus || { accounts: [], activeEmail: '' };
-      state.backendBaseUrl = '';
 
       const accounts = Array.isArray(state.senderStatus.accounts) ? state.senderStatus.accounts : [];
       els.senderSelect.innerHTML = '<option value="">-- Seleccionar remitente --</option>' + accounts.map((account) => {
         return '<option value="' + esc(account.email) + '"' + (account.email === state.senderStatus.activeEmail ? ' selected' : '') + '>' + esc(account.email) + '</option>';
       }).join('');
 
-      els.facturadorFilter.innerHTML = '<option value="">Todos</option>' + Array.from(new Map(state.rows.map((row) => [String(row.facturadorId || '').trim(), row.facturadorNombre || row.facturadorId || 'Sin facturador']))).map(([id, label]) => '<option value="' + esc(id) + '">' + esc(label) + '</option>').join('');
+      const facturadorMap = new Map();
+      state.rows.forEach((row) => {
+        const id = String(row.facturadorId || '').trim();
+        const label = row.facturadorNombre || row.facturadorId || 'Sin facturador';
+        if (id && !facturadorMap.has(id)) facturadorMap.set(id, label);
+      });
+      els.facturadorFilter.innerHTML = '<option value="">Todos</option>' + Array.from(facturadorMap.entries()).map(([id, label]) => '<option value="' + esc(id) + '">' + esc(label) + '</option>').join('');
 
       if (!els.toEmails.value.trim()) {
         els.toEmails.value = (config.defaultRecipients || DEFAULT_RECIPIENTS).join(', ');
@@ -442,13 +461,12 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
             fromEmail: els.senderSelect.value,
             facturadorNombre: row.facturadorNombre || '',
             files,
-            textBody: 'Se adjunta informacion para el pedido ' + row.pedido + '.',
-            htmlBody: '<p>Se adjunta informacion para el pedido <strong>' + esc(row.pedido) + '</strong>.</p>',
+            textBody: 'Le informamos que el trabajo correspondiente al pedido ' + row.pedido + ' ya esta listo. Adjuntamos el documento final para su revision.',
+            htmlBody: '<p>Le informamos que el trabajo correspondiente al pedido <strong>' + esc(row.pedido) + '</strong> ya esta listo.</p><p>Adjuntamos el documento final para su revision.</p>',
           }),
         });
-
         setStatus('Pedido ' + row.pedido + ' enviado correctamente desde ' + (result?.result?.from || els.senderSelect.value || 'remitente activo') + '.', 'ok');
-        await loadRows(false);
+        await loadRows(false, false);
       } catch (error) {
         setStatus(error.message || 'No se pudo enviar el pedido', 'err');
       } finally {
@@ -457,10 +475,9 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       }
     }
 
-    els.tabs = Array.from(document.querySelectorAll('[data-tab]'));
-    els.tabs.forEach((button) => {
+    Array.from(document.querySelectorAll('[data-tab]')).forEach((button) => {
       button.addEventListener('click', () => {
-        els.tabs.forEach((tab) => tab.classList.toggle('active', tab === button));
+        Array.from(document.querySelectorAll('[data-tab]')).forEach((tab) => tab.classList.toggle('active', tab === button));
         state.tab = button.getAttribute('data-tab') === 'sent' ? 'sent' : 'pending';
         render();
       });
@@ -488,11 +505,12 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
         setStatus(error.message || 'No se pudo cambiar el remitente', 'err');
       }
     });
-    els.reloadBtn.addEventListener('click', () => loadRows());
+    els.reloadBtn.addEventListener('click', () => loadRows(true, true));
     els.connectSenderBtn.addEventListener('click', () => {
-      window.location.href = '/pedidos-sin-liberacion/sender/connect?next=' + encodeURIComponent('/pedidos-sin-liberacion');
+      setStatus('El envio ahora sale desde Apps Script con contacto.gga.sc@gmail.com.', 'ok');
     });
-    loadRows().catch((error) => setStatus(error.message || 'No se pudo iniciar la pantalla', 'err'));
+
+    loadRows(true, false).catch((error) => setStatus(error.message || 'No se pudo iniciar la pantalla', 'err'));
   </script>
 </body>
 </html>`;

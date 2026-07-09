@@ -1,16 +1,16 @@
 import express from 'express';
 import {
+  debugPedidoLey,
   fetchPedidosLeySinLiberacion,
+  clearPedidosLeyRowsCache,
   markPedidoLeyEnviado,
   readPedidoLeyAttachment,
   recordPedidoLeySent,
   reconcilePedidoLeyEnviados,
   streamPedidoLeyFile,
-  clearPedidosLeyCache,
   getPedidosLeyFilesDir,
 } from './services/pedidosLey.js';
 import {
-  exchangePedidosLeySenderAuthCode,
   getPedidosLeySenderStatus,
   selectPedidosLeySenderAccount,
   sendPedidosLeyEmail,
@@ -66,12 +66,26 @@ pedidosLeyApiRouter.get('/sin-liberacion', async (req, res) => {
   }
 });
 
+pedidosLeyApiRouter.get('/debug', async (req, res) => {
+  try {
+    const user = await requireAdmin(req, res);
+    if (!user) return;
+    const pedido = String(req.query.pedido || '').trim();
+    const forceRefresh = String(req.query.refresh || '') === '1';
+    const data = await debugPedidoLey({ pedido, forceRefresh });
+    res.json(data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error desconocido';
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
 pedidosLeyApiRouter.post('/marcar-enviado', async (req, res) => {
   try {
     const user = await requireAdmin(req, res);
     if (!user) return;
     const result = await markPedidoLeyEnviado(req.body || {});
-    clearPedidosLeyCache();
+    clearPedidosLeyRowsCache();
     res.json({ ok: true, result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
@@ -84,7 +98,7 @@ pedidosLeyApiRouter.post('/toggle-enviado', async (req, res) => {
     const user = await requireAdmin(req, res);
     if (!user) return;
     const result = await markPedidoLeyEnviado(req.body || {});
-    clearPedidosLeyCache();
+    clearPedidosLeyRowsCache();
     res.json({ ok: true, result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
@@ -97,7 +111,7 @@ pedidosLeyApiRouter.post('/log-enviado', async (req, res) => {
     const user = await requireAdmin(req, res);
     if (!user) return;
     const result = recordPedidoLeySent(req.body || {});
-    clearPedidosLeyCache();
+    clearPedidosLeyRowsCache();
     res.json({ ok: true, result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
@@ -171,9 +185,21 @@ pedidosLeyApiRouter.post('/send', async (req, res) => {
 
     const result = await sendPedidosLeyEmail({
       to: payload.to || '',
-      subject: `Pedido ${String(payload.pedido || '').trim()}`,
-      textBody: String(payload.textBody || '').trim(),
-      htmlBody: String(payload.htmlBody || '').trim(),
+      subject: `Pedido ${String(payload.pedido || '').trim()} listo para entrega`,
+      textBody: String(payload.textBody || '').trim() || [
+        `Hola, buen dia.`,
+        ``,
+        `Le informamos que el trabajo correspondiente al pedido ${String(payload.pedido || '').trim()} ya esta listo.`,
+        `Adjuntamos el documento final para su revision.`,
+        ``,
+        `Quedamos atentos.`,
+      ].join('\n'),
+      htmlBody: String(payload.htmlBody || '').trim() || [
+        `<p>Hola, buen dia.</p>`,
+        `<p>Le informamos que el trabajo correspondiente al pedido <strong>${String(payload.pedido || '').trim()}</strong> ya esta listo.</p>`,
+        `<p>Adjuntamos el documento final para su revision.</p>`,
+        `<p>Quedamos atentos.</p>`,
+      ].join(''),
       attachments,
       fromEmail: payload.fromEmail || '',
     });
@@ -184,7 +210,7 @@ pedidosLeyApiRouter.post('/send', async (req, res) => {
         to: String(payload.to || '').trim(),
         fromEmail: String(payload.fromEmail || '').trim(),
         facturadorNombre: String(payload.facturadorNombre || '').trim(),
-        subject: `Pedido ${String(payload.pedido || '').trim()}`,
+        subject: `Pedido ${String(payload.pedido || '').trim()} listo para entrega`,
         sentAt: new Date().toISOString(),
       });
     } catch {
@@ -193,7 +219,7 @@ pedidosLeyApiRouter.post('/send', async (req, res) => {
 
     if (String(payload.pedido || '').trim()) {
       await markPedidoLeyEnviado({ pedido: String(payload.pedido || '').trim(), enviado: true });
-      clearPedidosLeyCache();
+      clearPedidosLeyRowsCache();
     }
 
     res.json({ ok: true, result });

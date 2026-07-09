@@ -6,12 +6,13 @@ import { google } from 'googleapis';
 const APP_ID = (process.env.FINANZAS_APPSHEET_APP_ID || process.env.PEDIDOS_APPSHEET_APP_ID || process.env.APPSHEET_APP_ID || '').trim();
 const API_KEY = (process.env.FINANZAS_APPSHEET_API_KEY || process.env.PEDIDOS_APPSHEET_API_KEY || process.env.APPSHEET_API_KEY || '').trim();
 const TABLE = (process.env.FINANZAS_APPSHEET_TABLE_PEDIDOS || process.env.PEDIDOS_APPSHEET_TABLE_PEDIDOS || 'PEDIDOS_LEY').trim();
+const SUCURSALES_TABLE = (process.env.FINANZAS_APPSHEET_TABLE_SUCURSALES || process.env.PEDIDOS_APPSHEET_TABLE_SUCURSALES || process.env.APPSHEET_TABLE_SUCURSALES || 'SUCURSALES').trim();
 const VIEW = (process.env.FINANZAS_APPSHEET_VIEW_SIN_LIBERACION || 'SIN LIBERACION').trim();
 const FILES_DIR = process.env.PEDIDOS_LEY_FILES_DIR || path.resolve(process.cwd(), 'runtime', 'pedidos-ley', 'files');
 const SENT_LOG_FILE = process.env.PEDIDOS_LEY_SENT_LOG_FILE || path.resolve(process.cwd(), 'runtime', 'pedidos-ley', 'sent-log.jsonl');
 const DRIVE_CREDENTIALS_PATH = process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS || process.env.FACTURACION_GOOGLE_CREDENTIALS_PATH || '';
 const DRIVE_TOKEN_PATH = process.env.PEDIDOS_GOOGLE_TOKEN_PATH || process.env.FACTURACION_GOOGLE_TOKEN_PATH || '';
-const CACHE_TTL_MS = Math.max(10_000, Number(process.env.PEDIDOS_LEY_CACHE_TTL_MS || 60_000));
+const CACHE_TTL_MS = Math.max(10_000, Number(process.env.PEDIDOS_LEY_CACHE_TTL_MS || 15 * 60_000));
 const FACTURADOR_OPTIONS = new Map([
   ['EiHiUQ9YHf4mA-C7L_ziyc', 'SERGIO GONZALEZ CASTILLO'],
   ['xwDqa6Mt6a42iqKHzJG9L6', 'GONZALEZ GAMEZ Y ASOCIADOS'],
@@ -24,6 +25,8 @@ let cache = {
   filesAt: 0,
   files: null,
   driveEntriesByRoot: new Map(),
+  sucursalesAt: 0,
+  sucursalesLookup: null,
 };
 
 ensureDir(FILES_DIR);
@@ -63,6 +66,13 @@ function normalizeScalarText(value) {
   return String(value).trim();
 }
 
+function extractAppSheetRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.Rows)) return payload.Rows;
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  return [];
+}
+
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -91,6 +101,129 @@ function resolveFacturadorNombre(facturadorId, row = {}) {
   if (fromMap) return fromMap;
   const fromRow = normalizeScalarText(getRowValue(row, ['facturador.nombre', 'FACTURADOR.NOMBRE', 'Facturador.Nombre']));
   return fromRow;
+}
+
+function normalizeSucursalRow(row = {}) {
+  const key = normalizeScalarText(getRowValue(row, ['id', 'ID', 'Id', 'Row ID', 'ROW ID']));
+  const label = normalizeScalarText(
+    getRowValue(row, [
+      'Label',
+      'LABEL',
+      'label',
+      'sucursales[label]',
+      'SUCURSALES[LABEL]',
+      'sucursales[Label]',
+      'SUCURSALES[Label]',
+      'tienda[label]',
+      'TIENDA[LABEL]',
+      'tienda[Label]',
+      'LABEL2',
+      'Label2',
+      'title',
+      'TITLE',
+      'name',
+      'NAME',
+      'NOMBRE',
+      'Nombre',
+    ])
+  );
+  const drive = normalizeScalarText(
+    getRowValue(row, [
+      'DRIVE',
+      'Drive',
+      'drive',
+      'sucursales[drive]',
+      'SUCURSALES[DRIVE]',
+      'sucursales[Drive]',
+      'tienda[drive]',
+      'TIENDA[DRIVE]',
+      'tienda[Drive]',
+    ])
+  );
+  const tienda = normalizeScalarText(getRowValue(row, ['TIENDA', 'Tienda', 'tienda']));
+  const displayLabel = label || tienda || key;
+  return { key, label, drive, tienda, displayLabel, raw: row };
+}
+
+function collectSucursalCandidates(value) {
+  const candidates = [];
+  const add = (candidate) => {
+    const text = normalizeScalarText(candidate);
+    if (!text) return;
+    if (!candidates.includes(text)) candidates.push(text);
+  };
+
+  add(value);
+  if (value && typeof value === 'object') {
+    add(value.id);
+    add(value.ID);
+    add(value.Id);
+    add(value.key);
+    add(value.KEY);
+    add(value.value);
+    add(value.label);
+    add(value.Label);
+    add(value.name);
+    add(value.NAME);
+    add(value.tienda);
+    add(value.TIENDA);
+    add(value.drive);
+    add(value.DRIVE);
+    add(value['Row ID']);
+    add(value['ROW ID']);
+  }
+
+  return candidates;
+}
+
+function matchSucursalRow(row = {}, candidates = []) {
+  if (!row || !candidates.length) return false;
+  const fields = [
+    'id',
+    'ID',
+    'Id',
+    'Row ID',
+    'ROW ID',
+    'tienda',
+    'TIENDA',
+    'Tienda',
+    'Label',
+    'LABEL',
+    'label',
+    'LABEL2',
+    'Label2',
+    'title',
+    'TITLE',
+    'name',
+    'NAME',
+    'NOMBRE',
+    'Nombre',
+  ];
+
+  const normalizedRowValues = fields.flatMap((field) => collectSucursalCandidates(getRowValue(row, [field])));
+  return candidates.some((candidate) => normalizedRowValues.includes(candidate));
+}
+
+function resolveSucursalForPedido(tiendaValue, tiendaKey, sucursalesLookup = null) {
+  const candidates = [
+    ...collectSucursalCandidates(tiendaValue),
+    ...collectSucursalCandidates(tiendaKey),
+  ];
+
+  if (!candidates.length || !sucursalesLookup) return null;
+
+  for (const candidate of candidates) {
+    const direct = sucursalesLookup.rowByKey?.get(candidate);
+    if (direct) return direct;
+  }
+
+  for (const row of Array.isArray(sucursalesLookup.rows) ? sucursalesLookup.rows : []) {
+    if (matchSucursalRow(row, candidates)) {
+      return normalizeSucursalRow(row);
+    }
+  }
+
+  return null;
 }
 
 function extractYear(value) {
@@ -143,6 +276,25 @@ function getRowValue(row, keys) {
     if (row?.[key] !== undefined && row?.[key] !== null && String(row[key]).trim() !== '') {
       return row[key];
     }
+    const pathKey = String(key || '')
+      .replace(/\[([^\]]+)\]/g, '.$1')
+      .replace(/^\.+/, '');
+    if (pathKey.includes('.')) {
+      const parts = pathKey.split('.');
+      let current = row;
+      let found = true;
+      for (const part of parts) {
+        if (current && typeof current === 'object' && Object.prototype.hasOwnProperty.call(current, part)) {
+          current = current[part];
+        } else {
+          found = false;
+          break;
+        }
+      }
+      if (found && current !== undefined && current !== null && String(current).trim() !== '') {
+        return current;
+      }
+    }
     const normalizedKey = normalizeText(key);
     const matchedKey = Object.keys(row || {}).find((candidate) => normalizeText(candidate) === normalizedKey);
     if (matchedKey && String(row[matchedKey]).trim() !== '') {
@@ -184,23 +336,67 @@ function createDriveClient() {
   return google.drive({ version: 'v3', auth });
 }
 
-function normalizeRow(row = {}) {
+function normalizeRow(row = {}, sucursalesLookup = null) {
   const rowId = normalizeScalarText(getRowValue(row, ['Row ID', 'ROW ID', 'RowId', 'ROWID', 'ID', 'Id', 'id']));
   const facturadorId = extractFacturadorId(row);
   const facturadorNombre = resolveFacturadorNombre(facturadorId, row);
   const fecha = normalizeScalarText(getRowValue(row, ['FECHA', 'Fecha', 'fecha']));
   const status = normalizeScalarText(getRowValue(row, ['STATUS', 'Status', 'ESTATUS', 'Estatus']));
   const pedido = normalizeScalarText(getRowValue(row, ['PEDIDO', 'NO. PEDIDO', 'NO PEDIDO', 'Pedido']));
-  const tiendaNombre = normalizeScalarText(getRowValue(row, ['tienda.nombre', 'TIENDA.NOMBRE', 'Tienda.Nombre', 'TIENDA', 'Tienda']));
-  const tiendaDrive = normalizeScalarText(getRowValue(row, ['tienda.drive', 'TIENDA.DRIVE', 'Tienda.Drive', 'DRIVE', 'Drive']));
+  const tiendaValue = getRowValue(row, ['tienda', 'TIENDA', 'Tienda']);
+  const tiendaKey = normalizeScalarText(
+    (tiendaValue && typeof tiendaValue === 'object'
+      ? tiendaValue.id
+        || tiendaValue.ID
+        || tiendaValue.Id
+        || tiendaValue.key
+        || tiendaValue.KEY
+        || tiendaValue.value
+        || tiendaValue.label
+        || tiendaValue.Label
+        || tiendaValue.name
+        || tiendaValue.NAME
+      : tiendaValue)
+    || getRowValue(row, ['ESTABLECIMIENTO', 'Establecimiento', 'establecimiento'])
+  );
+  const lookupByKey = resolveSucursalForPedido(tiendaValue, tiendaKey, sucursalesLookup);
+  const tiendaObject = tiendaValue && typeof tiendaValue === 'object' ? tiendaValue : null;
+  const resolvedTiendaLabel = normalizeScalarText(
+    lookupByKey?.label
+    || lookupByKey?.displayLabel
+    || getRowValue(row, ['tienda.label', 'TIENDA.LABEL', 'Tienda.Label', 'tienda[Label]', 'tienda[title]', 'tienda.title', 'tienda.name'])
+    || getRowValue(row, ['sucursales[label]', 'SUCURSALES[LABEL]', 'sucursales[Label]', 'SUCURSALES[Label]', 'tienda[label]', 'TIENDA[LABEL]'])
+    || tiendaObject?.Label
+    || tiendaObject?.label
+    || tiendaObject?.name
+    || tiendaObject?.title
+    || tiendaKey
+  );
+  const resolvedTiendaDrive = normalizeScalarText(
+    lookupByKey?.drive
+    || getRowValue(row, ['tienda.drive', 'TIENDA.DRIVE', 'Tienda.Drive', 'tienda[drive]'])
+    || getRowValue(row, ['sucursales[drive]', 'SUCURSALES[DRIVE]', 'sucursales[Drive]', 'tienda[drive]', 'TIENDA[DRIVE]'])
+    || tiendaObject?.drive
+  );
+  const ultimoPipcEstatal = normalizeScalarText(getRowValue(row, ['ultimo pipc estatal', 'ULTIMO PIPC ESTATAL', 'ultimoPipcEstatal', 'ultimo_pipc_estatal']));
+  const ultimoPipcMunicipal = normalizeScalarText(getRowValue(row, ['ultimo municipal', 'ULTIMO MUNICIPAL', 'ultimoPipcMunicipal', 'ultimo_pipc_municipal']));
   const importe = normalizeScalarText(getRowValue(row, ['IMPORTE', 'Importe']));
   const descripcion = normalizeScalarText(getRowValue(row, ['DESCRIPCION', 'Descripcion', 'DESCRIPTION']));
+  const establecimiento = tiendaKey || normalizeScalarText(getRowValue(row, ['ESTABLECIMIENTO', 'No. Tienda', 'No. tienda', 'No tienda']));
   return {
     rowId,
     pedido,
-    tienda: tiendaNombre,
-    tiendaDrive,
-    establecimiento: tiendaNombre || normalizeScalarText(getRowValue(row, ['ESTABLECIMIENTO', 'TIENDA', 'No. Tienda', 'No. tienda', 'No tienda'])),
+    tienda: {
+      id: tiendaKey,
+      label: resolvedTiendaLabel,
+      drive: resolvedTiendaDrive,
+      ultimoPipcEstatal,
+      ultimoPipcMunicipal,
+    },
+    tiendaLabel: resolvedTiendaLabel,
+    tiendaDrive: resolvedTiendaDrive,
+    tiendaKey,
+    establecimiento,
     facturadorId,
     facturadorNombre,
     fecha,
@@ -208,17 +404,19 @@ function normalizeRow(row = {}) {
     status,
     importe,
     descripcion,
+    ultimoPipcEstatal,
+    ultimoPipcMunicipal,
     enviado: normalizeScalarText(getRowValue(row, ['ENVIADO', 'Enviado'])),
     raw: row,
   };
 }
 
-async function appsheetAction(action, rows = [], selector = '') {
+async function appsheetAction(action, rows = [], selector = '', tableName = TABLE) {
   if (!APP_ID || !API_KEY) {
     throw new Error('Faltan variables de AppSheet para finanzas');
   }
 
-  const url = `https://api.appsheet.com/api/v2/apps/${APP_ID}/tables/${encodeURIComponent(TABLE)}/Action`;
+  const url = `https://api.appsheet.com/api/v2/apps/${APP_ID}/tables/${encodeURIComponent(tableName)}/Action`;
   const body = {
     Action: action,
     Properties: {
@@ -263,9 +461,39 @@ async function appsheetAction(action, rows = [], selector = '') {
   throw lastError || new Error(`AppSheet ${action} fallo`);
 }
 
-async function appsheetFindRows(selector = '') {
-  const result = await appsheetAction('Find', [], selector);
-  return Array.isArray(result) ? result : (result?.Rows || result?.rows || []);
+async function appsheetFindRows(selector = '', tableName = TABLE) {
+  const result = await appsheetAction('Find', [], selector, tableName);
+  return extractAppSheetRows(result);
+}
+
+async function fetchSucursalesLookup(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cache.sucursalesLookup && now - cache.sucursalesAt < CACHE_TTL_MS) {
+    return cache.sucursalesLookup;
+  }
+
+  const rows = await appsheetFindRows(`Filter(${SUCURSALES_TABLE}, true)`, SUCURSALES_TABLE);
+  const rowByKey = new Map();
+  const labelByKey = new Map();
+  const driveByKey = new Map();
+
+  for (const row of rows) {
+    const sucursal = normalizeSucursalRow(row);
+    if (!sucursal.key) continue;
+    rowByKey.set(sucursal.key, sucursal);
+    if (sucursal.tienda) rowByKey.set(sucursal.tienda, sucursal);
+    if (sucursal.raw?.RowID) rowByKey.set(String(sucursal.raw.RowID).trim(), sucursal);
+    if (sucursal.raw?.['Row ID']) rowByKey.set(String(sucursal.raw['Row ID']).trim(), sucursal);
+    if (sucursal.displayLabel) labelByKey.set(sucursal.key, sucursal.displayLabel);
+    if (sucursal.tienda && sucursal.displayLabel) labelByKey.set(sucursal.tienda, sucursal.displayLabel);
+    if (sucursal.drive) driveByKey.set(sucursal.key, sucursal.drive);
+    if (sucursal.tienda && sucursal.drive) driveByKey.set(sucursal.tienda, sucursal.drive);
+  }
+
+  const lookup = { rows, rowByKey, labelByKey, driveByKey };
+  cache.sucursalesAt = now;
+  cache.sucursalesLookup = lookup;
+  return lookup;
 }
 
 function getFilesDir() {
@@ -373,12 +601,13 @@ async function listDriveChildren(drive, folderId, pageToken = '') {
 
 async function collectDriveEntries(drive, rootId) {
   if (!drive || !rootId) return [];
-  const queue = [rootId];
+  const queue = [{ id: rootId, path: '' }];
   const visitedFolders = new Set();
   const results = [];
 
   while (queue.length) {
-    const folderId = queue.shift();
+    const current = queue.shift();
+    const folderId = current.id;
     if (!folderId || visitedFolders.has(folderId)) continue;
     visitedFolders.add(folderId);
 
@@ -388,6 +617,7 @@ async function collectDriveEntries(drive, rootId) {
       for (const file of page.files) {
         const mimeType = String(file.mimeType || '').trim();
         const normalizedName = normalizeLooseName(file.name);
+        const pathLabel = current.path ? `${current.path}/${String(file.name || '').trim()}` : String(file.name || '').trim();
         const entry = {
           id: String(file.id || '').trim(),
           name: String(file.name || '').trim(),
@@ -397,10 +627,12 @@ async function collectDriveEntries(drive, rootId) {
           webViewLink: String(file.webViewLink || '').trim(),
           webContentLink: String(file.webContentLink || '').trim(),
           normalizedName,
+          pathLabel,
+          normalizedPath: normalizeLooseName(pathLabel),
         };
 
         if (mimeType === 'application/vnd.google-apps.folder') {
-          queue.push(entry.id);
+          queue.push({ id: entry.id, path: pathLabel });
         } else {
           results.push(entry);
         }
@@ -431,6 +663,31 @@ async function getDriveEntriesForRoot(rootId, forceRefresh = false) {
   return entries;
 }
 
+function createConcurrencyLimiter(limit = 6) {
+  const max = Math.max(1, Number(limit) || 1);
+  let active = 0;
+  const queue = [];
+
+  const next = () => {
+    if (active >= max) return;
+    const task = queue.shift();
+    if (!task) return;
+    active += 1;
+    Promise.resolve()
+      .then(task.fn)
+      .then(task.resolve, task.reject)
+      .finally(() => {
+        active -= 1;
+        next();
+      });
+  };
+
+  return (fn) => new Promise((resolve, reject) => {
+    queue.push({ fn, resolve, reject });
+    next();
+  });
+}
+
 function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
   const storeText = normalizeLooseName(tienda || '');
   const driveText = String(tiendaDrive || '').trim();
@@ -441,18 +698,30 @@ function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
   const source = Array.isArray(entries) ? entries : [];
   const matches = source.filter((entry) => {
     const text = normalizeLooseName(entry.name || '');
-    if (!text) return false;
-    return keywords.some((group) => group.some((term) => text.includes(normalizeLooseName(term))));
+    const pathText = normalizeLooseName(entry.pathLabel || '');
+    if (!text && !pathText) return false;
+
+    const keywordHit = keywords.some((group) => group.some((term) => text.includes(normalizeLooseName(term)) || pathText.includes(normalizeLooseName(term))));
+
+    return keywordHit;
   });
 
   matches.sort((a, b) => {
     const score = (entry) => {
       const text = normalizeLooseName(entry.name || '');
-      const exactStore = storeText && text.includes(storeText) ? 3 : 0;
-      const pipc = text.includes('PIPC') ? 2 : 0;
-      const contingency = text.includes('PLAN DE CONTINGENCIAS') || text.includes('PLANES DE CONTINGENCIA') ? 1 : 0;
-      const driveHint = driveText && text.includes(driveText) ? 1 : 0;
-      return exactStore + pipc + contingency + driveHint;
+      const pathText = normalizeLooseName(entry.pathLabel || '');
+      const pipc = text.includes('PIPC') || pathText.includes('PIPC') ? 4 : 0;
+      const contingency = text.includes('PLAN DE CONTINGENCIAS')
+        || text.includes('PLANES DE CONTINGENCIA')
+        || text.includes('PLAN DE CONTINGENCIA')
+        || pathText.includes('PLAN DE CONTINGENCIAS')
+        || pathText.includes('PLANES DE CONTINGENCIA')
+        || pathText.includes('PLAN DE CONTINGENCIA')
+        ? 3
+        : 0;
+      const storeHint = storeText && (text.includes(storeText) || pathText.includes(storeText)) ? 1 : 0;
+      const driveHint = driveText && (text.includes(driveText) || pathText.includes(driveText)) ? 1 : 0;
+      return pipc + contingency + storeHint + driveHint;
     };
     const diff = score(b) - score(a);
     if (diff !== 0) return diff;
@@ -467,6 +736,7 @@ function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
     mimeType: entry.mimeType,
     mtimeMs: entry.modifiedTime ? Date.parse(entry.modifiedTime) : 0,
     openUrl: entry.webViewLink || `https://drive.google.com/file/d/${entry.id}/view`,
+    pathLabel: entry.pathLabel,
     downloadUrl: `/api/pedidos-ley/files?path=${encodeURIComponent(entry.id)}`,
   }));
 }
@@ -496,57 +766,64 @@ async function buildResponse(rows, { facturadorId = '', includeSent = false, for
     sentByPedido.set(String(entry.pedido).trim(), entry);
   }
 
+  const driveClient = createDriveClient();
+  if (!driveClient) {
+    throw new Error('No hay credenciales de Drive configuradas para pedidos');
+  }
+  const sucursalesLookup = await fetchSucursalesLookup(forceRefresh);
   const filtered = (Array.isArray(rows) ? rows : [])
-    .map(normalizeRow)
-    .filter((row) => row.pedido && (row.tienda || row.establecimiento))
+    .map((row) => normalizeRow(row, sucursalesLookup))
+    .filter((row) => row.pedido && (row.tiendaLabel || row.tiendaKey || row.establecimiento))
     .filter((row) => includeSent || !isTruthySent(row.enviado))
     .filter((row) => !normalizedFacturador || normalizeText(row.facturadorId) === normalizedFacturador);
 
-  const enriched = [];
-  for (const row of filtered) {
-    const driveRoot = extractDriveId(row.tiendaDrive);
-    let matchedFiles = [];
-    const driveClient = createDriveClient();
-    if (driveRoot && driveClient) {
-      const driveEntries = await getDriveEntriesForRoot(driveRoot, forceRefresh);
-      matchedFiles = matchStoreFiles(driveEntries, row.tienda || row.establecimiento || '', row.tiendaDrive);
-    } else {
-      const files = getCachedFiles(forceRefresh);
-      matchedFiles = matchFilesForStore(row.tienda || row.establecimiento, files).map((file) => ({
-        name: file.name,
-        relativePath: file.relativePath,
-        size: file.size,
-        mimeType: file.mimeType,
-        mtimeMs: file.mtimeMs,
-        downloadUrl: `/api/pedidos-ley/files?path=${encodeURIComponent(file.relativePath)}`,
-      }));
-    }
+  const uniqueRoots = Array.from(new Set(
+    filtered.map((row) => extractDriveId(row.tiendaDrive)).filter(Boolean)
+  ));
+  const driveEntriesByRoot = new Map();
+  const limit = createConcurrencyLimiter(6);
+  await Promise.all(uniqueRoots.map((root) => limit(async () => {
+    const entries = await getDriveEntriesForRoot(root, forceRefresh);
+    driveEntriesByRoot.set(root, entries);
+  })));
 
-    enriched.push({
-      pedido: row.pedido,
-      rowId: row.rowId,
-      tienda: row.tienda,
-      tiendaDrive: row.tiendaDrive,
-      establecimiento: row.establecimiento,
-      facturadorId: row.facturadorId,
-      fecha: row.fecha,
-      fechaYear: row.fechaYear,
-      status: row.status,
-      importe: row.importe,
-      descripcion: row.descripcion,
-      'facturador.nombre': row.facturadorNombre,
-      facturador: row.facturadorId,
-      facturadorNombre: row.facturadorNombre,
-      enviado: row.enviado,
-      enviadoBool: isTruthySent(row.enviado),
-      sentLocal: sentByPedido.has(row.pedido),
-      sentLocalAt: sentByPedido.get(row.pedido)?.sentAt || '',
-      sentLocalTo: sentByPedido.get(row.pedido)?.to || '',
-      sentLocalFrom: sentByPedido.get(row.pedido)?.fromEmail || '',
+  const enriched = filtered.map((normalizedRow) => {
+    const driveRoot = extractDriveId(normalizedRow.tiendaDrive);
+    const driveEntries = driveRoot ? (driveEntriesByRoot.get(driveRoot) || []) : [];
+    const matchedFiles = driveEntries.length
+      ? matchStoreFiles(driveEntries, normalizedRow.tiendaLabel || normalizedRow.establecimiento || '', normalizedRow.tiendaDrive)
+      : [];
+
+    const { raw, ...safeRow } = normalizedRow;
+    return {
+      ...safeRow,
+      pedido: normalizedRow.pedido,
+      rowId: normalizedRow.rowId,
+      tienda: normalizedRow.tienda,
+      tiendaLabel: normalizedRow.tiendaLabel,
+      tiendaDrive: normalizedRow.tiendaDrive,
+      establecimiento: normalizedRow.establecimiento,
+      facturadorId: normalizedRow.facturadorId,
+      fecha: normalizedRow.fecha,
+      fechaYear: normalizedRow.fechaYear,
+      status: normalizedRow.status,
+      importe: normalizedRow.importe,
+      descripcion: normalizedRow.descripcion,
+      ultimoPipcEstatal: normalizedRow.ultimoPipcEstatal,
+      ultimoPipcMunicipal: normalizedRow.ultimoPipcMunicipal,
+      'facturador.nombre': normalizedRow.facturadorNombre,
+      facturador: normalizedRow.facturadorId,
+      facturadorNombre: normalizedRow.facturadorNombre,
+      enviado: normalizedRow.enviado,
+      enviadoBool: isTruthySent(normalizedRow.enviado),
+      sentLocal: sentByPedido.has(normalizedRow.pedido),
+      sentLocalAt: sentByPedido.get(normalizedRow.pedido)?.sentAt || '',
+      sentLocalTo: sentByPedido.get(normalizedRow.pedido)?.to || '',
+      sentLocalFrom: sentByPedido.get(normalizedRow.pedido)?.fromEmail || '',
       matchedFiles,
       matchedCount: matchedFiles.length,
-    });
-  }
+    };
+  });
 
   return {
     ok: true,
@@ -587,30 +864,68 @@ export async function fetchPedidosLeySinLiberacion({ facturadorId = '', includeS
   return buildResponse(rows, { facturadorId: normalizedFacturadorId, includeSent, forceRefresh });
 }
 
+export async function debugPedidoLey({ pedido = '', forceRefresh = false } = {}) {
+  const normalizedPedido = String(pedido || '').trim();
+  if (!normalizedPedido) {
+    throw new Error('pedido requerido');
+  }
+
+  const rows = await appsheetFindRows(`Filter(${TABLE}, [PEDIDO]="${normalizedPedido}")`, TABLE);
+  const rawRow = Array.isArray(rows) ? rows[0] : null;
+  if (!rawRow) {
+    return {
+      ok: true,
+      pedido: normalizedPedido,
+      pedidoRow: null,
+      sucursal: null,
+      driveRoot: '',
+      driveEntriesCount: 0,
+      matchedFiles: [],
+    };
+  }
+
+  const sucursalesLookup = await fetchSucursalesLookup(forceRefresh);
+  const normalizedRow = normalizeRow(rawRow, sucursalesLookup);
+  const lookupByKey = resolveSucursalForPedido(rawRow?.TIENDA || rawRow?.tienda || rawRow?.Tienda, normalizedRow.tiendaKey, sucursalesLookup);
+  const lookupHasKey = normalizedRow.tiendaKey ? Boolean(sucursalesLookup?.rowByKey?.has(String(normalizedRow.tiendaKey))) : false;
+  const driveRoot = extractDriveId(normalizedRow.tiendaDrive || lookupByKey?.drive || '');
+  let driveEntries = [];
+  let matchedFiles = [];
+
+  if (driveRoot) {
+    driveEntries = await getDriveEntriesForRoot(driveRoot, forceRefresh);
+    matchedFiles = matchStoreFiles(driveEntries, normalizedRow.tiendaLabel || normalizedRow.establecimiento || '', normalizedRow.tiendaDrive || lookupByKey?.drive || '');
+  }
+
+  return {
+    ok: true,
+    pedido: normalizedPedido,
+    pedidoRow: rawRow,
+    normalizedRow,
+    sucursal: lookupByKey,
+    lookupHasKey,
+    lookupKeysSample: Array.from(sucursalesLookup?.rowByKey?.keys?.() || []).slice(0, 8),
+    sucursalesRowsCount: Array.isArray(sucursalesLookup?.rows) ? sucursalesLookup.rows.length : 0,
+    sucursalesFirstRowKeys: Array.isArray(sucursalesLookup?.rows) && sucursalesLookup.rows[0] ? Object.keys(sucursalesLookup.rows[0]).slice(0, 20) : [],
+    driveRoot,
+    driveEntriesCount: driveEntries.length,
+    matchedFiles,
+    matchedFilesCount: matchedFiles.length,
+  };
+}
+
 export function resolvePedidoLeyFile(relativePath) {
   const safeRelative = String(relativePath || '').replace(/^[\\/]+/, '');
   if (!safeRelative) {
     throw new Error('path requerido');
   }
 
-  const filesDir = path.resolve(getFilesDir());
-  const absolutePath = path.resolve(filesDir, safeRelative);
-  if (!absolutePath.startsWith(filesDir + path.sep) && absolutePath !== filesDir) {
-    const driveId = extractDriveId(safeRelative);
-    if (driveId) {
-      return { kind: 'drive', fileId: driveId };
-    }
-    throw new Error('Ruta de archivo no permitida');
-  }
-  if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
-    const driveId = extractDriveId(safeRelative);
-    if (driveId) {
-      return { kind: 'drive', fileId: driveId };
-    }
-    throw new Error(`Archivo no encontrado: ${safeRelative}`);
+  const driveId = extractDriveId(safeRelative);
+  if (driveId) {
+    return { kind: 'drive', fileId: driveId };
   }
 
-  return { kind: 'local', absolutePath };
+  throw new Error('Ruta de archivo no válida para Drive');
 }
 
 export function streamPedidoLeyFile(res, relativePath) {
@@ -637,11 +952,7 @@ export function streamPedidoLeyFile(res, relativePath) {
     });
   }
 
-  const filename = path.basename(resolved.absolutePath);
-  const mimeType = mime.lookup(filename) || 'application/octet-stream';
-  res.setHeader('Content-Type', mimeType);
-  res.setHeader('Content-Disposition', `inline; filename="${filename.replace(/"/g, '\\"')}"`);
-  return fs.createReadStream(resolved.absolutePath).pipe(res);
+  throw new Error('La lectura local de archivos está deshabilitada para pedidos');
 }
 
 export async function readPedidoLeyAttachment(relativePath) {
@@ -652,6 +963,13 @@ export async function readPedidoLeyAttachment(relativePath) {
       throw new Error('No hay credenciales de Drive configuradas');
     }
 
+    const metadataResponse = await driveClient.files.get({
+      fileId: resolved.fileId,
+      fields: 'id,name,mimeType',
+      supportsAllDrives: true,
+    });
+    const metadata = metadataResponse?.data || {};
+
     const response = await driveClient.files.get(
       {
         fileId: resolved.fileId,
@@ -661,8 +979,8 @@ export async function readPedidoLeyAttachment(relativePath) {
       { responseType: 'arraybuffer' },
     );
 
-    const filename = String(response?.headers?.['content-disposition'] || '').match(/filename="?([^"]+)"?/i)?.[1] || resolved.fileId;
-    const contentType = String(response?.headers?.['content-type'] || '').trim() || 'application/octet-stream';
+    const filename = String(metadata.name || '').trim() || String(response?.headers?.['content-disposition'] || '').match(/filename="?([^"]+)"?/i)?.[1] || resolved.fileId;
+    const contentType = String(metadata.mimeType || response?.headers?.['content-type'] || '').trim() || 'application/octet-stream';
     return {
       filename,
       mimeType: contentType,
@@ -670,11 +988,7 @@ export async function readPedidoLeyAttachment(relativePath) {
     };
   }
 
-  return {
-    filename: path.basename(resolved.absolutePath),
-    mimeType: mime.lookup(path.basename(resolved.absolutePath)) || 'application/octet-stream',
-    content: fs.readFileSync(resolved.absolutePath),
-  };
+  throw new Error('La lectura local de adjuntos está deshabilitada para pedidos');
 }
 
 export async function markPedidoLeyEnviado({ pedido, rowId, enviado } = {}) {
@@ -729,19 +1043,25 @@ export async function reconcilePedidoLeyEnviados(sentEntries = []) {
   }
 
   const result = await appsheetAction('Edit', payloads);
-  clearPedidosLeyCache();
+  clearPedidosLeyRowsCache();
   return { ok: true, updated: payloads.length, result };
 }
 
 export function clearPedidosLeyCache() {
-  cache = {
-    at: 0,
-    rows: null,
-    pending: null,
-    filesAt: 0,
-    files: null,
-    driveEntriesByRoot: new Map(),
-  };
+  cache.at = 0;
+  cache.rows = null;
+  cache.pending = null;
+  cache.filesAt = 0;
+  cache.files = null;
+  cache.driveEntriesByRoot = new Map();
+  cache.sucursalesAt = 0;
+  cache.sucursalesLookup = null;
+}
+
+export function clearPedidosLeyRowsCache() {
+  cache.at = 0;
+  cache.rows = null;
+  cache.pending = null;
 }
 
 export function getPedidosLeyFilesDir() {

@@ -139,6 +139,12 @@ export function createApp() {
   app.use("/", homeRouter);
   app.use("/", facturacionRouter);
 
+  app.use((err, _req, res, _next) => {
+    const message = err instanceof Error ? err.message : 'Error desconocido';
+    if (res.headersSent) return;
+    res.status(500).json({ ok: false, error: message });
+  });
+
   return app;
 }
 

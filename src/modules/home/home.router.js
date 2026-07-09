@@ -24,7 +24,6 @@ import {
   updateCapacitacionNotas,
 } from "./portalAuth.service.js";
 import { getFaltantesLeyData } from "../faltantes-ley/faltantesLey.service.js";
-import { buildPedidosLeySenderAuthUrl, exchangePedidosLeySenderAuthCode } from "../pedidos-ley/services/pedidosLeyMail.js";
 import { renderPedidosSinLiberacionPage } from "../pedidos-ley/pedidosLey.page.js";
 
 export const homeRouter = express.Router();
@@ -4320,14 +4319,6 @@ homeRouter.get("/auth/google/callback", async (req, res) => {
   }
 
   try {
-    if (receivedState.startsWith("pedidos-ley-sender:")) {
-      const nextPath = decodeURIComponent(receivedState.split(":").slice(1).join(":") || "/pedidos-sin-liberacion");
-      await exchangePedidosLeySenderAuthCode(code);
-      res.setHeader("Set-Cookie", buildClearOAuthStateCookieHeader({ secure }));
-      res.redirect(nextPath.startsWith("/") ? nextPath : "/pedidos-sin-liberacion");
-      return;
-    }
-
     const profile = await exchangeGoogleAuthCode(code);
     const employee = await authenticateEmployeeByEmail(profile.email);
     const token = await createSessionForEmployee(employee);
@@ -4527,12 +4518,10 @@ homeRouter.get("/pedidos-sin-liberacion/sender/connect", async (req, res) => {
     return;
   }
 
-  const nextPath = String(req.query.next || "/pedidos-sin-liberacion").trim();
-  const safeNext = nextPath.startsWith("/") ? nextPath : "/pedidos-sin-liberacion";
-  const state = `pedidos-ley-sender:${encodeURIComponent(safeNext)}`;
-  const secure = isRequestSecure(req);
-  res.setHeader("Set-Cookie", `${getOAuthStateCookieName()}=${encodeURIComponent(state)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secure ? "; Secure" : ""}`);
-  res.redirect(buildPedidosLeySenderAuthUrl(state));
+  res
+    .status(200)
+    .type("html")
+    .send(renderLoginPage("El envio de pedidos ahora sale desde Apps Script con contacto.gga.sc@gmail.com. Ya no hace falta conectar un remitente."));
 });
 
 homeRouter.post("/dashboard/capacitaciones/:rowId/status", async (req, res) => {
