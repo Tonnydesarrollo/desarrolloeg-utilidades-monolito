@@ -121,6 +121,7 @@ export function construirDataHTML(json) {
   return {
     logoEmisor,
     logoCliente,
+    empresaId: json.empresaId || "",
 
     empresa: {
       nombreComercial: json.empresa.nombreComercial || "",

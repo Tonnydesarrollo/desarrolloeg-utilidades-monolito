@@ -1,6 +1,11 @@
 ﻿import crypto from "crypto";
 import { google } from "googleapis";
+import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
 
+const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 20000);
+const APPSHEET_MAX_RETRIES = Number(process.env.APPSHEET_MAX_RETRIES || 3);
+const APPSHEET_RETRY_BASE_MS = Number(process.env.APPSHEET_RETRY_BASE_MS || 500);
+const APPSHEET_RETRY_MAX_MS = Number(process.env.APPSHEET_RETRY_MAX_MS || 5000);
 const EMPLOYEE_CACHE_TTL_MS = Number(process.env.PORTAL_EMPLOYEES_CACHE_TTL_MS || 120000);
 const SESSION_TTL_HOURS = Number(process.env.PORTAL_SESSION_TTL_HOURS || 12);
 const COOKIE_NAME = process.env.PORTAL_SESSION_COOKIE_NAME || "desarrolloeg_portal_session";
@@ -8,9 +13,13 @@ const GOOGLE_STATE_COOKIE_NAME = process.env.PORTAL_GOOGLE_STATE_COOKIE_NAME || 
 const SESSION_SECRET =
   process.env.PORTAL_AUTH_SECRET ||
   process.env.PORTAL_SESSION_SECRET ||
-  process.env.WHATSAPP_CAP_APPSHEET_ACCESS_KEY ||
-  process.env.APPSHEET_API_KEY ||
-  "desarrolloeg-portal-dev-secret";
+  (String(process.env.NODE_ENV || "development").toLowerCase() !== "production"
+    ? "desarrolloeg-portal-dev-secret"
+    : "");
+
+if (!SESSION_SECRET) {
+  throw new Error("Falta configurar PORTAL_AUTH_SECRET o PORTAL_SESSION_SECRET");
+}
 const GOOGLE_OAUTH_SCOPES = ["openid", "email", "profile"];
 
 const DEFAULT_CONFIG = {
@@ -59,7 +68,9 @@ const DEFAULT_CONFIG = {
 
 const EMPLOYEE_CACHE = {
   entries: new Map(),
+  pending: null,
 };
+const EMPLOYEE_SHARED_CACHE_KEY = "__shared__";
 
 const CAPACITACION_CACHE = {
   entries: new Map(),
@@ -72,6 +83,22 @@ const CALENDAR_NOTE_CACHE = {
 const SUCURSAL_CACHE = {
   entries: new Map(),
 };
+
+const DASHBOARD_CACHE = {
+  entries: new Map(),
+};
+
+function getSharedCacheEntry(cache) {
+  return cache.entries.get(EMPLOYEE_SHARED_CACHE_KEY) || null;
+}
+
+function setSharedCacheEntry(cache, entry = {}) {
+  cache.entries.set(EMPLOYEE_SHARED_CACHE_KEY, entry);
+}
+
+function getDashboardCacheKey(viewerRole, selectedRowId) {
+  return `${String(viewerRole || "").trim()}:${String(selectedRowId || "").trim() || "__default__"}`;
+}
 
 const ADMIN_PUESTOS = new Set(["GERENTE GENERAL", "DIRECTOR GENERAL", "MEJORA CONTINUA"]);
 const CAPACITADOR_PUESTOS = new Set(["CAPACITADOR"]);
@@ -125,6 +152,13 @@ const GENERAL_ROUTE_CARDS = [
     title: "Pedidos sin liberacion",
     description: "Envio de pedidos, archivos de Drive y control de enviados para admins.",
     href: "/pedidos-sin-liberacion",
+  },
+  {
+    tone: "cyan",
+    label: "Pedidos",
+    title: "Pedidos admin",
+    description: "Panel con pedidos, estados, pagos y clasificacion estatal o municipal.",
+    href: "/dashboard/pedidos",
   },
   {
     tone: "teal",
@@ -515,13 +549,14 @@ export function isGoogleOAuthConfigured() {
   return Boolean(config.clientId && config.clientSecret && config.redirectUri);
 }
 
-function createGoogleOAuthClient() {
+function createGoogleOAuthClient(redirectUriOverride = "") {
   const config = getGoogleConfig();
-  if (!config.clientId || !config.clientSecret || !config.redirectUri) {
+  const redirectUri = String(redirectUriOverride || config.redirectUri || "").trim();
+  if (!config.clientId || !config.clientSecret || !redirectUri) {
     throw new Error("Falta configurar Google OAuth para el portal");
   }
 
-  return new google.auth.OAuth2(config.clientId, config.clientSecret, config.redirectUri);
+  return new google.auth.OAuth2(config.clientId, config.clientSecret, redirectUri);
 }
 
 function buildStateCookieHeader(token, { secure = false } = {}) {
@@ -549,45 +584,76 @@ function buildClearStateCookieHeader({ secure = false } = {}) {
   return parts.join("; ");
 }
 
-export function buildGoogleAuthUrl(state) {
-  const oauthClient = createGoogleOAuthClient();
+function decodeJwtPayload(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length < 2) return null;
+  try {
+    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export function buildGoogleAuthUrl(state, redirectUriOverride = "") {
+  const oauthClient = createGoogleOAuthClient(redirectUriOverride);
   return oauthClient.generateAuthUrl({
-    access_type: "offline",
     scope: GOOGLE_OAUTH_SCOPES,
-    prompt: "consent",
-    include_granted_scopes: true,
     state,
   });
 }
 
-export async function exchangeGoogleAuthCode(code) {
-  const oauthClient = createGoogleOAuthClient();
+export async function exchangeGoogleAuthCode(code, redirectUriOverride = "") {
+  const oauthClient = createGoogleOAuthClient(redirectUriOverride);
   const { tokens } = await oauthClient.getToken(code);
   oauthClient.setCredentials(tokens);
 
-  const accessToken = tokens.access_token;
-  if (!accessToken) {
-    throw new Error("Google no devolvio access_token.");
+  const idTokenPayload = decodeJwtPayload(tokens.id_token);
+  let profile = null;
+  if (idTokenPayload) {
+    const audience = String(idTokenPayload.aud || "");
+    const clientId = getGoogleConfig().clientId;
+    const email = normalizeEmail(idTokenPayload.email);
+    if (clientId && audience && audience !== clientId) {
+      throw new Error("El token de Google no coincide con la app configurada.");
+    }
+    if (email) {
+      profile = {
+        email,
+        name: String(idTokenPayload.name || "").trim(),
+        picture: String(idTokenPayload.picture || "").trim(),
+        email_verified: true,
+      };
+    }
   }
 
-  const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  if (!profile) {
+    const accessToken = tokens.access_token;
+    if (!accessToken) {
+      throw new Error("Google no devolvio access_token.");
+    }
 
-  if (!profileResponse.ok) {
-    throw new Error(`No se pudo leer el perfil de Google (${profileResponse.status})`);
+    const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!profileResponse.ok) {
+      throw new Error(`No se pudo leer el perfil de Google (${profileResponse.status})`);
+    }
+
+    const remoteProfile = await profileResponse.json();
+    profile = {
+      email: normalizeEmail(remoteProfile.email),
+      name: String(remoteProfile.name || "").trim(),
+      picture: String(remoteProfile.picture || "").trim(),
+      email_verified: remoteProfile.email_verified,
+    };
   }
 
-  const profile = await profileResponse.json();
   const email = normalizeEmail(profile.email);
-  const verified = profile.email_verified === true || profile.email_verified === "true";
   if (!email) {
     throw new Error("Google no entrego un correo valido.");
-  }
-  if (!verified) {
-    throw new Error("Tu correo de Google no esta verificado.");
   }
 
   const allowedDomains = getGoogleConfig().allowedDomains;
@@ -619,6 +685,54 @@ function getCachedEntry(cache, runAsUserEmail = "") {
 
 function setCachedEntry(cache, runAsUserEmail = "", entry = {}) {
   cache.entries.set(getCacheKey(runAsUserEmail), entry);
+}
+
+function findCachedEmployeeByEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  for (const entry of EMPLOYEE_CACHE.entries.values()) {
+    if (!entry?.rows?.length) continue;
+    const found = entry.rows.find((item) => item.correo === normalizedEmail);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), APPSHEET_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function shouldRetryAppSheetError(error) {
+  const code = error?.code || error?.cause?.code || error?.errno;
+  return error?.name === "AbortError" || ["ENOBUFS", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ECONNREFUSED", "ENETUNREACH"].includes(code);
+}
+
+function getRetryDelayMs(attempt) {
+  const exp = Math.min(APPSHEET_RETRY_BASE_MS * Math.pow(2, attempt - 1), APPSHEET_RETRY_MAX_MS);
+  const jitter = Math.floor(Math.random() * 200);
+  return exp + jitter;
+}
+
+async function fetchWithRetry(url, options = {}) {
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    try {
+      return await fetchWithTimeout(url, options);
+    } catch (error) {
+      if (!shouldRetryAppSheetError(error) || attempt >= APPSHEET_MAX_RETRIES) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, getRetryDelayMs(attempt)));
+    }
+  }
 }
 
 function extractAppSheetDataRows(data) {
@@ -688,7 +802,7 @@ async function appsheetAction({ table, action, rows = [], selector, runAsUserEma
     body.Rows = rows;
   }
 
-  const response = await fetch(getAppSheetUrl(config, table), {
+  const response = await fetchWithRetry(getAppSheetUrl(config, table), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -719,6 +833,17 @@ async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
   }
 
   const now = Date.now();
+  const sharedCached = getSharedCacheEntry(EMPLOYEE_CACHE);
+  if (!force && sharedCached?.rows?.length > 0 && now - sharedCached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+    EMPLOYEE_CACHE.nameByKey = sharedCached.nameByKey;
+    EMPLOYEE_CACHE.initialsByKey = sharedCached.initialsByKey;
+    EMPLOYEE_CACHE.colorByKey = sharedCached.colorByKey;
+    if (runAsUserEmail) {
+      setCachedEntry(EMPLOYEE_CACHE, runAsUserEmail, sharedCached);
+    }
+    return sharedCached.rows;
+  }
+
   const cached = getCachedEntry(EMPLOYEE_CACHE, runAsUserEmail);
   if (!force && cached?.rows?.length > 0 && now - cached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
     EMPLOYEE_CACHE.nameByKey = cached.nameByKey;
@@ -726,69 +851,132 @@ async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
     return cached.rows;
   }
 
+  if (!force && EMPLOYEE_CACHE.pending) {
+    return EMPLOYEE_CACHE.pending;
+  }
+
+  EMPLOYEE_CACHE.pending = (async () => {
+    try {
+      const data = await appsheetAction({
+        table: config.table,
+        action: "Find",
+        selector: `Filter(${config.table}, true)`,
+        runAsUserEmail,
+      });
+      const rows = Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
+      const currentYear = new Date().getFullYear();
+      const birthdayColumn = config.birthdayColumn || "CUMPLEAÑOS";
+      const birthdaySyncJobs = [];
+      const normalized = rows.map((row) => {
+        const employee = normalizeEmployee(row);
+        if (!employee.rowId) return null;
+
+        const rawBirthday = String(getFlexibleValue(row, [birthdayColumn, "CUMPLEAÑOS", "Cumpleaños", "Cumpleanos", "BIRTHDAY", "Birthday", "FECHA NACIMIENTO", "Fecha Nacimiento"]) ?? "").trim();
+        const normalizedBirthday = normalizeBirthdayValue(rawBirthday, currentYear);
+        employee.cumpleanos = normalizedBirthday.value;
+        employee.cumpleanosRaw = rawBirthday;
+        employee.cumpleanosDate = normalizedBirthday.parsed;
+        if (normalizedBirthday.value && normalizedBirthday.parsed && normalizedBirthday.parsed.getFullYear() !== currentYear) {
+          birthdaySyncJobs.push(
+            appsheetAction({
+              table: config.table,
+              action: "Edit",
+              rows: [
+                {
+                  [config.keyColumn || "Row ID"]: employee.rowId,
+                  [birthdayColumn]: normalizedBirthday.value,
+                },
+              ],
+            }).catch((error) => {
+              console.warn("No se pudo actualizar CUMPLEAÑOS en EMPLEADOS:", error instanceof Error ? error.message : error);
+            })
+          );
+        }
+
+        return employee;
+      }).filter(Boolean);
+
+      if (birthdaySyncJobs.length > 0) {
+        void Promise.allSettled(birthdaySyncJobs).catch((error) => {
+          console.warn("No se pudieron actualizar algunos CUMPLEAÑOS en EMPLEADOS:", error instanceof Error ? error.message : error);
+        });
+      }
+
+      const nameByKey = new Map();
+      const initialsByKey = new Map();
+      const colorByKey = new Map();
+      for (const employee of normalized) {
+        nameByKey.set(employee.rowId, employee.nombre);
+        initialsByKey.set(employee.rowId, employee.initials || buildInitialsFromName(employee.nombre));
+        colorByKey.set(employee.rowId, employee.calendarColor || employee.color || "");
+      }
+      const cacheEntry = {
+        loadedAt: Date.now(),
+        rows: normalized,
+        nameByKey,
+        initialsByKey,
+        colorByKey,
+      };
+      setCachedEntry(EMPLOYEE_CACHE, runAsUserEmail, cacheEntry);
+      setSharedCacheEntry(EMPLOYEE_CACHE, cacheEntry);
+      EMPLOYEE_CACHE.nameByKey = nameByKey;
+      EMPLOYEE_CACHE.initialsByKey = initialsByKey;
+      EMPLOYEE_CACHE.colorByKey = colorByKey;
+      return normalized;
+    } finally {
+      EMPLOYEE_CACHE.pending = null;
+    }
+  })();
+
+  return EMPLOYEE_CACHE.pending;
+}
+
+async function fetchEmployeeByEmailFromAppSheet(email, runAsUserEmail = "") {
+  const config = getConfig();
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const cachedEmployee = findCachedEmployeeByEmail(normalizedEmail);
+  if (cachedEmployee) {
+    return cachedEmployee;
+  }
+
+  const sharedCached = getSharedCacheEntry(EMPLOYEE_CACHE);
+  if (sharedCached?.rows?.length) {
+    const sharedEmployee = sharedCached.rows.find((item) => item.correo === normalizedEmail);
+    if (sharedEmployee) {
+      return sharedEmployee;
+    }
+  }
+
+  const cached = getCachedEntry(EMPLOYEE_CACHE, runAsUserEmail);
+  if (cached?.rows?.length) {
+    const cachedEmployee = cached.rows.find((item) => item.correo === normalizedEmail);
+    if (cachedEmployee) {
+      return cachedEmployee;
+    }
+  }
+
+  const selector = `Filter(${config.table}, [${config.emailColumn}] = "${normalizedEmail.replaceAll('"', '""')}")`;
   const data = await appsheetAction({
     table: config.table,
     action: "Find",
-    selector: `Filter(${config.table}, true)`,
+    selector,
     runAsUserEmail,
   });
   const rows = Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
-  const currentYear = new Date().getFullYear();
-  const birthdayColumn = config.birthdayColumn || "CUMPLEAÑOS";
-  const birthdaySyncJobs = [];
-  const normalized = rows.map((row) => {
-    const employee = normalizeEmployee(row);
-    if (!employee.rowId) return null;
-
-    const rawBirthday = String(getFlexibleValue(row, [birthdayColumn, "CUMPLEAÑOS", "Cumpleaños", "Cumpleanos", "BIRTHDAY", "Birthday", "FECHA NACIMIENTO", "Fecha Nacimiento"]) ?? "").trim();
-    const normalizedBirthday = normalizeBirthdayValue(rawBirthday, currentYear);
-    employee.cumpleanos = normalizedBirthday.value;
-    employee.cumpleanosRaw = rawBirthday;
-    employee.cumpleanosDate = normalizedBirthday.parsed;
-    if (normalizedBirthday.value && normalizedBirthday.parsed && normalizedBirthday.parsed.getFullYear() !== currentYear) {
-      birthdaySyncJobs.push(
-        appsheetAction({
-          table: config.table,
-          action: "Edit",
-          rows: [
-            {
-              [config.keyColumn || "Row ID"]: employee.rowId,
-              [birthdayColumn]: normalizedBirthday.value,
-            },
-          ],
-        }).catch((error) => {
-          console.warn("No se pudo actualizar CUMPLEAÑOS en EMPLEADOS:", error instanceof Error ? error.message : error);
-        })
-      );
-    }
-
-    return employee;
-  }).filter(Boolean);
-
-  if (birthdaySyncJobs.length > 0) {
-    await Promise.allSettled(birthdaySyncJobs);
+  if (!rows.length) {
+    return null;
   }
 
-  const nameByKey = new Map();
-  const initialsByKey = new Map();
-  const colorByKey = new Map();
-  for (const employee of normalized) {
-    nameByKey.set(employee.rowId, employee.nombre);
-    initialsByKey.set(employee.rowId, employee.initials || buildInitialsFromName(employee.nombre));
-    colorByKey.set(employee.rowId, employee.calendarColor || employee.color || "");
+  const employee = normalizeEmployee(rows[0]);
+  if (!employee.rowId) {
+    return null;
   }
-  const cacheEntry = {
-    loadedAt: now,
-    rows: normalized,
-    nameByKey,
-    initialsByKey,
-    colorByKey,
-  };
-  setCachedEntry(EMPLOYEE_CACHE, runAsUserEmail, cacheEntry);
-  EMPLOYEE_CACHE.nameByKey = nameByKey;
-  EMPLOYEE_CACHE.initialsByKey = initialsByKey;
-  EMPLOYEE_CACHE.colorByKey = colorByKey;
-  return normalized;
+
+  return employee;
 }
 
 async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
@@ -798,6 +986,16 @@ async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
   }
 
   const now = Date.now();
+  const sharedCached = getSharedCacheEntry(SUCURSAL_CACHE);
+  if (!force && sharedCached?.rows?.length > 0 && now - sharedCached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+    SUCURSAL_CACHE.labelByKey = sharedCached.labelByKey;
+    SUCURSAL_CACHE.keyByLabel = sharedCached.keyByLabel;
+    if (runAsUserEmail) {
+      setCachedEntry(SUCURSAL_CACHE, runAsUserEmail, sharedCached);
+    }
+    return sharedCached.rows;
+  }
+
   const cached = getCachedEntry(SUCURSAL_CACHE, runAsUserEmail);
   if (!force && cached?.rows?.length > 0 && now - cached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
     SUCURSAL_CACHE.labelByKey = cached.labelByKey;
@@ -832,6 +1030,7 @@ async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
     keyByLabel,
   };
   setCachedEntry(SUCURSAL_CACHE, runAsUserEmail, cacheEntry);
+  setSharedCacheEntry(SUCURSAL_CACHE, cacheEntry);
   SUCURSAL_CACHE.labelByKey = labelByKey;
   SUCURSAL_CACHE.keyByLabel = keyByLabel;
   return normalized;
@@ -996,8 +1195,7 @@ export async function authenticateEmployeeByEmail(email) {
     throw new Error("Escribe un correo valido.");
   }
 
-  const employees = await fetchEmployeesFromAppSheet(false, normalizedEmail);
-  const employee = employees.find((item) => item.correo === normalizedEmail);
+  const employee = await fetchEmployeeByEmailFromAppSheet(normalizedEmail);
   if (!employee) {
     throw new Error("No encontramos ese correo en EMPLEADOS.");
   }
@@ -1015,15 +1213,32 @@ export async function loadAuthenticatedEmployee(req) {
   const payload = verifySessionToken(token);
   if (!payload) return null;
 
-  const employees = await fetchEmployeesFromAppSheet(false, payload.correo);
-  const employee = employees.find((item) => item.rowId === String(payload.rowId));
-  if (!employee) return null;
+  // Prefer the signed session payload so the critical login path does not wait on AppSheet.
+  // We still merge cached data when available, but avoid a live roundtrip unless the session is invalid.
+  const cachedEmployee = findCachedEmployeeByEmail(payload.correo);
+  if (cachedEmployee && cachedEmployee.rowId === String(payload.rowId) && isAllowedRole(cachedEmployee.role)) {
+    return cachedEmployee;
+  }
 
-  if (!isAllowedRole(employee.role)) return null;
-  if (employee.correo !== normalizeEmail(payload.correo)) return null;
-  if (employee.role !== payload.role) return null;
+  if (!isAllowedRole(payload.role)) return null;
 
-  return employee;
+  return {
+    rowId: String(payload.rowId),
+    correo: normalizeEmail(payload.correo),
+    nombre: String(payload.nombre || "").trim(),
+    puesto: String(payload.puesto || "").trim(),
+    role: payload.role,
+    initials: buildInitialsFromName(payload.nombre || payload.correo),
+    color: "",
+    calendarColor: "",
+    permiso: "",
+    firma: "",
+    telefono: "",
+    telefono2: "",
+    capacita: payload.role === "capacitador",
+    cumpleanos: "",
+    raw: null,
+  };
 }
 
 export async function createSessionForEmployee(employee) {
@@ -1037,6 +1252,16 @@ export function isRequestSecure(req) {
 
 export async function refreshEmployeesCache() {
   return fetchEmployeesFromAppSheet(true);
+}
+
+export async function warmPortalDashboardCaches() {
+  await Promise.allSettled([
+    fetchEmployeesFromAppSheet(true),
+    fetchSucursalesFromAppSheet(true),
+    fetchCapacitacionesFromAppSheet(true),
+    fetchCalendarNotesFromAppSheet(true),
+    fetchPedidosLeyAdminDashboardData({ year: new Date().getFullYear(), forceRefresh: true }).catch(() => null),
+  ]);
 }
 
 export async function listEmployeesForPortal({ runAsUserEmail = "" } = {}) {
@@ -1448,6 +1673,11 @@ async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "
   }
 
   const now = Date.now();
+  const sharedCached = getSharedCacheEntry(CAPACITACION_CACHE);
+  if (!force && sharedCached?.rows?.length > 0 && now - sharedCached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+    return sharedCached.rows;
+  }
+
   const cached = getCachedEntry(CAPACITACION_CACHE, runAsUserEmail);
   if (!force && cached?.rows?.length > 0 && now - cached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
     return cached.rows;
@@ -1479,6 +1709,10 @@ async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "
     loadedAt: now,
     rows: normalized,
   });
+  setSharedCacheEntry(CAPACITACION_CACHE, {
+    loadedAt: now,
+    rows: normalized,
+  });
   return normalized;
 }
 
@@ -1489,6 +1723,11 @@ async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = ""
   }
 
   const now = Date.now();
+  const sharedCached = getSharedCacheEntry(CALENDAR_NOTE_CACHE);
+  if (!force && sharedCached?.rows?.length > 0 && now - sharedCached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+    return sharedCached.rows;
+  }
+
   const cached = getCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail);
   if (!force && cached?.rows?.length > 0 && now - cached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
     return cached.rows;
@@ -1496,6 +1735,10 @@ async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = ""
 
   if (!config.calendarNotesTable) {
     setCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail, {
+      loadedAt: now,
+      rows: [],
+    });
+    setSharedCacheEntry(CALENDAR_NOTE_CACHE, {
       loadedAt: now,
       rows: [],
     });
@@ -1525,6 +1768,10 @@ async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = ""
   }
 
   setCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail, {
+    loadedAt: now,
+    rows: normalized,
+  });
+  setSharedCacheEntry(CALENDAR_NOTE_CACHE, {
     loadedAt: now,
     rows: normalized,
   });
@@ -1592,12 +1839,21 @@ async function saveCalendarNote(noteData, runAsUserEmail = "") {
 
 export async function getCapacitacionesDashboardData({ viewer = null, selectedEmployee = null } = {}) {
   const runAsUserEmail = normalizeEmail(viewer?.correo || selectedEmployee?.correo || "");
-  const rows = await fetchCapacitacionesFromAppSheet(false, runAsUserEmail);
-  const employees = await fetchEmployeesFromAppSheet(false, runAsUserEmail);
-  const calendarNotesRows = await fetchCalendarNotesFromAppSheet(false, runAsUserEmail);
   const viewerRole = viewer?.role || "capacitador";
   const selectedRole = selectedEmployee?.role || viewerRole;
   const selectedRowId = String(selectedEmployee?.rowId || viewer?.rowId || "").trim();
+  const dashboardCacheKey = getDashboardCacheKey(viewerRole, selectedRowId || selectedRole);
+  const now = Date.now();
+  const cached = DASHBOARD_CACHE.entries.get(dashboardCacheKey);
+  if (cached?.data && now - cached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const [rows, employees, calendarNotesRows] = await Promise.all([
+    fetchCapacitacionesFromAppSheet(false, runAsUserEmail),
+    fetchEmployeesFromAppSheet(false, runAsUserEmail),
+    fetchCalendarNotesFromAppSheet(false, runAsUserEmail),
+  ]);
 
   const visible = rows.filter((row) => {
     if (viewerRole === "admin") {
@@ -1671,7 +1927,7 @@ export async function getCapacitacionesDashboardData({ viewer = null, selectedEm
       return aDate - bDate;
     });
 
-  return {
+  const dashboardData = {
     visible,
     programadas,
     finalizadasSinDiplomas,
@@ -1679,6 +1935,11 @@ export async function getCapacitacionesDashboardData({ viewer = null, selectedEm
     calendarCapacitaciones,
     calendarNotes,
   };
+  DASHBOARD_CACHE.entries.set(dashboardCacheKey, {
+    loadedAt: now,
+    data: dashboardData,
+  });
+  return dashboardData;
 }
 
 export async function listCapacitacionesForPortal({ viewer = null, selectedEmployee = null } = {}) {

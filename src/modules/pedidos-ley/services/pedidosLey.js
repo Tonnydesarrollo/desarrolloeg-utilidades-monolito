@@ -7,12 +7,19 @@ const APP_ID = (process.env.FINANZAS_APPSHEET_APP_ID || process.env.PEDIDOS_APPS
 const API_KEY = (process.env.FINANZAS_APPSHEET_API_KEY || process.env.PEDIDOS_APPSHEET_API_KEY || process.env.APPSHEET_API_KEY || '').trim();
 const TABLE = (process.env.FINANZAS_APPSHEET_TABLE_PEDIDOS || process.env.PEDIDOS_APPSHEET_TABLE_PEDIDOS || 'PEDIDOS_LEY').trim();
 const SUCURSALES_TABLE = (process.env.FINANZAS_APPSHEET_TABLE_SUCURSALES || process.env.PEDIDOS_APPSHEET_TABLE_SUCURSALES || process.env.APPSHEET_TABLE_SUCURSALES || 'SUCURSALES').trim();
+const EMPRESA_TABLE = (process.env.PEDIDOS_APPSHEET_TABLE_EMPRESA || process.env.PEDIDOS_APPSHEET_TABLE_EMPRESAS || 'EMPRESA').trim();
+const MUNICIPIO_TABLE = (process.env.PEDIDOS_APPSHEET_TABLE_MUNICIPIO || process.env.PEDIDOS_APPSHEET_TABLE_MUNICIPIOS || 'MUNICIPIOS').trim();
+const ESTADO_TABLE = (process.env.PEDIDOS_APPSHEET_TABLE_ESTADO || process.env.PEDIDOS_APPSHEET_TABLE_ESTADOS || 'ESTADOS').trim();
 const VIEW = (process.env.FINANZAS_APPSHEET_VIEW_SIN_LIBERACION || 'SIN LIBERACION').trim();
 const FILES_DIR = process.env.PEDIDOS_LEY_FILES_DIR || path.resolve(process.cwd(), 'runtime', 'pedidos-ley', 'files');
 const SENT_LOG_FILE = process.env.PEDIDOS_LEY_SENT_LOG_FILE || path.resolve(process.cwd(), 'runtime', 'pedidos-ley', 'sent-log.jsonl');
 const DRIVE_CREDENTIALS_PATH = process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS || process.env.FACTURACION_GOOGLE_CREDENTIALS_PATH || '';
 const DRIVE_TOKEN_PATH = process.env.PEDIDOS_GOOGLE_TOKEN_PATH || process.env.FACTURACION_GOOGLE_TOKEN_PATH || '';
 const CACHE_TTL_MS = Math.max(10_000, Number(process.env.PEDIDOS_LEY_CACHE_TTL_MS || 15 * 60_000));
+const DEFAULT_STATE_THRESHOLD = 32000;
+const DEFAULT_MUNICIPAL_THRESHOLD = 9794.98;
+const DEFAULT_ADMIN_FACTURADOR_ID = 'xwDqa6Mt6a42iqKHzJG9L6';
+const CULIACAN_MUNICIPAL_FACTURADOR_ID = 'EiHiUQ9YHf4mA-C7L_ziyc';
 const FACTURADOR_OPTIONS = new Map([
   ['EiHiUQ9YHf4mA-C7L_ziyc', 'SERGIO GONZALEZ CASTILLO'],
   ['xwDqa6Mt6a42iqKHzJG9L6', 'GONZALEZ GAMEZ Y ASOCIADOS'],
@@ -28,6 +35,15 @@ let cache = {
   sucursalesAt: 0,
   sucursalesLookup: null,
 };
+
+const lookupCache = {
+  empresas: { at: 0, lookup: null },
+  municipios: { at: 0, lookup: null },
+  estados: { at: 0, lookup: null },
+  sucursales: { at: 0, lookup: null },
+};
+
+const dashboardCache = new Map();
 
 ensureDir(FILES_DIR);
 ensureDir(path.dirname(SENT_LOG_FILE));
@@ -66,6 +82,22 @@ function normalizeScalarText(value) {
   return String(value).trim();
 }
 
+function looksLikeIdentifier(value) {
+  const text = normalizeScalarText(value);
+  if (!text) return true;
+  if (/^\d+$/.test(text)) return true;
+  if (/^[a-f0-9-]{8,}$/i.test(text) && !/\s/.test(text)) return true;
+  return false;
+}
+
+function getFirstMeaningfulText(row = {}, keys = []) {
+  for (const key of keys) {
+    const value = normalizeScalarText(getRowValue(row, [key]));
+    if (value && !looksLikeIdentifier(value)) return value;
+  }
+  return '';
+}
+
 function extractAppSheetRows(payload) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.Rows)) return payload.Rows;
@@ -75,6 +107,119 @@ function extractAppSheetRows(payload) {
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function collectReferenceCandidates(value) {
+  const candidates = [];
+  const add = (candidate) => {
+    const text = normalizeScalarText(candidate);
+    if (!text) return;
+    if (!candidates.includes(text)) candidates.push(text);
+  };
+
+  add(value);
+  if (value && typeof value === 'object') {
+    add(value.id);
+    add(value.ID);
+    add(value.Id);
+    add(value.key);
+    add(value.KEY);
+    add(value.value);
+    add(value.label);
+    add(value.Label);
+    add(value.name);
+    add(value.NAME);
+    add(value.nombre);
+    add(value.NOMBRE);
+    add(value.title);
+    add(value.TITLE);
+    add(value['Row ID']);
+    add(value['ROW ID']);
+  }
+
+  return candidates;
+}
+
+function parseMoneyValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  const cleaned = text
+    .replace(/\s+/g, '')
+    .replace(/[$€£MXN]/gi, '')
+    .replace(/[^\d,.-]/g, '');
+
+  if (!cleaned) return null;
+
+  let normalized = cleaned;
+  if (normalized.includes(',') && normalized.includes('.')) {
+    normalized = normalized.replace(/,/g, '');
+  } else if (normalized.includes(',') && !normalized.includes('.')) {
+    normalized = normalized.replace(/,/g, '.');
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function classifyPedidoImporte(importeNumber, { estatalMin = DEFAULT_STATE_THRESHOLD, municipalMin = DEFAULT_MUNICIPAL_THRESHOLD } = {}) {
+  const amount = Number(importeNumber);
+  if (!Number.isFinite(amount)) {
+    return 'sin-clasificar';
+  }
+  if (amount >= Number(estatalMin)) {
+    return 'estatal';
+  }
+  if (amount >= Number(municipalMin)) {
+    return 'municipal';
+  }
+  return 'sin-clasificar';
+}
+
+function classifyPedidoDescripcion(descripcion = "") {
+  const text = normalizeText(descripcion);
+  if (!text) {
+    return null;
+  }
+
+  const hasEstatal = text.includes("ESTATAL");
+  const hasMunicipal = text.includes("MUNICIPAL");
+  if (hasEstatal && !hasMunicipal) return "estatal";
+  if (hasMunicipal && !hasEstatal) return "municipal";
+  return null;
+}
+
+function classifyPedidoTipo(descripcion, importeNumber, thresholds = {}) {
+  const fromDescription = classifyPedidoDescripcion(descripcion);
+  if (fromDescription) {
+    return fromDescription;
+  }
+  return classifyPedidoImporte(importeNumber, thresholds);
+}
+
+function normalizeTruthValue(value) {
+  const text = normalizeText(value);
+  if (!text) return false;
+  return ['SI', 'S', 'YES', 'Y', 'TRUE', '1', 'ENVIADO', 'PAGADO', 'PAGO', 'LIBERADO', 'FACTURADO', 'CHEQUE'].includes(text);
+}
+
+function resolveLookupRow(value, lookup = null) {
+  if (!lookup) return null;
+  const candidates = collectReferenceCandidates(value).map((item) => normalizeText(item));
+  if (!candidates.length) return null;
+
+  for (const candidate of candidates) {
+    const direct = lookup.rowByKey?.get(candidate);
+    if (direct) return direct;
+  }
+
+  for (const candidate of candidates) {
+    const byLabel = lookup.rowByLabel?.get(candidate);
+    if (byLabel) return byLabel;
+  }
+
+  return null;
 }
 
 function extractFacturadorId(row = {}) {
@@ -103,7 +248,66 @@ function resolveFacturadorNombre(facturadorId, row = {}) {
   return fromRow;
 }
 
-function normalizeSucursalRow(row = {}) {
+function normalizeEmpresaRow(row = {}) {
+  const key = normalizeScalarText(getRowValue(row, ['ID', 'Id', 'id', 'Row ID', 'ROW ID']));
+  const nombreComercial = normalizeScalarText(getRowValue(row, ['NOMBRE COMERCIAL', 'Nombre Comercial', 'nombre comercial']));
+  const razonSocial = normalizeScalarText(getRowValue(row, ['RAZON SOCIAL', 'Razón Social', 'RAZON SOCIAL']));
+  const logo = normalizeScalarText(getRowValue(row, ['LOGO', 'Logo']));
+  const logoUrl = normalizeScalarText(getRowValue(row, ['LOGOURL', 'LogoURL', 'LOGO URL']));
+  const displayLabel = razonSocial || nombreComercial || key;
+  return { key, nombreComercial, razonSocial, logo, logoUrl, displayLabel, raw: row };
+}
+
+function normalizeMunicipioRow(row = {}) {
+  const key = normalizeScalarText(getRowValue(row, ['ID', 'Id', 'id', 'Row ID', 'ROW ID']));
+  const nombre = getFirstMeaningfulText(row, [
+    'NOMBRE',
+    'Nombre',
+    'nombre',
+    'LABEL',
+    'Label',
+    'label',
+    'LABEL2',
+    'Label2',
+    'NOMBRE MUNICIPIO',
+    'Nombre Municipio',
+    'nombre municipio',
+    'MUNICIPIO',
+    'Municipio',
+    'CITY',
+    'City',
+    'NAME',
+    'Name',
+  ]);
+  const escudo = normalizeScalarText(getRowValue(row, ['ESCUDO', 'Escudo', 'escudo']));
+  const displayLabel = nombre || getFirstMeaningfulText(row, ['DISPLAYLABEL', 'DisplayLabel', 'displayLabel', 'LABEL2', 'Label2', 'LABEL', 'Label']) || key;
+  return { key, nombre, escudo, displayLabel, raw: row };
+}
+
+function normalizeEstadoRow(row = {}) {
+  const key = normalizeScalarText(getRowValue(row, ['ID', 'Id', 'id', 'Row ID', 'ROW ID']));
+  const nombre = getFirstMeaningfulText(row, [
+    'NOMBRE',
+    'Nombre',
+    'nombre',
+    'LABEL',
+    'Label',
+    'label',
+    'LABEL2',
+    'Label2',
+    'ESTADO',
+    'Estado',
+    'STATE',
+    'State',
+    'NAME',
+    'Name',
+  ]);
+  const escudo = normalizeScalarText(getRowValue(row, ['ESCUDO', 'Escudo', 'escudo']));
+  const displayLabel = nombre || getFirstMeaningfulText(row, ['DISPLAYLABEL', 'DisplayLabel', 'displayLabel', 'LABEL2', 'Label2', 'LABEL', 'Label']) || key;
+  return { key, nombre, escudo, displayLabel, raw: row };
+}
+
+function normalizeSucursalRow(row = {}, catalogs = {}) {
   const key = normalizeScalarText(getRowValue(row, ['id', 'ID', 'Id', 'Row ID', 'ROW ID']));
   const label = normalizeScalarText(
     getRowValue(row, [
@@ -127,6 +331,7 @@ function normalizeSucursalRow(row = {}) {
       'Nombre',
     ])
   );
+  const label2 = normalizeScalarText(getRowValue(row, ['LABEL2', 'Label2', 'label2']));
   const drive = normalizeScalarText(
     getRowValue(row, [
       'DRIVE',
@@ -141,8 +346,64 @@ function normalizeSucursalRow(row = {}) {
     ])
   );
   const tienda = normalizeScalarText(getRowValue(row, ['TIENDA', 'Tienda', 'tienda']));
-  const displayLabel = label || tienda || key;
-  return { key, label, drive, tienda, displayLabel, raw: row };
+  const empresaIdRaw = getRowValue(row, ['ID EMPRESA', 'EMPRESA', 'Empresa', 'empresa']);
+  const municipioIdRaw = getRowValue(row, ['MUNICIPIO', 'Municipio', 'municipio']);
+  const estadoIdRaw = getRowValue(row, ['ESTADO', 'Estado', 'estado']);
+  const empresaRow = resolveLookupRow(empresaIdRaw, catalogs.empresasLookup);
+  const municipioRow = resolveLookupRow(municipioIdRaw, catalogs.municipiosLookup);
+  const estadoRow = resolveLookupRow(estadoIdRaw, catalogs.estadosLookup);
+  const direccion = normalizeScalarText(getRowValue(row, ['DIRECCION', 'Direccion', 'direccion']));
+  const direccionGoogle = normalizeScalarText(getRowValue(row, ['DIRECCION GOOGLE', 'Direccion Google', 'direccionGoogle', 'DIRECCION_GOOGLE']));
+  const status = normalizeScalarText(getRowValue(row, ['STATUS', 'Status', 'status']));
+  const vencimientoMunicipal = normalizeScalarText(getRowValue(row, ['VENCIMIENTO MUNICIPAL', 'Vencimiento Municipal', 'vencimiento municipal']));
+  const trabajos = normalizeScalarText(getRowValue(row, ['TRABAJOS', 'Trabajos', 'trabajos']));
+  const tipo = normalizeScalarText(getRowValue(row, ['TIPO', 'Tipo', 'tipo']));
+  const nivelRiesgo = normalizeScalarText(getRowValue(row, ['NIVEL DE RIESGO', 'Nivel de Riesgo', 'nivel de riesgo']));
+  const precioEstatal = parseMoneyValue(getRowValue(row, ['PRECIO ESTATAL', 'Precio Estatal', 'precio estatal']));
+  const precioMunicipal = parseMoneyValue(getRowValue(row, ['PRECIO MUNICIPAL', 'Precio Municipal', 'precio municipal']));
+  const idPc = normalizeScalarText(getRowValue(row, ['ID_PC', 'ID PC', 'Id Pc', 'id_pc']));
+  const logo = normalizeScalarText(getRowValue(row, ['LOGO', 'Logo']));
+  const ultimoPipcEstatal = normalizeScalarText(getRowValue(row, ['ULTIMO PIPC ESTATAL', 'Ultimo PIPC Estatal', 'ultimo pipc estatal']));
+  const ultimoPipcMunicipal = normalizeScalarText(getRowValue(row, ['ULTIMO MUNICIPAL', 'Ultimo Municipal', 'ultimo municipal']));
+  const pedido = normalizeScalarText(getRowValue(row, ['PEDIDO', 'Pedido', 'pedido']));
+  const latLng = normalizeScalarText(getRowValue(row, ['lat/lng', 'LAT/LNG', 'LAT LNG', 'latlng', 'LATLNG']));
+  const mesPlaneacion = normalizeScalarText(getRowValue(row, ['MES PLANEACION', 'Mes Planeacion', 'mes planeacion']));
+  const displayLabel = label || label2 || tienda || key;
+  return {
+    key,
+    label,
+    label2,
+    drive,
+    tienda,
+    displayLabel,
+    empresaId: normalizeScalarText(empresaIdRaw),
+    empresaLabel: empresaRow?.displayLabel || empresaRow?.razonSocial || empresaRow?.nombreComercial || normalizeScalarText(empresaIdRaw),
+    municipioId: normalizeScalarText(municipioIdRaw),
+    municipioLabel: municipioRow?.displayLabel || municipioRow?.nombre || normalizeScalarText(municipioIdRaw),
+    municipioNombre: municipioRow?.nombre || municipioRow?.displayLabel || normalizeScalarText(municipioIdRaw),
+    estadoId: normalizeScalarText(estadoIdRaw),
+    estadoLabel: estadoRow?.displayLabel || estadoRow?.nombre || normalizeScalarText(estadoIdRaw),
+    direccion,
+    direccionGoogle,
+    status,
+    vencimientoMunicipal,
+    trabajos,
+    tipo,
+    nivelRiesgo,
+    precioEstatal,
+    precioMunicipal,
+    idPc,
+    logo,
+    ultimoPipcEstatal,
+    ultimoPipcMunicipal,
+    pedido,
+    latLng,
+    mesPlaneacion,
+    empresa: empresaRow || null,
+    municipio: municipioRow || null,
+    estado: estadoRow || null,
+    raw: row,
+  };
 }
 
 function collectSucursalCandidates(value) {
@@ -336,7 +597,8 @@ function createDriveClient() {
   return google.drive({ version: 'v3', auth });
 }
 
-function normalizeRow(row = {}, sucursalesLookup = null) {
+function normalizeRow(row = {}, catalogs = {}, thresholds = {}) {
+  const sucursalesLookup = catalogs.sucursalesLookup || null;
   const rowId = normalizeScalarText(getRowValue(row, ['Row ID', 'ROW ID', 'RowId', 'ROWID', 'ID', 'Id', 'id']));
   const facturadorId = extractFacturadorId(row);
   const facturadorNombre = resolveFacturadorNombre(facturadorId, row);
@@ -361,6 +623,9 @@ function normalizeRow(row = {}, sucursalesLookup = null) {
   );
   const lookupByKey = resolveSucursalForPedido(tiendaValue, tiendaKey, sucursalesLookup);
   const tiendaObject = tiendaValue && typeof tiendaValue === 'object' ? tiendaValue : null;
+  const companyIdRaw = lookupByKey?.empresaId || getRowValue(row, ['ID EMPRESA', 'EMPRESA', 'Empresa', 'empresa']);
+  const municipalityIdRaw = lookupByKey?.municipioId || getRowValue(row, ['MUNICIPIO', 'Municipio', 'municipio']);
+  const stateIdRaw = lookupByKey?.estadoId || getRowValue(row, ['ESTADO', 'Estado', 'estado']);
   const resolvedTiendaLabel = normalizeScalarText(
     lookupByKey?.label
     || lookupByKey?.displayLabel
@@ -381,8 +646,36 @@ function normalizeRow(row = {}, sucursalesLookup = null) {
   const ultimoPipcEstatal = normalizeScalarText(getRowValue(row, ['ultimo pipc estatal', 'ULTIMO PIPC ESTATAL', 'ultimoPipcEstatal', 'ultimo_pipc_estatal']));
   const ultimoPipcMunicipal = normalizeScalarText(getRowValue(row, ['ultimo municipal', 'ULTIMO MUNICIPAL', 'ultimoPipcMunicipal', 'ultimo_pipc_municipal']));
   const importe = normalizeScalarText(getRowValue(row, ['IMPORTE', 'Importe']));
+  const importeNumber = parseMoneyValue(importe);
   const descripcion = normalizeScalarText(getRowValue(row, ['DESCRIPCION', 'Descripcion', 'DESCRIPTION']));
   const establecimiento = tiendaKey || normalizeScalarText(getRowValue(row, ['ESTABLECIMIENTO', 'No. Tienda', 'No. tienda', 'No tienda']));
+  const liberacion = normalizeScalarText(getRowValue(row, ['LIBERACION', 'Liberacion', 'LIBERADO']));
+  const pago = normalizeScalarText(getRowValue(row, ['PAGO', 'Pago', 'PAGADO']));
+  const facturaEnLey = normalizeScalarText(getRowValue(row, ['FACTURA EN LEY', 'Factura En Ley', 'FACTURAENLEY', 'FACTURA_EN_LEY']));
+  const folioClubFactura = normalizeScalarText(getRowValue(row, ['FOLIO CLUBFACTURA', 'Folio ClubFactura', 'FOLIO_CLUBFACTURA']));
+  const cheque = normalizeScalarText(getRowValue(row, ['CHEQUE', 'Cheque']));
+  const uuid = normalizeScalarText(getRowValue(row, ['UUID', 'Uuid', 'uuid']));
+  const relatedLiberaciones = normalizeScalarText(getRowValue(row, ['Related LIBERACIONESs', 'Related LIBERACIONES', 'related liberaciones']));
+  const fechaDate = extractYear(getRowValue(row, ['fecha(DATE)', 'FECHA(DATE)', 'fecha']));
+  const tipoClasificacion = classifyPedidoTipo(descripcion, importeNumber, thresholds);
+  const empresaRow = resolveLookupRow(companyIdRaw, catalogs.empresasLookup);
+  const municipioRow = resolveLookupRow(municipalityIdRaw, catalogs.municipiosLookup);
+  const estadoRow = resolveLookupRow(stateIdRaw, catalogs.estadosLookup);
+  const municipioNombre = municipioRow?.nombre || municipioRow?.displayLabel || getFirstMeaningfulText(municipioRow?.raw || {}, ['NOMBRE', 'Nombre', 'LABEL', 'Label', 'LABEL2', 'Label2', 'MUNICIPIO', 'Municipio', 'NAME', 'Name']) || normalizeScalarText(municipalityIdRaw);
+  const estadoNombre = estadoRow?.nombre || estadoRow?.displayLabel || getFirstMeaningfulText(estadoRow?.raw || {}, ['NOMBRE', 'Nombre', 'LABEL', 'Label', 'LABEL2', 'Label2', 'ESTADO', 'Estado', 'NAME', 'Name']) || normalizeScalarText(stateIdRaw);
+  const isCuliacanMunicipal = normalizeText(municipioNombre).includes('CULIACAN') && tipoClasificacion === 'municipal';
+  const clasificacionLabel = isCuliacanMunicipal
+    ? 'Municipal Culiacán'
+    : tipoClasificacion === 'estatal'
+      ? 'Estatal'
+      : tipoClasificacion === 'municipal'
+        ? 'Municipal'
+        : 'Sin clasificar';
+  const clasificacionDetalle = isCuliacanMunicipal ? 'Municipal de Culiacán asignado a Sergio González Castillo' : '';
+  const resolvedFacturadorId = isCuliacanMunicipal ? CULIACAN_MUNICIPAL_FACTURADOR_ID : facturadorId;
+  const resolvedFacturadorNombre = isCuliacanMunicipal
+    ? (FACTURADOR_OPTIONS.get(CULIACAN_MUNICIPAL_FACTURADOR_ID) || facturadorNombre)
+    : facturadorNombre;
   return {
     rowId,
     pedido,
@@ -392,21 +685,49 @@ function normalizeRow(row = {}, sucursalesLookup = null) {
       drive: resolvedTiendaDrive,
       ultimoPipcEstatal,
       ultimoPipcMunicipal,
+      empresaId: normalizeScalarText(companyIdRaw),
+      empresaLabel: empresaRow?.displayLabel || empresaRow?.razonSocial || empresaRow?.nombreComercial || normalizeScalarText(companyIdRaw),
+      municipioId: normalizeScalarText(municipalityIdRaw),
+      municipioLabel: municipioNombre,
+      municipioNombre,
+      estadoId: normalizeScalarText(stateIdRaw),
+      estadoLabel: estadoNombre,
+      estadoNombre,
+      estadoRawLabel: estadoRow?.nombre || estadoRow?.displayLabel || normalizeScalarText(stateIdRaw),
     },
     tiendaLabel: resolvedTiendaLabel,
     tiendaDrive: resolvedTiendaDrive,
     tiendaKey,
     establecimiento,
-    facturadorId,
-    facturadorNombre,
+    facturadorId: resolvedFacturadorId,
+    facturadorNombre: resolvedFacturadorNombre,
     fecha,
-    fechaYear: extractYear(fecha),
+    fechaYear: fechaDate || extractYear(fecha),
     status,
     importe,
+    importeNumber,
     descripcion,
+    liberacion,
+    liberacionBool: normalizeTruthValue(liberacion),
+    relatedLiberaciones,
+    pago,
+    pagoBool: normalizeTruthValue(pago),
+    facturaEnLey,
+    facturaEnLeyBool: normalizeTruthValue(facturaEnLey),
+    folioClubFactura,
+    cheque,
+    chequeBool: normalizeTruthValue(cheque),
+    uuid,
     ultimoPipcEstatal,
     ultimoPipcMunicipal,
     enviado: normalizeScalarText(getRowValue(row, ['ENVIADO', 'Enviado'])),
+    enviadoBool: normalizeTruthValue(getRowValue(row, ['ENVIADO', 'Enviado'])),
+    tipoClasificacion,
+    clasificacionLabel,
+    clasificacionDetalle,
+    empresa: empresaRow || null,
+    municipio: municipioRow || null,
+    estado: estadoRow || null,
     raw: row,
   };
 }
@@ -466,34 +787,128 @@ async function appsheetFindRows(selector = '', tableName = TABLE) {
   return extractAppSheetRows(result);
 }
 
-async function fetchSucursalesLookup(forceRefresh = false) {
+async function fetchLookupRows(tableName, normalizer, cacheKey, forceRefresh = false, lookupBuilder = null) {
   const now = Date.now();
-  if (!forceRefresh && cache.sucursalesLookup && now - cache.sucursalesAt < CACHE_TTL_MS) {
-    return cache.sucursalesLookup;
+  const cacheEntry = lookupCache[cacheKey];
+  if (!cacheEntry) {
+    throw new Error(`Lookup cache no definido para ${cacheKey}`);
   }
 
-  const rows = await appsheetFindRows(`Filter(${SUCURSALES_TABLE}, true)`, SUCURSALES_TABLE);
-  const rowByKey = new Map();
-  const labelByKey = new Map();
-  const driveByKey = new Map();
-
-  for (const row of rows) {
-    const sucursal = normalizeSucursalRow(row);
-    if (!sucursal.key) continue;
-    rowByKey.set(sucursal.key, sucursal);
-    if (sucursal.tienda) rowByKey.set(sucursal.tienda, sucursal);
-    if (sucursal.raw?.RowID) rowByKey.set(String(sucursal.raw.RowID).trim(), sucursal);
-    if (sucursal.raw?.['Row ID']) rowByKey.set(String(sucursal.raw['Row ID']).trim(), sucursal);
-    if (sucursal.displayLabel) labelByKey.set(sucursal.key, sucursal.displayLabel);
-    if (sucursal.tienda && sucursal.displayLabel) labelByKey.set(sucursal.tienda, sucursal.displayLabel);
-    if (sucursal.drive) driveByKey.set(sucursal.key, sucursal.drive);
-    if (sucursal.tienda && sucursal.drive) driveByKey.set(sucursal.tienda, sucursal.drive);
+  if (!forceRefresh && cacheEntry.lookup && now - cacheEntry.at < CACHE_TTL_MS) {
+    return cacheEntry.lookup;
   }
 
-  const lookup = { rows, rowByKey, labelByKey, driveByKey };
-  cache.sucursalesAt = now;
-  cache.sucursalesLookup = lookup;
+  const rows = await appsheetFindRows(`Filter(${tableName}, true)`, tableName);
+  const normalizedRows = rows.map((row) => normalizer(row)).filter((row) => row.key);
+  const lookup = typeof lookupBuilder === 'function'
+    ? lookupBuilder(normalizedRows)
+    : { rows: normalizedRows };
+
+  lookupCache[cacheKey] = {
+    at: now,
+    lookup,
+  };
+
   return lookup;
+}
+
+function buildIndexedLookup(rows, { labelSelector = (row) => row.displayLabel || row.label || row.nombre || row.razonSocial || row.key, extraAliases = [] } = {}) {
+  const rowByKey = new Map();
+  const rowByLabel = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = normalizeText(row.key);
+    if (!key) continue;
+    rowByKey.set(key, row);
+    const label = normalizeText(labelSelector(row));
+    if (label) rowByLabel.set(label, row);
+    for (const alias of Array.isArray(extraAliases) ? extraAliases : []) {
+      const aliasValue = normalizeText(alias(row));
+      if (aliasValue) rowByKey.set(aliasValue, row);
+    }
+  }
+
+  return {
+    rows,
+    rowByKey,
+    rowByLabel,
+  };
+}
+
+async function fetchSucursalesLookup(forceRefresh = false, catalogs = {}) {
+  return fetchLookupRows(
+    SUCURSALES_TABLE,
+    (row) => normalizeSucursalRow(row, catalogs),
+    'sucursales',
+    forceRefresh,
+    (rows) => {
+      const indexed = buildIndexedLookup(rows, {
+        labelSelector: (row) => row.displayLabel || row.label || row.label2 || row.tienda || row.key,
+      });
+      const driveByKey = new Map();
+      for (const row of rows) {
+        if (row.key && row.drive) driveByKey.set(normalizeText(row.key), row.drive);
+        if (row.tienda && row.drive) driveByKey.set(normalizeText(row.tienda), row.drive);
+      }
+      return { ...indexed, driveByKey };
+    }
+  );
+}
+
+async function fetchEmpresasLookup(forceRefresh = false) {
+  return fetchLookupRows(
+    EMPRESA_TABLE,
+    normalizeEmpresaRow,
+    'empresas',
+    forceRefresh,
+    (rows) => buildIndexedLookup(rows, {
+      labelSelector: (row) => row.displayLabel || row.razonSocial || row.nombreComercial || row.key,
+    })
+  );
+}
+
+async function fetchMunicipiosLookup(forceRefresh = false) {
+  return fetchLookupRows(
+    MUNICIPIO_TABLE,
+    normalizeMunicipioRow,
+    'municipios',
+    forceRefresh,
+    (rows) => buildIndexedLookup(rows, {
+      labelSelector: (row) => row.displayLabel || row.nombre || row.key,
+    })
+  );
+}
+
+async function fetchEstadosLookup(forceRefresh = false) {
+  return fetchLookupRows(
+    ESTADO_TABLE,
+    normalizeEstadoRow,
+    'estados',
+    forceRefresh,
+    (rows) => buildIndexedLookup(rows, {
+      labelSelector: (row) => row.displayLabel || row.nombre || row.key,
+    })
+  );
+}
+
+async function fetchPedidosLeyCatalogs(forceRefresh = false) {
+  const [empresasLookup, municipiosLookup, estadosLookup] = await Promise.all([
+    fetchEmpresasLookup(forceRefresh),
+    fetchMunicipiosLookup(forceRefresh),
+    fetchEstadosLookup(forceRefresh),
+  ]);
+
+  const sucursalesLookup = await fetchSucursalesLookup(forceRefresh, {
+    empresasLookup,
+    municipiosLookup,
+    estadosLookup,
+  });
+
+  return {
+    empresasLookup,
+    municipiosLookup,
+    estadosLookup,
+    sucursalesLookup,
+  };
 }
 
 function getFilesDir() {
@@ -693,7 +1108,7 @@ function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
   const driveText = String(tiendaDrive || '').trim();
   const keywords = [
     ['PIPC'],
-    ['PLAN DE CONTINGENCIAS', 'PLANES DE CONTINGENCIA'],
+    ['PLAN DE CONTINGENCIAS', 'PLANES DE CONTINGENCIA', 'PLAN DE CONTINGENCIA', 'PLAN DE CONTINUIDAD'],
   ];
   const source = Array.isArray(entries) ? entries : [];
   const matches = source.filter((entry) => {
@@ -714,9 +1129,11 @@ function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
       const contingency = text.includes('PLAN DE CONTINGENCIAS')
         || text.includes('PLANES DE CONTINGENCIA')
         || text.includes('PLAN DE CONTINGENCIA')
+        || text.includes('PLAN DE CONTINUIDAD')
         || pathText.includes('PLAN DE CONTINGENCIAS')
         || pathText.includes('PLANES DE CONTINGENCIA')
         || pathText.includes('PLAN DE CONTINGENCIA')
+        || pathText.includes('PLAN DE CONTINUIDAD')
         ? 3
         : 0;
       const storeHint = storeText && (text.includes(storeText) || pathText.includes(storeText)) ? 1 : 0;
@@ -770,9 +1187,10 @@ async function buildResponse(rows, { facturadorId = '', includeSent = false, for
   if (!driveClient) {
     throw new Error('No hay credenciales de Drive configuradas para pedidos');
   }
-  const sucursalesLookup = await fetchSucursalesLookup(forceRefresh);
+  const catalogs = await fetchPedidosLeyCatalogs(forceRefresh);
+  const sucursalesLookup = catalogs.sucursalesLookup;
   const filtered = (Array.isArray(rows) ? rows : [])
-    .map((row) => normalizeRow(row, sucursalesLookup))
+    .map((row) => normalizeRow(row, catalogs))
     .filter((row) => row.pedido && (row.tiendaLabel || row.tiendaKey || row.establecimiento))
     .filter((row) => includeSent || !isTruthySent(row.enviado))
     .filter((row) => !normalizedFacturador || normalizeText(row.facturadorId) === normalizedFacturador);
@@ -864,6 +1282,72 @@ export async function fetchPedidosLeySinLiberacion({ facturadorId = '', includeS
   return buildResponse(rows, { facturadorId: normalizedFacturadorId, includeSent, forceRefresh });
 }
 
+export function getPedidosLeyAdminDefaultThresholds() {
+  return {
+    estatalMin: DEFAULT_STATE_THRESHOLD,
+    municipalMin: DEFAULT_MUNICIPAL_THRESHOLD,
+  };
+}
+
+export async function fetchPedidosLeyAdminDashboardData({
+  year = new Date().getFullYear(),
+  forceRefresh = false,
+  facturadorId = DEFAULT_ADMIN_FACTURADOR_ID,
+  thresholds = {},
+} = {}) {
+  const normalizedYear = Number.parseInt(String(year || '').trim(), 10);
+  const targetYear = Number.isFinite(normalizedYear) ? normalizedYear : new Date().getFullYear();
+  const normalizedFacturadorId = String(facturadorId || '').trim();
+  const normalizedThresholds = {
+    estatalMin: Number.isFinite(Number.parseFloat(thresholds.estatalMin)) ? Number.parseFloat(thresholds.estatalMin) : DEFAULT_STATE_THRESHOLD,
+    municipalMin: Number.isFinite(Number.parseFloat(thresholds.municipalMin)) ? Number.parseFloat(thresholds.municipalMin) : DEFAULT_MUNICIPAL_THRESHOLD,
+  };
+  const cacheKey = JSON.stringify({
+    year: targetYear,
+    facturadorId: normalizedFacturadorId,
+    estatalMin: normalizedThresholds.estatalMin,
+    municipalMin: normalizedThresholds.municipalMin,
+  });
+  const cached = dashboardCache.get(cacheKey);
+  if (!forceRefresh && cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const candidateYears = [targetYear, targetYear - 1, targetYear - 2].filter((value, index, array) => Number.isFinite(value) && value >= 2020 && array.indexOf(value) === index);
+  const catalogsPromise = fetchPedidosLeyCatalogs(forceRefresh);
+  let rows = [];
+  let loadedYear = targetYear;
+  for (const candidateYear of candidateYears) {
+    const selector = `Filter(${TABLE}, YEAR([fecha(DATE)]) = ${candidateYear})`;
+    const result = await appsheetFindRows(selector, TABLE);
+    rows = Array.isArray(result) ? result : [];
+    loadedYear = candidateYear;
+    if (rows.length > 0) break;
+  }
+  const catalogs = await catalogsPromise;
+  const normalizedRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeRow(row, catalogs, normalizedThresholds))
+    .filter((row) => row.pedido)
+    .filter((row) => !normalizedFacturadorId || normalizeText(row.facturadorId) === normalizeText(normalizedFacturadorId));
+
+  const data = {
+    ok: true,
+    year: loadedYear,
+    requestedYear: targetYear,
+    facturadorId: normalizedFacturadorId,
+    facturadorLabel: FACTURADOR_OPTIONS.get(normalizedFacturadorId) || normalizedFacturadorId,
+    thresholds: normalizedThresholds,
+    table: TABLE,
+    rows: normalizedRows,
+    catalogs,
+  };
+  dashboardCache.set(cacheKey, {
+    at: Date.now(),
+    data,
+  });
+  return data;
+}
+
 export async function debugPedidoLey({ pedido = '', forceRefresh = false } = {}) {
   const normalizedPedido = String(pedido || '').trim();
   if (!normalizedPedido) {
@@ -884,8 +1368,9 @@ export async function debugPedidoLey({ pedido = '', forceRefresh = false } = {})
     };
   }
 
-  const sucursalesLookup = await fetchSucursalesLookup(forceRefresh);
-  const normalizedRow = normalizeRow(rawRow, sucursalesLookup);
+  const catalogs = await fetchPedidosLeyCatalogs(forceRefresh);
+  const sucursalesLookup = catalogs.sucursalesLookup;
+  const normalizedRow = normalizeRow(rawRow, catalogs);
   const lookupByKey = resolveSucursalForPedido(rawRow?.TIENDA || rawRow?.tienda || rawRow?.Tienda, normalizedRow.tiendaKey, sucursalesLookup);
   const lookupHasKey = normalizedRow.tiendaKey ? Boolean(sucursalesLookup?.rowByKey?.has(String(normalizedRow.tiendaKey))) : false;
   const driveRoot = extractDriveId(normalizedRow.tiendaDrive || lookupByKey?.drive || '');
@@ -1056,6 +1541,11 @@ export function clearPedidosLeyCache() {
   cache.driveEntriesByRoot = new Map();
   cache.sucursalesAt = 0;
   cache.sucursalesLookup = null;
+  for (const entry of Object.values(lookupCache)) {
+    entry.at = 0;
+    entry.lookup = null;
+  }
+  dashboardCache.clear();
 }
 
 export function clearPedidosLeyRowsCache() {
@@ -1067,3 +1557,5 @@ export function clearPedidosLeyRowsCache() {
 export function getPedidosLeyFilesDir() {
   return getFilesDir();
 }
+
+

@@ -76,7 +76,7 @@ facturacionRouter.get("/cotizacion/:id/html-data", async (req, res) => {
     res.json({ ok: true, data });
   } catch (err) {
     console.error("ERROR EN /html-data:", err);
-    res.status(500).json({ ok: false, error: err.message, stack: err.stack });
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : "Error interno" });
   }
 });
 
@@ -118,7 +118,9 @@ facturacionRouter.get("/cotizacion/:id/html", async (req, res) => {
   try {
     const json = await obtenerCotizacionCompleta(req.params.id);
     const data = construirDataHTML(json);
-    res.render(String(json.empresaId) === "1" ? "cotizacion_ley" : "cotizacion", { data });
+    const empresaId = String(json.empresaId || "").trim();
+    const usarPlantillaLey = empresaId === "1" || empresaId === "25";
+    res.render(usarPlantillaLey ? "cotizacion_ley" : "cotizacion", { data });
   } catch (err) {
     console.error(err);
     res.status(500).send("Error");

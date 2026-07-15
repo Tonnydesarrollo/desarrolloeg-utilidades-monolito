@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "desarrolloeg-monolito",
       script: "src/server.js",
-      cwd: "C:\\Users\\devssh\\Documents\\Programacion\\DESARROLLOEG_UTILIDADES_MONOLITO",
+      cwd: __dirname,
       instances: 1,
       exec_mode: "fork",
       autorestart: true,

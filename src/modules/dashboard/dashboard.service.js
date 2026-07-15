@@ -308,7 +308,7 @@ async function getMonolithStatuses(baseUrl) {
 
 async function getPm2Processes() {
   try {
-    const { stdout } = await execAsync("npx pm2 jlist", { windowsHide: true });
+    const { stdout } = await execAsync("pm2 jlist", { windowsHide: true });
     const normalizedStdout = String(stdout || "").trim();
     if (!normalizedStdout.startsWith("[")) {
       return [];

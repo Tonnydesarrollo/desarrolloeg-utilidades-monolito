@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import {
   buildCartaCompromisoMunicipalPreset,
   buildCartaEntregaCuliacanPreset,
+  buildCartaEntregaNavolatoPreset,
   buildCedulaSimulacroPreset,
   getWebDefaults,
   listEmpleadosSummary,
@@ -82,6 +83,19 @@ sucursalesDocsRouter.get("/api/presets/carta-entrega-culiacan", async (req, res)
   }
 });
 
+sucursalesDocsRouter.get("/api/presets/carta-entrega-navolato", async (req, res) => {
+  try {
+    const id = String(req.query.id || "").trim();
+    if (!id) {
+      return handleError(res, new Error("Debes seleccionar una sucursal."), 400);
+    }
+
+    res.json(await buildCartaEntregaNavolatoPreset(id));
+  } catch (error) {
+    handleError(res, error, 400);
+  }
+});
+
 sucursalesDocsRouter.get("/api/presets/cedula-simulacro", async (req, res) => {
   try {
     const id = String(req.query.id || "").trim();
@@ -108,6 +122,7 @@ sucursalesDocsRouter.post("/api/preview", async (req, res) => {
       bodyHtml: req.body.bodyHtml,
       templateId: req.body.templateId,
       fields: req.body.fields,
+      basePath: req.baseUrl || "",
     });
 
     res.type("html").send(html);
@@ -129,6 +144,7 @@ sucursalesDocsRouter.post("/api/pdf", async (req, res) => {
       bodyHtml: req.body.bodyHtml,
       templateId: req.body.templateId,
       fields: req.body.fields,
+      basePath: req.baseUrl || "",
     });
 
     res.setHeader("Content-Type", "application/pdf");

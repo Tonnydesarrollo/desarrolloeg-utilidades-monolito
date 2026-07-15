@@ -1,4 +1,4 @@
-import fs from "fs/promises";
+﻿import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import puppeteer from "puppeteer-core";
@@ -8,6 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..", "..", "..");
 const standaloneRoot = path.join(projectRoot, "standalone", "sucursales-docs");
+const NAVOLATO_TEMPLATE_ID = "carta-entrega-navolato";
+const NAVOLATO_PDF_FILENAME = "CARTA DE ENTREGA ZAPATERIA DLIS.pdf";
 
 const cache = {
   ts: 0,
@@ -223,7 +225,9 @@ function getConfig() {
     brandingPath: path.join(standaloneRoot, "config", "branding.default.json"),
     cartaTemplatePath: path.join(standaloneRoot, "templates", "carta-compromiso-municipal.html"),
     cartaEntregaCuliacanTemplatePath: path.join(standaloneRoot, "templates", "carta-entrega-culiacan.html"),
+    cartaEntregaNavolatoTemplatePath: path.join(standaloneRoot, "templates", "carta-entrega-navolato.html"),
     cedulaTemplatePath: path.join(standaloneRoot, "templates", "cedula-simulacro.html"),
+    cartaEntregaNavolatoPdfPath: path.join(__dirname, NAVOLATO_PDF_FILENAME),
     cedulaPdfTemplatePath: path.join(projectRoot, "CEDULA DE SIMULACRO - Hoja1 (1).pdf"),
     proteccionCivilLogoPath: readEnv(
       ["DOCS_PROTECCION_CIVIL_LOGO_PATH", "PROTECCION_CIVIL_LOGO_PATH"],
@@ -380,6 +384,118 @@ async function resolveCedulaBranchLogoSource(row, config) {
   const appSheetUrl = getAppSheetFileUrl(config, logoValue);
   const resolved = await resolveImageSource(appSheetUrl);
   return resolved || TRANSPARENT_IMAGE_DATA_URI;
+}
+
+async function buildStaticPdfPreviewHtml({ title, subtitle, pdfUrl, label }) {
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root {
+      --bg: #f4f7fa;
+      --panel: rgba(255,255,255,0.94);
+      --line: #d5dee7;
+      --ink: #10202a;
+      --muted: #5f7281;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, Arial, sans-serif;
+      background: radial-gradient(circle at top left, rgba(15,118,110,0.12), transparent 24%), var(--bg);
+      color: var(--ink);
+    }
+    .shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 20px 50px rgba(16,32,42,0.12);
+      overflow: hidden;
+    }
+    .header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #0f766e;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      line-height: 1.05;
+    }
+    .subtitle {
+      margin-top: 8px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 16px 24px 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #eef7f6;
+      border: 1px solid #d7ece8;
+      font-weight: 700;
+      color: #0f766e;
+    }
+    iframe {
+      display: block;
+      width: 100%;
+      min-height: 84vh;
+      border: 0;
+      background: #fff;
+    }
+    .footer {
+      padding: 14px 24px 20px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="card">
+      <div class="header">
+        <p class="eyebrow">Documento fijo</p>
+        <h1>${escapeHtml(title)}</h1>
+        <div class="subtitle">${escapeHtml(subtitle)}</div>
+      </div>
+      <div class="meta">
+        <span class="pill">Sucursal: ${escapeHtml(label || "General")}</span>
+        <span class="pill">Vista PDF integrada</span>
+      </div>
+      <iframe src="${escapeHtml(pdfUrl)}" title="${escapeHtml(title)}"></iframe>
+      <div class="footer">
+        Este formato se muestra como PDF directo porque el ejemplo de Navolato ya existe como archivo final.
+      </div>
+    </section>
+  </div>
+</body>
+</html>`;
 }
 
 async function findFirstExistingFile(filePaths) {
@@ -668,6 +784,23 @@ function getSucursalLabel(row, config) {
   );
 }
 
+function getSucursalDisplayInfo(row, config, empresasById = new Map(), municipiosById = new Map(), estadosById = new Map()) {
+  const empresaRow = getEmpresaRow(row, empresasById);
+  const municipioRow = getMunicipioRow(row, municipiosById);
+  const estadoRow = getEstadoRow(row, estadosById);
+  return {
+    id: getLookupId(row, [config.sucursalesIdCol, "ID", "Id", "id"]),
+    tienda: toDisplayValue(getFirstFlexible(row, [config.sucursalesTiendaCol, "TIENDA", "Tienda"]) ?? ""),
+    label: getSucursalLabel(row, config),
+    empresa: toUpperDisplay(
+      getFirstFlexible(empresaRow, ["RAZON SOCIAL", "RazÃ³n Social", "Razon Social", "NOMBRE"]) ?? ""
+    ),
+    municipio: toUpperDisplay(getFirstFlexible(municipioRow, ["NOMBRE", "Nombre"]) ?? ""),
+    estado: toUpperDisplay(getFirstFlexible(estadoRow, ["NOMBRE", "Nombre"]) ?? ""),
+    tipo: toUpperDisplay(getFirstFlexible(row, ["TIPO", "Tipo", "TIPO SUCURSAL", "Tipo Sucursal"]) ?? ""),
+  };
+}
+
 function applySignerToFields(fields, employeeRow) {
   if (!employeeRow) {
     return {
@@ -696,7 +829,7 @@ function buildCartaCompromisoMunicipalFields(row, config, empresasById, municipi
   return {
     fecha_carta: formatCartaMonth(new Date()),
     empresa: toUpperDisplay(
-      getFirstFlexible(empresaRow, ["RAZON SOCIAL", "RazÃ³n Social", "Razon Social", "razon social", "NOMBRE"]) ?? ""
+      getFirstFlexible(empresaRow, ["RAZON SOCIAL", "RazÃƒÂ³n Social", "Razon Social", "razon social", "NOMBRE"]) ?? ""
     ),
     label: toUpperDisplay(getSucursalLabel(row, config)),
     direccion_google: toUpperDisplay(
@@ -722,7 +855,31 @@ function buildCartaEntregaCuliacanFields(row, config, empresasById, municipiosBy
     fecha_carta: formatCartaMonth(new Date()),
     encargado_pc: toUpperDisplay(getFirstFlexible(municipioRow, ["ENCARGADO PC", "Encargado PC"]) ?? ""),
     puesto_destinatario: toUpperDisplay(getFirstFlexible(municipioRow, ["PUESTO", "Puesto"]) ?? ""),
-    empresa: toUpperDisplay(getFirstFlexible(empresaRow, ["RAZON SOCIAL", "Razón Social", "Razon Social", "NOMBRE"]) ?? ""),
+    empresa: toUpperDisplay(getFirstFlexible(empresaRow, ["RAZON SOCIAL", "RazÃ³n Social", "Razon Social", "NOMBRE"]) ?? ""),
+    label: label2,
+    direccion_google: toUpperDisplay(
+      getFirstFlexible(row, ["DIRECCION GOOGLE", "Direccion Google", "DIRECCION", "Direccion"]) ?? ""
+    ),
+    nombre_firma: "",
+    puesto_firma: "",
+    signer_id: "",
+    firma_url: "",
+  };
+}
+
+function buildCartaEntregaNavolatoFields(row, config, empresasById, municipiosById) {
+  const municipioRow = getMunicipioRow(row, municipiosById);
+  const empresaRow = getEmpresaRow(row, empresasById);
+  const label2 = toUpperDisplay(getFirstFlexible(row, ["LABEL2", "Label2", config.sucursalesNameCol, "LABEL", "Label"]) ?? "");
+  const municipioNombre = toUpperDisplay(getFirstFlexible(municipioRow, ["NOMBRE", "Nombre"]) ?? "NAVOLATO");
+
+  return {
+    fecha_carta: formatCartaMonth(new Date()),
+    destinatario_nombre: "LIC. CESAR HUMBERTO SANCHEZ ZAZUETA",
+    destinatario_puesto: "COORDINADOR DE PROTECCION CIVIL MUNICIPAL",
+    destinatario_municipio: municipioNombre || "NAVOLATO",
+    destinatario_linea2: `COORDINADOR DE PROTECCION CIVIL MUNICIPAL ${municipioNombre || "NAVOLATO"}`,
+    empresa: toUpperDisplay(getFirstFlexible(empresaRow, ["RAZON SOCIAL", "RazÃ³n Social", "Razon Social", "NOMBRE"]) ?? ""),
     label: label2,
     direccion_google: toUpperDisplay(
       getFirstFlexible(row, ["DIRECCION GOOGLE", "Direccion Google", "DIRECCION", "Direccion"]) ?? ""
@@ -743,14 +900,14 @@ function buildCedulaSimulacroFields(row, config, estadosById = new Map(), empres
   );
   const entidadFederativa = toUpperDisplay(getFirstFlexible(estadoRow, ["NOMBRE", "Nombre"]) ?? "");
   const empresaNombre = toUpperDisplay(
-    getFirstFlexible(empresaRow, ["RAZON SOCIAL", "RazÃƒÂ³n Social", "Razon Social", "razon social", "NOMBRE"]) ?? ""
+    getFirstFlexible(empresaRow, ["RAZON SOCIAL", "RazÃƒÆ’Ã‚Â³n Social", "Razon Social", "razon social", "NOMBRE"]) ?? ""
   );
 
   return {
     fecha: formatInputDate(new Date()),
     dependencia: empresaNombre,
     sucursal_label: label2,
-    telefono: toUpperDisplay(getFirstFlexible(row, ["TELEFONO", "Telefono", "Teléfono"]) ?? ""),
+    telefono: toUpperDisplay(getFirstFlexible(row, ["TELEFONO", "Telefono", "TelÃ©fono"]) ?? ""),
     direccion: direccionSucursal || toUpperDisplay(cartaFields.direccion_google || ""),
     entidad_federativa: entidadFederativa,
     tipo_inmueble: toUpperDisplay(getFirstFlexible(row, ["TIPO DE INMUEBLE", "Tipo de inmueble", "GIRO", "Giro"]) ?? ""),
@@ -865,6 +1022,21 @@ async function renderCartaEntregaCuliacanBody(fields = {}) {
   return renderTemplate(template, makeLookupMap(renderedFields));
 }
 
+async function renderCartaEntregaNavolatoBody(fields = {}) {
+  const config = getConfig();
+  await ensureFile(config.cartaEntregaNavolatoTemplatePath, "plantilla carta de entrega navolato");
+
+  const template = await fs.readFile(config.cartaEntregaNavolatoTemplatePath, "utf8");
+  const normalizedFields = normalizeEditableFields(fields);
+  const signatureSource = await resolveImageSource(fields.firma_url);
+  const renderedFields = {
+    ...normalizedFields,
+    firma_image_html: buildSignatureImageHtml(signatureSource),
+  };
+
+  return renderTemplate(template, makeLookupMap(renderedFields));
+}
+
 async function renderCedulaSimulacroDocument(row, config, fields = {}, branchLogoDataUri) {
   await ensureFile(config.cedulaTemplatePath, "plantilla cedula de simulacro");
 
@@ -883,6 +1055,26 @@ async function renderCedulaSimulacroDocument(row, config, fields = {}, branchLog
   };
 
   return renderTemplate(template, makeLookupMap(values));
+}
+
+async function renderStaticPdfPreviewDocument(row, config, title, subtitle, pdfUrl) {
+  const label =
+    getSucursalLabel(row, config) ||
+    row?.[config.sucursalesTiendaCol] ||
+    row?.[config.sucursalesIdCol] ||
+    "sucursal";
+
+  return buildStaticPdfPreviewHtml({
+    title,
+    subtitle,
+    label,
+    pdfUrl,
+  });
+}
+
+function normalizeBasePath(basePath = "") {
+  const value = String(basePath || "").trim().replace(/\/+$/g, "");
+  return value || "";
 }
 
 function buildBaseValues(row, config, defaults, branding, companyLogoDataUri, title, subtitle) {
@@ -971,6 +1163,27 @@ export async function buildCartaEntregaCuliacanPreset(id, signerId = "") {
   };
 }
 
+export async function buildCartaEntregaNavolatoPreset(id, signerId = "") {
+  const [{ config, rows }, { empresasById, municipiosById, employeesById }] = await Promise.all([
+    loadSucursales(),
+    loadRelatedTables(),
+  ]);
+
+  const row = findRowOrThrow(rows, config, id);
+  let fields = buildCartaEntregaNavolatoFields(row, config, empresasById, municipiosById);
+
+  if (signerId && employeesById.has(String(signerId).trim())) {
+    fields = applySignerToFields(fields, employeesById.get(String(signerId).trim()));
+  }
+
+  return {
+    templateId: "carta-entrega-navolato",
+    title: "Carta de Entrega Navolato",
+    subtitle: "",
+    fields,
+  };
+}
+
 export async function buildCedulaSimulacroPreset(id) {
   const [{ config, rows }, { empresasById, estadosById }] = await Promise.all([
     loadSucursales(),
@@ -989,21 +1202,30 @@ export async function buildCedulaSimulacroPreset(id) {
 
 export async function listSucursalesSummary(query = "") {
   const { config, rows } = await loadSucursales();
+  const { empresasById, municipiosById, estadosById } = await loadRelatedTables();
   const normalizedQuery = normalizeSearch(query);
 
   return rows
+    .map((row) => ({
+      ...getSucursalDisplayInfo(row, config, empresasById, municipiosById, estadosById),
+      raw: row,
+    }))
     .filter((row) => {
       if (!normalizedQuery) return true;
       const haystack = normalizeSearch(
-        `${row?.[config.sucursalesIdCol] ?? ""} ${row?.[config.sucursalesTiendaCol] ?? ""} ${getSucursalLabel(row, config)}`
+        `${row.id} ${row.tienda} ${row.label} ${row.empresa} ${row.municipio} ${row.estado} ${row.tipo}`
       );
       return haystack.includes(normalizedQuery);
     })
-    .map((row) => ({
-      id: String(row?.[config.sucursalesIdCol] ?? ""),
-      tienda: String(row?.[config.sucursalesTiendaCol] ?? ""),
-      label: getSucursalLabel(row, config),
-    }));
+    .sort((a, b) => {
+      const tiendaCompare = String(a.tienda).localeCompare(String(b.tienda), "es-MX", {
+        numeric: true,
+        sensitivity: "base",
+      });
+      if (tiendaCompare !== 0) return tiendaCompare;
+      return String(a.label).localeCompare(String(b.label), "es-MX", { sensitivity: "base" });
+    })
+    .map(({ raw, ...row }) => row);
 }
 
 export async function listEmpleadosSummary(query = "") {
@@ -1428,9 +1650,11 @@ export async function renderSucursalDocumentHtml({
   bodyHtml = "",
   templateId = "",
   fields = {},
+  basePath = "",
 }) {
   const { config, rows } = await loadSucursales();
   const row = findRowOrThrow(rows, config, id);
+  const routeBase = normalizeBasePath(basePath);
   const isCedulaSimulacro = String(templateId || "").trim() === "cedula-simulacro";
   const isCartaEntregaCuliacan = String(templateId || "").trim() === "carta-entrega-culiacan";
 
@@ -1441,6 +1665,49 @@ export async function renderSucursalDocumentHtml({
       html: await renderCedulaSimulacroDocument(row, config, fields, branchLogoDataUri),
       row,
       fileBaseName: `cedula-de-simulacro-${slugify(getSucursalLabel(row, config) || row?.[config.sucursalesTiendaCol] || "sucursal")}`,
+    };
+  }
+
+  const isCartaEntregaNavolato = String(templateId || "").trim() === "carta-entrega-navolato";
+
+  if (isCartaEntregaNavolato) {
+    const defaults = await getWebDefaults();
+    const { branding, companyLogoDataUri } = await loadBranding(config);
+    const baseValues = buildBaseValues(
+      row,
+      config,
+      defaults,
+      branding,
+      companyLogoDataUri,
+      "Carta de Entrega Navolato",
+      "PDF de ejemplo integrado en el modulo"
+    );
+    let selectedFields = normalizeEditableFields(fields);
+
+    if (!Object.keys(selectedFields).length) {
+      selectedFields = (await buildCartaEntregaNavolatoPreset(id)).fields;
+    }
+
+    const bodyHtml = await renderCartaEntregaNavolatoBody({
+      ...selectedFields,
+      firma_url: toDisplayValue(fields?.firma_url ?? ""),
+      signer_id: toDisplayValue(fields?.signer_id ?? ""),
+    });
+    const tokenMap = makeLookupMap(baseValues);
+    tokenMap.set("body_html", bodyHtml);
+    tokenMap.set("BODY_HTML", bodyHtml);
+    const html = renderTemplate(await fs.readFile(config.templatePath, "utf8"), tokenMap);
+    const label =
+      selectedFields.label ||
+      getSucursalLabel(row, config) ||
+      row?.[config.sucursalesTiendaCol] ||
+      row?.[config.sucursalesIdCol] ||
+      "sucursal";
+
+    return {
+      html,
+      row,
+      fileBaseName: `${slugify("carta-de-entrega-navolato")}-${slugify(label)}`,
     };
   }
 
@@ -1582,3 +1849,4 @@ export async function renderSucursalDocumentPdf(params) {
     await browser.close();
   }
 }
+

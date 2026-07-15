@@ -22,9 +22,12 @@ import {
   updateCapacitacionDiplomas,
   updateCapacitacionStatus,
   updateCapacitacionNotas,
+  warmPortalDashboardCaches,
 } from "./portalAuth.service.js";
 import { getFaltantesLeyData } from "../faltantes-ley/faltantesLey.service.js";
 import { renderPedidosSinLiberacionPage } from "../pedidos-ley/pedidosLey.page.js";
+import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
+import { renderPedidosLeyAdminPage } from "../pedidos-ley/pedidosLey.admin.page.js";
 
 export const homeRouter = express.Router();
 
@@ -45,6 +48,17 @@ function parseCookies(req) {
     cookies[key.trim()] = decodeURIComponent(rest.join("=").trim() || "");
   }
   return cookies;
+}
+
+function getGoogleOAuthRedirectUri(req) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+  const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = forwardedHost || String(req.headers.host || "").trim();
+  const protocol = forwardedProto === "https" ? "https" : "http";
+  if (!host) {
+    return "";
+  }
+  return `${protocol}://${host}/auth/google/callback`;
 }
 
 function escapeHtml(value = "") {
@@ -1236,23 +1250,57 @@ function getHomeStyles() {
         margin: 0 auto;
         padding: 26px 18px 56px;
       }
+      .dashboard-main {
+        max-width: 1600px;
+      }
+      .dashboard-main .hero {
+        padding: 16px 18px;
+      }
+      .dashboard-main .hero-grid {
+        grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.48fr);
+      }
+      .dashboard-main .hero p {
+        display: none;
+      }
+      .dashboard-main .hero-actions {
+        margin-top: 12px;
+      }
+      .dashboard-main .hero-callout,
+      .dashboard-main .hero-note {
+        padding: 12px 14px;
+      }
+      .dashboard-main .hero-callout-compact {
+        gap: 10px;
+      }
+      .dashboard-main .hero-logo {
+        max-width: 88px;
+        width: min(88px, 24vw);
+      }
+      .dashboard-main .hero-callout h2 {
+        font-size: clamp(0.98rem, 1.65vw, 1.12rem);
+      }
+      .dashboard-main .hero::after {
+        width: 190px;
+        height: 190px;
+        inset: auto -3% -28% auto;
+      }
       .hero {
         overflow: hidden;
         position: relative;
-        border-radius: 32px;
+        border-radius: 28px;
         background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
         color: var(--ink);
-        padding: 28px;
+        padding: 20px 22px;
         box-shadow: var(--shadow);
         border: 1px solid rgba(26, 42, 58, 0.10);
-        border-top: 6px solid var(--crimson);
+        border-top: 4px solid var(--crimson);
       }
       .hero::after {
         content: "";
         position: absolute;
-        inset: auto -2% -32% auto;
-        width: 340px;
-        height: 340px;
+        inset: auto -4% -42% auto;
+        width: 280px;
+        height: 280px;
         border-radius: 50%;
         background: radial-gradient(circle, rgba(192, 57, 43, 0.12), transparent 70%);
         pointer-events: none;
@@ -1261,9 +1309,9 @@ function getHomeStyles() {
         position: relative;
         z-index: 1;
         display: grid;
-        grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.9fr);
-        gap: 22px;
-        align-items: start;
+        grid-template-columns: minmax(0, 1.55fr) minmax(240px, 0.55fr);
+        gap: 16px;
+        align-items: center;
       }
       .eyebrow {
         display: inline-flex;
@@ -1278,25 +1326,25 @@ function getHomeStyles() {
         font-family: "Montserrat", sans-serif;
       }
       h1 {
-        margin: 14px 0 0;
-        font-size: clamp(2.1rem, 4.4vw, 3.7rem);
-        line-height: 0.95;
+        margin: 10px 0 0;
+        font-size: clamp(1.8rem, 3.8vw, 3rem);
+        line-height: 0.98;
         letter-spacing: -0.03em;
         font-family: "Cinzel", serif;
         text-transform: uppercase;
       }
       .hero p {
-        margin: 14px 0 0;
+        margin: 10px 0 0;
         max-width: 760px;
         color: var(--muted);
-        line-height: 1.55;
+        line-height: 1.45;
         font-family: "Montserrat", sans-serif;
       }
       .hero-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
-        margin-top: 22px;
+        margin-top: 16px;
       }
       .button {
         appearance: none;
@@ -1322,46 +1370,59 @@ function getHomeStyles() {
       }
       .hero-side {
         display: grid;
-        gap: 12px;
+        gap: 10px;
       }
       .hero-callout, .hero-note {
-        border-radius: 22px;
-        padding: 18px;
+        border-radius: 20px;
+        padding: 14px 16px;
         background: #ffffff;
         border: 1px solid rgba(26,42,58,0.10);
         box-shadow: 0 10px 24px rgba(26,42,58,0.05);
       }
       .hero-logo {
         display: block;
-        max-width: 170px;
-        width: min(170px, 54vw);
+        max-width: 120px;
+        width: min(120px, 34vw);
         height: auto;
-        margin: 0 auto 14px;
+        margin: 0;
         object-fit: contain;
         filter: drop-shadow(0 12px 24px rgba(0,0,0,0.16));
+      }
+      .hero-callout {
+        display: grid;
+        gap: 10px;
+      }
+      .hero-callout-compact {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
       }
       .hero-callout h2, .section-head h2 {
         margin: 0;
         letter-spacing: -0.03em;
         font-family: "Cinzel", serif;
       }
+      .hero-callout h2 {
+        font-size: clamp(1.05rem, 2vw, 1.35rem);
+      }
       .hero-callout p, .hero-note p {
-        margin: 10px 0 0;
+        margin: 6px 0 0;
         color: var(--muted);
-        line-height: 1.5;
+        line-height: 1.4;
         font-family: "Montserrat", sans-serif;
       }
       .hero-note strong {
         display: block;
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         text-transform: uppercase;
         letter-spacing: 0.1em;
         color: var(--crimson);
         font-family: "Montserrat", sans-serif;
       }
       .hero-note p {
-        margin-top: 8px;
-        font-size: 0.94rem;
+        margin-top: 6px;
+        font-size: 0.88rem;
         word-break: break-word;
       }
       .portal-group {
@@ -1404,6 +1465,8 @@ function getHomeStyles() {
         text-decoration: none;
         box-shadow: var(--shadow);
         transition: transform 180ms ease, box-shadow 180ms ease;
+        content-visibility: auto;
+        contain-intrinsic-size: 280px;
       }
       .card:hover, .employee-card:hover {
         transform: translateY(-2px);
@@ -1470,7 +1533,7 @@ function getHomeStyles() {
       }
       .dashboard-tabs-nav {
         position: sticky;
-        top: 14px;
+        top: 10px;
         z-index: 18;
         display: flex;
         gap: 8px;
@@ -1547,6 +1610,10 @@ function getHomeStyles() {
       .dashboard-tab-panel[hidden] {
         display: none !important;
       }
+      .dashboard-tab-panel {
+        content-visibility: auto;
+        contain-intrinsic-size: 1200px;
+      }
       .dashboard-tab-panel-content {
         display: grid;
         gap: 20px;
@@ -1564,6 +1631,8 @@ function getHomeStyles() {
         padding: 22px;
         box-shadow: var(--shadow);
         border-top: 5px solid var(--crimson);
+        content-visibility: auto;
+        contain-intrinsic-size: 760px;
       }
       .panel h2 {
         margin: 0;
@@ -1576,6 +1645,528 @@ function getHomeStyles() {
         line-height: 1.55;
         font-family: "Montserrat", sans-serif;
       }
+      .pedidos-native {
+        display: grid;
+        gap: 16px;
+        position: relative;
+        overflow: hidden;
+      }
+      .pedidos-native::before {
+        content: "";
+        position: absolute;
+        inset: -90px -120px auto auto;
+        width: 280px;
+        height: 280px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(29,78,216,0.08), transparent 68%);
+        pointer-events: none;
+      }
+      .pedidos-native::after {
+        content: "";
+        position: absolute;
+        inset: auto auto -120px -120px;
+        width: 340px;
+        height: 340px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(192,57,43,0.08), transparent 70%);
+        pointer-events: none;
+      }
+      .pedidos-native .summary-grid {
+        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .pedidos-native .summary-card {
+        position: relative;
+        overflow: hidden;
+        min-height: 104px;
+        padding: 14px;
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,250,252,0.96)),
+          var(--card-soft, rgba(255,255,255,1));
+        border: 1px solid rgba(26,42,58,0.10);
+        box-shadow: 0 12px 28px rgba(26,42,58,0.08);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .pedidos-native .summary-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto auto 0;
+        width: 100%;
+        height: 5px;
+        background: var(--summary-accent, rgba(26,42,58,0.14));
+      }
+      .pedidos-native .summary-card[data-tone="blue"] {
+        --summary-accent: linear-gradient(90deg, #1d4ed8, #0f766e);
+      }
+      .pedidos-native .summary-card[data-tone="fail"] {
+        --summary-accent: linear-gradient(90deg, #be123c, #ef4444);
+      }
+      .pedidos-native .summary-card[data-tone="warn"] {
+        --summary-accent: linear-gradient(90deg, #b45309, #f59e0b);
+      }
+      .pedidos-native .summary-card[data-tone="ok"] {
+        --summary-accent: linear-gradient(90deg, #166534, #10b981);
+      }
+      .pedidos-native .summary-card .eyebrow {
+        position: relative;
+        z-index: 1;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font: 900 0.66rem/1 "Montserrat", sans-serif;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .pedidos-native .summary-card .value {
+        position: relative;
+        z-index: 1;
+        font-size: clamp(1.75rem, 2.3vw, 2.2rem);
+        line-height: 0.92;
+        letter-spacing: -0.04em;
+        font-family: "Cinzel", serif;
+      }
+      .pedidos-native .summary-card .detail {
+        position: relative;
+        z-index: 1;
+        margin-top: 8px;
+        color: var(--muted);
+        line-height: 1.3;
+        font-size: 0.80rem;
+      }
+      .pedidos-summary-panels {
+        display: grid;
+        gap: 12px;
+      }
+      .pedidos-summary-panel {
+        display: grid;
+        gap: 12px;
+      }
+      .pedidos-summary-panel[hidden] {
+        display: none !important;
+      }
+      .pedidos-summary-head {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .pedidos-summary-head h3 {
+        margin: 0;
+        font-family: "Cinzel", serif;
+        text-transform: uppercase;
+        letter-spacing: -0.03em;
+        font-size: 1.05rem;
+      }
+      .pedidos-summary-head p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+      .pedidos-summary-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .pedidos-summary-chips .pill {
+        background: rgba(255,255,255,0.78);
+      }
+      .pedidos-context {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 20px;
+        border: 1px solid rgba(26,42,58,0.08);
+        background: linear-gradient(180deg, rgba(247,250,252,0.92), rgba(255,255,255,0.92));
+      }
+      .pedidos-context-copy {
+        display: grid;
+        gap: 4px;
+        max-width: 560px;
+      }
+      .pedidos-context-copy strong {
+        font: 900 0.8rem/1 "Montserrat", sans-serif;
+        letter-spacing: 0.10em;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+      .pedidos-context-copy span {
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .pedidos-context-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .pedidos-native-shell {
+        display: grid;
+        gap: 16px;
+        position: relative;
+        z-index: 1;
+      }
+      .pedidos-native-shell--embedded {
+        gap: 12px;
+      }
+      .pedidos-header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 2px 0 0;
+      }
+      .pedidos-header--compact {
+        align-items: center;
+      }
+      .pedidos-native--embedded .pedidos-surface {
+        padding: 14px;
+        border-radius: 24px;
+      }
+      .pedidos-native--embedded .pedidos-header {
+        gap: 10px;
+      }
+      .pedidos-header h2 {
+        margin: 0;
+        font-family: "Cinzel", serif;
+        text-transform: uppercase;
+        letter-spacing: -0.03em;
+        font-size: clamp(1.25rem, 2vw, 1.75rem);
+        color: var(--ink);
+      }
+      .pedidos-header p {
+        margin: 8px 0 0;
+        max-width: 860px;
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+      .pedidos-surface {
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96)),
+          var(--surface);
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 30px;
+        box-shadow: 0 26px 64px rgba(26,42,58,0.10);
+        padding: 18px;
+        backdrop-filter: blur(16px);
+      }
+      .pedidos-toolbar {
+        display: grid;
+        gap: 12px;
+        margin-top: 14px;
+      }
+      .pedidos-filter-group {
+        display: grid;
+        gap: 8px;
+      }
+      .pedidos-toolbar-label {
+        font: 900 0.68rem/1 "Montserrat", sans-serif;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding-left: 2px;
+      }
+      .pedidos-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .pedidos-tab-btn {
+        appearance: none;
+        border: 1px solid rgba(26,42,58,0.10);
+        background: rgba(247,250,252,0.86);
+        color: #4b5563;
+        border-radius: 999px;
+        padding: 11px 15px;
+        font: 800 0.82rem/1 "Montserrat", sans-serif;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease;
+      }
+      .pedidos-tab-btn:hover {
+        transform: translateY(-1px);
+        border-color: rgba(29,78,216,0.18);
+      }
+      .pedidos-tab-btn.is-active {
+        background: linear-gradient(135deg, var(--ink), #1d4ed8);
+        color: #fff;
+        box-shadow: 0 12px 26px rgba(15,23,42,0.18);
+        border-color: transparent;
+      }
+      .pedidos-advanced {
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(247,250,252,0.92), rgba(241,245,249,0.88));
+        overflow: hidden;
+      }
+      .pedidos-view {
+        display: grid;
+        gap: 16px;
+        margin-top: 18px;
+      }
+      .pedidos-view[hidden] {
+        display: none !important;
+      }
+      .pedidos-view-header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .pedidos-view-header h3 {
+        margin: 0;
+        font-family: "Cinzel", serif;
+        text-transform: uppercase;
+        letter-spacing: -0.03em;
+        font-size: 1.05rem;
+      }
+      .pedidos-view-header p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .pedidos-coverage-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .pedidos-advanced > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 14px 18px;
+        font-weight: 900;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .pedidos-advanced > summary::-webkit-details-marker {
+        display: none;
+      }
+      .pedidos-advanced > summary::after {
+        content: "Mostrar filtros";
+        color: var(--muted);
+        font-size: 0.70rem;
+        text-transform: uppercase;
+        letter-spacing: 0.10em;
+      }
+      .pedidos-advanced[open] > summary::after {
+        content: "Ocultar filtros";
+      }
+      .pedidos-advanced-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+        padding: 0 18px 18px;
+      }
+      .pedidos-field {
+        display: grid;
+        gap: 7px;
+      }
+      .pedidos-field label {
+        font-size: 0.68rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.11em;
+        color: var(--muted);
+      }
+      .pedidos-field input {
+        width: 100%;
+        border: 1px solid rgba(26,42,58,0.12);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.96);
+        padding: 12px 13px;
+        font: inherit;
+        color: var(--ink);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
+      }
+      .pedidos-field input:focus {
+        outline: none;
+        border-color: rgba(29,78,216,0.42);
+        box-shadow: 0 0 0 3px rgba(29,78,216,0.10);
+      }
+      .pedidos-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: end;
+        justify-content: flex-end;
+      }
+      .pedidos-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        color: var(--muted);
+        font: 800 0.78rem/1.4 "Montserrat", sans-serif;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .pedidos-stats .pill {
+        background: rgba(255,255,255,0.94);
+      }
+      .pedidos-table-shell {
+        padding: 0;
+        overflow: auto;
+        border-radius: 22px;
+        border: 1px solid rgba(26,42,58,0.08);
+        background: rgba(255,255,255,0.98);
+      }
+      .pedidos-table-shell table {
+        min-width: 1200px;
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+      .pedidos-table-shell thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: linear-gradient(180deg, #f8fbff, #eef3f8);
+        color: #334155;
+        border-bottom: 1px solid rgba(26,42,58,0.10);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.74rem;
+        padding-top: 16px;
+        padding-bottom: 16px;
+      }
+      .pedidos-table-shell tbody tr {
+        transition: background 160ms ease, transform 160ms ease;
+      }
+      .pedidos-table-shell tbody tr:nth-child(even) {
+        background: rgba(248,250,252,0.7);
+      }
+      .pedidos-table-shell tbody tr:hover {
+        background: rgba(239,246,255,0.75);
+      }
+      .pedidos-row[hidden] {
+        display: none !important;
+      }
+      .pedidos-native .chip {
+        background: rgba(255,255,255,0.96);
+        border-color: rgba(26,42,58,0.10);
+        box-shadow: 0 4px 12px rgba(26,42,58,0.06);
+        letter-spacing: 0.06em;
+      }
+      .pedidos-coverage {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        gap: 18px;
+        margin-top: 10px;
+      }
+      .pedidos-coverage-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .pedidos-coverage-head h3 {
+        margin: 0;
+        font-family: "Cinzel", serif;
+        text-transform: uppercase;
+        letter-spacing: -0.02em;
+        font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+      }
+      .pedidos-coverage-head p {
+        margin: 8px 0 0;
+        max-width: 980px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .pedidos-coverage-tabs {
+        margin-left: auto;
+        justify-content: flex-end;
+      }
+      .pedidos-coverage-panels {
+        display: grid;
+        gap: 16px;
+      }
+      .pedidos-coverage-panel {
+        display: grid;
+      }
+      .pedidos-coverage-panel[hidden] {
+        display: none !important;
+      }
+      .pedidos-coverage-card {
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96)),
+          var(--surface);
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 28px;
+        padding: 18px;
+        box-shadow: 0 20px 48px rgba(26,42,58,0.08);
+      }
+      .pedidos-coverage-card h4 {
+        margin: 0;
+        font-family: "Cinzel", serif;
+        text-transform: uppercase;
+        letter-spacing: -0.02em;
+      }
+      .pedidos-coverage-card .coverage-meta {
+        margin-top: 8px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .pedidos-coverage-card .summary-grid {
+        margin-top: 14px;
+      }
+      .pedidos-coverage-section {
+        margin-top: 12px;
+      }
+      .pedidos-coverage-subtitle {
+        margin: 18px 0 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--ink);
+        font: 900 0.82rem/1 "Montserrat", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+      .pedidos-coverage-subtitle::before {
+        content: "";
+        width: 28px;
+        height: 1px;
+        background: rgba(26,42,58,0.22);
+      }
+      .pedidos-coverage-table {
+        margin-top: 8px;
+        border-radius: 18px;
+      }
+      .pedidos-coverage-table .table-shell {
+        border-radius: 18px;
+      }
+      .pedidos-coverage-table table {
+        min-width: 1080px;
+      }
+      .pedidos-coverage-empty {
+        padding: 18px;
+        color: var(--muted);
+        border: 1px dashed rgba(26,42,58,0.18);
+        border-radius: 18px;
+        background: rgba(248,250,252,0.72);
+      }
+      .pedidos-coverage-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(29,78,216,0.08);
+        color: var(--ink);
+        font: 900 0.7rem/1 "Montserrat", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
       .calendar-panel {
         display: flex;
         flex-direction: column;
@@ -1585,6 +2176,8 @@ function getHomeStyles() {
           radial-gradient(circle at top right, rgba(192,57,43,0.06), transparent 34%),
           radial-gradient(circle at left bottom, rgba(26,42,58,0.04), transparent 30%),
           linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94));
+        content-visibility: auto;
+        contain-intrinsic-size: 980px;
       }
       .calendar-split {
         display: grid;
@@ -3037,11 +3630,11 @@ function getHomeStyles() {
       }
       @media (max-width: 640px) {
         main { padding: 12px 8px 24px; }
-        .hero, .panel, .auth-form, .auth-visual { padding: 18px; border-radius: 22px; }
+        .hero, .panel, .auth-form, .auth-visual { padding: 16px; border-radius: 20px; }
         .hero::after {
-          width: 220px;
-          height: 220px;
-          inset: auto -28px -86px auto;
+          width: 180px;
+          height: 180px;
+          inset: auto -24px -68px auto;
         }
         .hero-grid {
           gap: 16px;
@@ -3292,7 +3885,7 @@ function getHomeStyles() {
   `;
 }
 
-function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAction, sideContent, bodyContent, footer, headExtra = "", bodyScripts = "" }) {
+function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAction, sideContent, bodyContent, footer, headExtra = "", bodyScripts = "", mainClass = "" }) {
   return `<!DOCTYPE html>
   <html lang="es">
   <head>
@@ -3311,7 +3904,7 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
         <p class="page-loader-text">Cargando Desarrollo EG</p>
       </div>
     </div>
-    <main>
+    <main class="${escapeAttr(mainClass || "")}">
       <section class="hero">
         <div class="hero-grid">
           <div>
@@ -3391,9 +3984,635 @@ function renderLoginPage(errorMessage = "") {
   </html>`;
 }
 
+function normalizeText(value = "") {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+}
+
+function getPedidoRowClassification(row = {}, thresholds = {}) {
+  const amount = Number(row.importeNumber);
+  const estatalMin = Number(thresholds?.estatalMin || 32000);
+  const municipalMin = Number(thresholds?.municipalMin || 9794.98);
+  const tipo = row.tipoClasificacion || (Number.isFinite(amount)
+    ? (amount >= estatalMin ? "estatal" : amount >= municipalMin ? "municipal" : "sin-clasificar")
+    : "sin-clasificar");
+  const statusText = normalizeText(row.status || "");
+  const liberado = statusText.includes("LIBERADO") || statusText.includes("LIBERACION") || statusText.includes("LIBERADO PENDIENTE");
+  const facturaLey = statusText.includes("LEY");
+  const pago = statusText.includes("PAGO");
+  return {
+    tipo,
+    liberado,
+    facturaLey,
+    pago,
+    noLiberado: statusText.includes("SIN LIBERACION")
+      || statusText.includes("NO LIBERADO")
+      || (statusText.includes("PENDIENTE") && !statusText.includes("PAGO")),
+    liberadoPendLey: statusText.includes("LIBERADO") && !facturaLey,
+    pendientePago: statusText.includes("PENDIENTE") && statusText.includes("PAGO"),
+    estatal: tipo === "estatal",
+    municipal: tipo === "municipal",
+  };
+}
+
+function renderPedidosAdminDashboardPanel({ data = {}, year = new Date().getFullYear(), embedded = false } = {}) {
+  const baseHref = `/dashboard/pedidos?year=${encodeURIComponent(String(year))}`;
+  return `
+    <div class="pedidos-native-shell${embedded ? " pedidos-native-shell--embedded" : ""}">
+      <div class="pedidos-header${embedded ? " pedidos-header--compact" : ""}">
+        <div>
+          <h2>Pedidos</h2>
+          <p>${embedded ? "Lectura rápida por estatus, tipo y cobertura, integrada al dashboard." : "Resumen ejecutivo de pedidos con lectura rápida por estatus, tipo y cobertura. La vista completa queda disponible para revisión profunda."}</p>
+        </div>
+        ${embedded ? "" : `<div class="hero-actions"><a class="button primary" href="${escapeAttr(baseHref)}" target="_blank" rel="noopener">Abrir panel completo</a></div>`}
+      </div>
+      <div data-pedidos-loading style="background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(248,250,252,.96));border-radius:18px;border:1px solid rgba(26,42,58,.08);display:flex;align-items:center;justify-content:center;gap:12px;flex-direction:column;color:var(--muted);font-family:'Montserrat',sans-serif;font-weight:800;letter-spacing:.04em;text-transform:uppercase;min-height:340px;padding:18px;">
+        <div class="page-loader-spinner" aria-hidden="true" style="width:40px;height:40px;border-width:3px;"></div>
+        <span>Cargando pedidos</span>
+      </div>
+      <div data-pedidos-root style="display:none;">${data?.rows?.length ? renderPedidosDashboardFragment({ user: null, data, year, embedded: true }) : ""}</div>
+  `;
+}
+
+function formatDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const date = new Date(text);
+  if (!Number.isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat("es-MX", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  }
+  return text;
+}
+
+function renderPedidoDashboardMetric(label, value, detail, tone = "blue") {
+  return `
+    <div class="summary-card" data-tone="${escapeAttr(tone)}" style="display:block;text-decoration:none;">
+      <div class="eyebrow">${escapeHtml(label)}</div>
+      <div class="value">${escapeHtml(String(value ?? 0))}</div>
+      <div class="detail">${escapeHtml(detail || "")}</div>
+    </div>
+  `;
+}
+
+function getPedidoDashboardStatusBucket(row = {}, flags = null, hasOrder = true) {
+  if (!hasOrder) return "sin-pedido";
+  const statusText = normalizeText(row.status || "");
+  const paid = Boolean(flags?.pago || row.pagoBool || statusText.includes("PAGADO"));
+  const pendingPayment = Boolean(flags?.pendientePago || row.pendientePago || (statusText.includes("PENDIENTE") && statusText.includes("PAGO")));
+  const liberated = Boolean(flags?.liberado || row.liberacionBool || statusText.includes("LIBERADO"));
+  const noLiberado = Boolean(flags?.noLiberado || row.noLiberado || statusText.includes("SIN LIBERACION") || statusText.includes("NO LIBERADO"));
+  if (pendingPayment) {
+    return "pendientes-pago";
+  }
+  if (paid) {
+    return "pagados";
+  }
+  if (liberated) {
+    return "liberados";
+  }
+  if (noLiberado) {
+    return "sin-liberacion";
+  }
+  if (statusText.includes("SIN LIBERACION") || statusText.includes("NO LIBERADO")) {
+    return "sin-liberacion";
+  }
+  if (statusText.includes("LIBERADO") && !statusText.includes("LEY")) {
+    return "liberados";
+  }
+  return "otros";
+}
+
+function getPedidoDashboardTypeBucket(row = {}) {
+  if (row._flags?.estatal) return "estatal";
+  if (row._flags?.municipal) return "municipal";
+  return "otros";
+}
+
+function getPedidoCoverageBranchKey(row = {}) {
+  return normalizeText(row.key || row.id || row.tienda || row.displayLabel || row.label || row.label2 || "");
+}
+
+function getPedidoCoverageBranchLabel(row = {}) {
+  return String(row.displayLabel || row.label || row.label2 || row.tienda || row.key || row.id || "").trim();
+}
+
+function getPedidoCoverageBranchKinds(row = {}) {
+  const work = normalizeText(row.trabajos || "");
+  const kinds = [];
+  if (work.includes("ESTATAL")) kinds.push("estatal");
+  if (work.includes("MUNICIPAL")) kinds.push("municipal");
+  return kinds;
+}
+
+function isPedidoCoverageBranchAllowed(row = {}) {
+  return normalizeText(row.empresaId || row.empresa || "") === "1"
+    && normalizeText(row.status || "").includes("ACTIVA");
+}
+
+function buildPedidosCoverageModel(rows = [], branches = [], facturadorId = "") {
+  const normalizedFacturadorId = normalizeText(facturadorId || "");
+  const ordersByBranchKey = new Map();
+  const orderRows = Array.isArray(rows) ? rows : [];
+
+  for (const row of orderRows) {
+    if (normalizedFacturadorId && normalizeText(row.facturadorId) !== normalizedFacturadorId) continue;
+    const rowKeys = [
+      row.tiendaKey,
+      row.establecimiento,
+      row.tiendaLabel,
+      row.tienda?.label,
+      row.tienda?.displayLabel,
+    ].map((item) => normalizeText(item)).filter(Boolean);
+    const deduped = [];
+    for (const key of rowKeys) {
+      if (!deduped.includes(key)) deduped.push(key);
+    }
+    for (const key of deduped) {
+      const bucket = ordersByBranchKey.get(key) || [];
+      bucket.push(row);
+      ordersByBranchKey.set(key, bucket);
+    }
+  }
+
+  const branchesByKind = {
+    estatal: [],
+    municipal: [],
+    otros: [],
+  };
+
+  const getBranchOrders = (branch) => {
+    const candidateKeys = [
+      branch.key,
+      branch.id,
+      branch.tienda,
+      branch.displayLabel,
+      branch.label,
+      branch.label2,
+    ].map((item) => normalizeText(item)).filter(Boolean);
+    const collected = [];
+    for (const key of candidateKeys) {
+      const bucket = ordersByBranchKey.get(key);
+      if (bucket && bucket.length) collected.push(...bucket);
+    }
+    const unique = [];
+    const seen = new Set();
+    for (const row of collected) {
+      const identifier = String(row.pedido || row.rowId || row.uuid || row.fecha || `${row.tiendaKey || ""}-${row.status || ""}`).trim();
+      if (seen.has(identifier)) continue;
+      seen.add(identifier);
+      unique.push(row);
+    }
+    unique.sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")) || Number(b.fechaYear || 0) - Number(a.fechaYear || 0));
+    return unique;
+  };
+
+  for (const branch of Array.isArray(branches) ? branches : []) {
+    if (!isPedidoCoverageBranchAllowed(branch)) continue;
+    const kinds = getPedidoCoverageBranchKinds(branch);
+    for (const kind of kinds) {
+      const isCuliacanMunicipal = kind === "municipal" && normalizeText(branch.municipioNombre || branch.municipioLabel || branch.municipio?.displayLabel || "").includes("CULIACAN");
+      if (isCuliacanMunicipal) continue;
+      const orders = getBranchOrders(branch).filter((row) => row._flags?.[kind]);
+      const order = orders[0] || null;
+      const entry = {
+        branch,
+        kind,
+        order,
+      };
+      branchesByKind[kind].push(entry);
+    }
+    if (!kinds.length) {
+      const orders = getBranchOrders(branch).filter((row) => getPedidoDashboardTypeBucket(row) === "otros");
+      const order = orders[0] || null;
+      branchesByKind.otros.push({
+        branch,
+        kind: "otros",
+        order,
+      });
+    }
+  }
+
+  return {
+    estatal: branchesByKind.estatal,
+    municipal: branchesByKind.municipal,
+    otros: branchesByKind.otros,
+  };
+}
+
+function renderPedidosCoverageTable(entries = [], emptyMessage = "", kindLabel = "") {
+  const rows = Array.isArray(entries) ? entries : [];
+  if (!rows.length) {
+    return `<div class="pedidos-coverage-empty">${escapeHtml(emptyMessage)}</div>`;
+  }
+
+  return `
+    <div class="pedidos-coverage-table table-shell">
+      <table>
+        <thead>
+          <tr>
+            <th>Sucursal</th>
+            <th>Tipo</th>
+            <th>Municipio</th>
+            <th>Estado</th>
+            <th>Condición</th>
+            <th>Pedido</th>
+            <th>Status</th>
+            <th>Importe</th>
+            <th>Observación</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((item) => {
+            const branch = item.branch || {};
+            const order = item.order || null;
+            const missing = !order;
+            const statusTone = missing ? "fail" : "ok";
+            const kind = String(item.kind || kindLabel || "otros").trim();
+            const kindLabelValue = kind === "otros" ? "Otros" : kind === "estatal" ? "Estatal" : "Municipal";
+            const municipio = branch.municipioNombre || branch.municipioLabel || branch.municipio?.displayLabel || "";
+            const estado = branch.estadoNombre || branch.estadoLabel || branch.estado?.displayLabel || "";
+            const observation = missing ? "Debe tener pedido" : "Normal";
+            const search = [
+              getPedidoCoverageBranchLabel(branch),
+              getPedidoCoverageBranchKey(branch),
+              kindLabelValue,
+              municipio,
+              estado,
+              order?.pedido,
+              order?.status,
+              order?.descripcion,
+            ].map((value) => normalizeText(value)).join(" ");
+            return `
+              <tr
+                data-pedidos-branch-row
+                data-status="${escapeAttr(missing ? "sin-pedido" : (order?._statusBucket || "otros"))}"
+                data-type="${escapeAttr(kind)}"
+                data-search="${escapeAttr(search)}"
+              >
+                <td>
+                  <div class="stack">
+                    <strong>${escapeHtml(getPedidoCoverageBranchLabel(branch))}</strong>
+                    <span class="muted">${escapeHtml(getPedidoCoverageBranchKey(branch))}</span>
+                  </div>
+                </td>
+                <td><span class="chip ${kind === "otros" ? "blue" : kind === "municipal" ? "warn" : "ok"}">${escapeHtml(kindLabelValue)}</span></td>
+                <td><strong>${escapeHtml(municipio)}</strong></td>
+                <td><strong>${escapeHtml(estado)}</strong></td>
+                <td>${missing ? '<span class="chip fail">Sin pedido</span>' : '<span class="chip ok">Con pedido</span>'}</td>
+                <td>${escapeHtml(order?.pedido || "—")}</td>
+                <td><span class="chip ${statusTone}">${escapeHtml(order?.status || "Sin status")}</span></td>
+                <td><strong>${escapeHtml(order ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(Number(order.importeNumber || 0)) : "—")}</strong></td>
+                <td><span class="pedidos-coverage-badge">${escapeHtml(observation)}</span></td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderPedidosCoverageSection({ rows = [], catalogs = {}, facturadorId = "" } = {}) {
+  const branches = Array.isArray(catalogs?.sucursalesLookup?.rows) ? catalogs.sucursalesLookup.rows : [];
+  const model = buildPedidosCoverageModel(rows, branches, facturadorId);
+  const entries = [...model.estatal, ...model.municipal, ...model.otros];
+  const estatales = entries.filter((item) => item.kind === "estatal");
+  const municipales = entries.filter((item) => item.kind === "municipal");
+  const otros = entries.filter((item) => item.kind === "otros");
+
+  return `
+    <section class="pedidos-coverage" data-pedidos-view="sucursales">
+      <div class="pedidos-coverage-head">
+        <div>
+          <h3>Sucursales</h3>
+          <p>Activas de la empresa 1. Aquí revisas cobertura y estatus de pedido por tipo: estatal, municipal u otros.</p>
+        </div>
+      </div>
+      <div class="pedidos-context" style="margin-top:10px;">
+        <div class="pedidos-context-copy">
+          <strong>Cobertura de sucursales</strong>
+          <span>Revisa qué sucursales deberían tener pedido estatal o municipal, cuáles ya lo tienen y cuáles faltan.</span>
+        </div>
+        <div class="pedidos-context-chips">
+          <span class="pill strong">Estatales: ${escapeHtml(String(estatales.length))}</span>
+          <span class="pill strong">Municipales: ${escapeHtml(String(municipales.length))}</span>
+          <span class="pill strong">Otros: ${escapeHtml(String(otros.length))}</span>
+        </div>
+      </div>
+      <div class="pedidos-coverage-section">
+        ${renderPedidosCoverageTable(entries, "No hay sucursales para mostrar.", "Sucursal")}
+      </div>
+    </section>
+  `;
+}
+
+function buildPedidosDashboardToolbar({ requestedYear, thresholds, facturadorId, facturadorLabel, selectedScope, selectedStatus, selectedType, searchText }) {
+  return `
+    <div class="pedidos-toolbar">
+      <div class="pedidos-filter-group">
+        <div class="pedidos-toolbar-label">Vista</div>
+        <div class="pedidos-tabs" data-pedidos-scope-tabs>
+          <button type="button" class="pedidos-tab-btn${selectedScope === "pedidos" ? " is-active" : ""}" data-pedidos-scope="pedidos">Pedidos</button>
+          <button type="button" class="pedidos-tab-btn${selectedScope === "sucursales" ? " is-active" : ""}" data-pedidos-scope="sucursales">Sucursales</button>
+        </div>
+      </div>
+      <div class="pedidos-filter-group">
+        <div class="pedidos-toolbar-label">Tipo</div>
+        <div class="pedidos-tabs" data-pedidos-type-tabs>
+          <button type="button" class="pedidos-tab-btn${selectedType === "all" ? " is-active" : ""}" data-pedidos-type="all">Todos</button>
+          <button type="button" class="pedidos-tab-btn${selectedType === "estatal" ? " is-active" : ""}" data-pedidos-type="estatal">Estatales</button>
+          <button type="button" class="pedidos-tab-btn${selectedType === "municipal" ? " is-active" : ""}" data-pedidos-type="municipal">Municipales</button>
+          <button type="button" class="pedidos-tab-btn${selectedType === "otros" ? " is-active" : ""}" data-pedidos-type="otros">Otros</button>
+        </div>
+      </div>
+      <div class="pedidos-filter-group">
+        <div class="pedidos-toolbar-label">Estatus</div>
+        <div class="pedidos-tabs" data-pedidos-status-tabs>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "all" ? " is-active" : ""}" data-pedidos-status="all">Todos</button>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "sin-liberacion" ? " is-active" : ""}" data-pedidos-status="sin-liberacion">Sin liberación</button>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "liberados" ? " is-active" : ""}" data-pedidos-status="liberados">Liberados</button>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "pagados" ? " is-active" : ""}" data-pedidos-status="pagados">Pagados</button>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "pendientes-pago" ? " is-active" : ""}" data-pedidos-status="pendientes-pago">Pendientes de pago</button>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "sin-pedido" ? " is-active" : ""}" data-pedidos-status="sin-pedido">Sin pedido</button>
+        </div>
+      </div>
+      <details class="pedidos-advanced">
+        <summary>Filtros avanzados</summary>
+        <div class="pedidos-advanced-grid">
+          <div class="pedidos-field">
+            <label>Año</label>
+            <input data-pedidos-year type="number" min="2020" max="2100" value="${escapeAttr(String(requestedYear))}">
+          </div>
+          <div class="pedidos-field">
+            <label>Facturador</label>
+            <input data-pedidos-facturador type="text" value="${escapeAttr(String(facturadorId || ""))}" placeholder="ID del facturador">
+          </div>
+          <div class="pedidos-field">
+            <label>Precio estatal</label>
+            <input data-pedidos-estatal-min type="number" step="0.01" value="${escapeAttr(String(thresholds.estatalMin))}">
+          </div>
+          <div class="pedidos-field">
+            <label>Precio municipal</label>
+            <input data-pedidos-municipal-min type="number" step="0.01" value="${escapeAttr(String(thresholds.municipalMin))}">
+          </div>
+          <div class="pedidos-field">
+            <label>Buscar</label>
+            <input data-pedidos-search type="search" value="${escapeAttr(String(searchText || ""))}" placeholder="Pedido, sucursal, municipio...">
+          </div>
+          <div class="pedidos-actions">
+            <button type="button" class="button secondary" data-pedidos-reset>Limpiar</button>
+            <button type="button" class="button secondary" data-pedidos-refresh>Recargar datos</button>
+            <button type="button" class="button primary" data-pedidos-apply>Aplicar</button>
+          </div>
+        </div>
+        <div class="pedidos-stats" style="padding:0 16px 16px;color:var(--muted);">
+          <span>Pedidos de ${escapeHtml(facturadorLabel || facturadorId || "todos")}</span>
+          <span>·</span>
+          <span>Vista: pedidos / sucursales · tipos: estatal, municipal, otros · estatus: liberados, pagados, sin liberación, pendientes y sin pedido.</span>
+        </div>
+      </details>
+    </div>
+  `;
+}
+
+export function renderPedidosDashboardFragment({ user = null, data = {}, year = new Date().getFullYear(), embedded = false } = {}) {
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const requestedYear = Number(data.requestedYear || data.year || year || new Date().getFullYear());
+  const thresholds = data.thresholds || {};
+  const selectedScope = String(data.scope || "pedidos").trim() || "pedidos";
+  const selectedStatus = String(data.status || "all").trim() || "all";
+  const selectedType = String(data.type || "all").trim() || "all";
+  const searchText = String(data.search || "").trim();
+  const state = {
+    year: requestedYear,
+    estatalMin: Number(thresholds.estatalMin || 32000),
+    municipalMin: Number(thresholds.municipalMin || 9794.98),
+    facturadorId: String(data.facturadorId || "").trim(),
+    facturadorLabel: String(data.facturadorLabel || "").trim(),
+  };
+
+  const visibleRows = rows.filter((row) => {
+    const rowYear = Number(row.fechaYear || 0);
+    if (Number.isFinite(state.year) && rowYear && rowYear !== state.year) return false;
+    return true;
+  });
+  const classifiedRows = visibleRows.map((row) => {
+    const flags = getPedidoRowClassification(row, thresholds);
+    const _statusBucket = getPedidoDashboardStatusBucket(row);
+    const _typeBucket = getPedidoDashboardTypeBucket({ ...row, _flags: flags });
+    const _searchText = [
+      row.pedido,
+      row.descripcion,
+      row.status,
+      row.tiendaLabel,
+      row.tiendaKey,
+      row.establecimiento,
+      row.tienda?.municipioNombre,
+      row.tienda?.estadoNombre,
+      row.clasificacionLabel,
+      row.clasificacionDetalle,
+    ].map((item) => normalizeText(item)).join(" ");
+    return { ...row, _flags: flags, _statusBucket, _typeBucket, _searchText };
+  });
+  const filteredRows = classifiedRows.filter((row) => {
+    if (selectedStatus !== "all" && row._statusBucket !== selectedStatus) return false;
+    if (selectedType !== "all" && row._typeBucket !== selectedType) return false;
+    if (searchText && !row._searchText.includes(normalizeText(searchText))) return false;
+    return true;
+  });
+  const coverageRows = buildPedidosCoverageModel(classifiedRows, data.catalogs?.sucursalesLookup?.rows || [], state.facturadorId);
+  const counts = {
+    total: filteredRows.length,
+    sinLiberacion: filteredRows.filter((row) => row._statusBucket === "sin-liberacion").length,
+    liberados: filteredRows.filter((row) => row._statusBucket === "liberados").length,
+    pagados: filteredRows.filter((row) => row._statusBucket === "pagados").length,
+    pendientesPago: filteredRows.filter((row) => row._statusBucket === "pendientes-pago").length,
+  };
+  const branchCounts = {
+    total: coverageRows.estatal.length + coverageRows.municipal.length + coverageRows.otros.length,
+    conPedido: [...coverageRows.estatal, ...coverageRows.municipal, ...coverageRows.otros].filter((item) => item.order).length,
+    sinPedido: [...coverageRows.estatal, ...coverageRows.municipal, ...coverageRows.otros].filter((item) => !item.order).length,
+    estatales: coverageRows.estatal.length,
+    municipales: coverageRows.municipal.length,
+    otros: coverageRows.otros.length,
+  };
+  const roleLabel = user?.role === "admin" ? "Administrador" : "Usuario";
+  const username = escapeHtml(user?.nombre || user?.correo || "Usuario");
+  const facturadorLabel = escapeHtml(state.facturadorLabel || state.facturadorId || "Todos");
+  const visibleRowsCount = selectedScope === "sucursales" ? branchCounts.total : filteredRows.length;
+  const visibleRowsLabel = selectedScope === "sucursales" ? "sucursales visibles" : "pedidos visibles";
+  const typeLabel = selectedType === "estatal" ? "Estatales" : selectedType === "municipal" ? "Municipales" : selectedType === "otros" ? "Otros" : "Sin filtro de tipo";
+  const typeRows = selectedType === "all" ? filteredRows : classifiedRows.filter((row) => row._typeBucket === selectedType);
+  const typeSummaryChips = selectedType === "all"
+    ? [
+        `<span class="pill strong">Estatales: ${escapeHtml(String(classifiedRows.filter((row) => row._typeBucket === "estatal").length))}</span>`,
+        `<span class="pill strong">Municipales: ${escapeHtml(String(classifiedRows.filter((row) => row._typeBucket === "municipal").length))}</span>`,
+        `<span class="pill strong">Otros: ${escapeHtml(String(classifiedRows.filter((row) => row._typeBucket === "otros").length))}</span>`,
+      ]
+    : [
+        `<span class="pill strong">${escapeHtml(typeLabel)}</span>`,
+      ];
+  const makeOrderRowMarkup = (row) => {
+    const municipio = row.tienda?.municipioNombre || row.tienda?.municipioLabel || row.municipio?.nombre || row.municipio?.displayLabel || "";
+    const estado = row.tienda?.estadoNombre || row.tienda?.estadoLabel || row.estado?.nombre || row.estado?.displayLabel || "";
+    const tipo = row.clasificacionLabel || (row._flags.estatal ? "Estatal" : row._flags.municipal ? "Municipal" : "Otros");
+    const tone = row.clasificacionLabel && normalizeText(row.clasificacionLabel).includes("CULIACAN")
+      ? "warn"
+      : row._flags.estatal
+        ? "ok"
+        : row._flags.municipal
+          ? "blue"
+          : "warn";
+    const search = [
+      row.pedido,
+      row.descripcion,
+      row.status,
+      row.tiendaLabel,
+      row.tiendaKey,
+      row.establecimiento,
+      municipio,
+      estado,
+      row.clasificacionLabel,
+      row.clasificacionDetalle,
+    ].map((item) => normalizeText(item)).join(" ");
+    return `
+      <tr
+        class="pedidos-row"
+        data-pedidos-row
+        data-status="${escapeAttr(row._statusBucket)}"
+        data-type="${escapeAttr(row._typeBucket)}"
+        data-search="${escapeAttr(search)}"
+      >
+        <td>
+          <div class="stack">
+            <strong>${escapeHtml(row.pedido || "")}</strong>
+            <span class="muted">${escapeHtml(row.descripcion || "")}</span>
+          </div>
+        </td>
+        <td>
+          <div class="stack">
+            <strong>${escapeHtml(row.tiendaLabel || row.establecimiento || "")}</strong>
+            <span class="muted">${escapeHtml(row.tiendaKey || row.establecimiento || "")}</span>
+          </div>
+        </td>
+        <td><strong>${escapeHtml(municipio)}</strong></td>
+        <td><strong>${escapeHtml(estado)}</strong></td>
+        <td>${escapeHtml(formatDate(row.fecha || row["fecha(DATE)"] || ""))}</td>
+        <td><strong>${escapeHtml(new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(Number(row.importeNumber || 0)))}</strong></td>
+        <td><span class="chip ${tone}">${escapeHtml(tipo)}</span></td>
+        <td><span class="chip ${tone}">${escapeHtml(row.status || "Sin status")}</span></td>
+      </tr>
+    `;
+  };
+  const rowMarkup = filteredRows.length
+    ? filteredRows.map((row) => makeOrderRowMarkup(row)).join("")
+    : `<tr><td colspan="8" class="empty">No hay pedidos para estos filtros.</td></tr>`;
+  const branchesMarkup = renderPedidosCoverageSection({
+    rows: classifiedRows,
+    catalogs: data.catalogs || {},
+    facturadorId: state.facturadorId,
+  });
+
+  return `
+    <div class="pedidos-native${embedded ? " pedidos-native--embedded" : ""}" data-pedidos-panel data-year="${escapeAttr(String(requestedYear))}" data-facturador-id="${escapeAttr(state.facturadorId)}" data-estatal-min="${escapeAttr(String(state.estatalMin))}" data-municipal-min="${escapeAttr(String(state.municipalMin))}" data-status="${escapeAttr(selectedStatus)}" data-type="${escapeAttr(selectedType)}" data-scope="${escapeAttr(selectedScope)}" data-search="${escapeAttr(searchText)}">
+      <div class="pedidos-surface" style="margin-top:16px;">
+        <div class="pedidos-header">
+          <div>
+            <h2>${escapeHtml(selectedScope === "sucursales" ? "Cobertura de sucursales" : "Pedidos del año")} ${escapeHtml(String(requestedYear))}</h2>
+            <p>${escapeHtml(selectedScope === "sucursales"
+              ? "Aquí ves qué sucursales tienen pedido y cuáles faltan, sin usar tarjetas confusas."
+              : "Aquí ves el estado operativo de los pedidos del año filtrado, sin KPI de interpretación difícil.")} Cambia entre pedidos y sucursales sin salir de esta pantalla.</p>
+          </div>
+          ${embedded ? "" : `<div class="hero-actions"><a class="button primary" href="/dashboard/pedidos?year=${encodeURIComponent(String(requestedYear))}" target="_blank" rel="noopener">Vista completa</a></div>`}
+        </div>
+        ${buildPedidosDashboardToolbar({
+          requestedYear,
+          thresholds,
+          facturadorId: state.facturadorId,
+          facturadorLabel: state.facturadorLabel,
+          selectedScope,
+          selectedStatus,
+          selectedType,
+          searchText,
+        })}
+        <div class="pedidos-stats" data-pedidos-stats style="margin-top:4px;">
+          <span data-pedidos-visible-count>${escapeHtml(String(visibleRowsCount))}</span>
+          <span>de</span>
+          <span data-pedidos-total-count>${escapeHtml(String(selectedScope === "sucursales" ? branchCounts.total : classifiedRows.length))}</span>
+          <span data-pedidos-visible-label>${escapeHtml(visibleRowsLabel)}</span>
+        </div>
+        <div class="pedidos-context">
+          <div class="pedidos-context-copy">
+            <strong>${selectedScope === "sucursales" ? "Cobertura de sucursales" : "Lectura de pedidos"}</strong>
+            <span>${selectedScope === "sucursales"
+              ? "Aquí ves cuáles sucursales tienen pedido, cuáles faltan y cómo se reparten por tipo."
+              : `Aquí ves el estado operativo de los pedidos del año filtrado. Filtro activo: ${typeLabel}.`}</span>
+          </div>
+          <div class="pedidos-context-chips">
+            ${selectedScope === "sucursales"
+              ? [
+                  `<span class="pill strong">Estatales: ${escapeHtml(String(branchCounts.estatales))}</span>`,
+                  `<span class="pill strong">Municipales: ${escapeHtml(String(branchCounts.municipales))}</span>`,
+                  `<span class="pill strong">Otros: ${escapeHtml(String(branchCounts.otros))}</span>`,
+                  `<span class="pill strong">Con pedido: ${escapeHtml(String(branchCounts.conPedido))}</span>`,
+                  `<span class="pill strong">Sin pedido: ${escapeHtml(String(branchCounts.sinPedido))}</span>`,
+                ].join("")
+              : [
+                  ...typeSummaryChips,
+                  `<span class="pill strong">Sin liberación: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "sin-liberacion").length))}</span>`,
+                  `<span class="pill strong">Liberados: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "liberados").length))}</span>`,
+                  `<span class="pill strong">Pagados: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "pagados").length))}</span>`,
+                  `<span class="pill strong">Pend. pago: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "pendientes-pago").length))}</span>`,
+                ].join("")}
+          </div>
+        </div>
+        <section class="pedidos-view" data-pedidos-view="pedidos">
+          <div class="pedidos-view-header">
+            <div>
+              <h3>Tabla de pedidos</h3>
+              <p>Listado operativo de pedidos cargados para el año filtrado.</p>
+            </div>
+          </div>
+          <div class="pedidos-table-shell table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pedido</th>
+                  <th>Sucursal</th>
+                  <th>Municipio</th>
+                  <th>Estado</th>
+                  <th>Fecha</th>
+                  <th>Importe</th>
+                  <th>Tipo</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>${rowMarkup}</tbody>
+            </table>
+          </div>
+        </section>
+        <section class="pedidos-view" data-pedidos-view="sucursales" hidden>
+          <div class="pedidos-view-header">
+            <div>
+              <h3>Tabla de sucursales</h3>
+              <p>Cobertura operativa para detectar faltantes y pedidos existentes.</p>
+            </div>
+          </div>
+          ${branchesMarkup}
+        </section>
+      </div>
+    </div>
+  `;
+}
+
 async function renderDashboardPage({
   user,
   employees,
+  pedidosData = null,
+  dashboardData = null,
   selectedEmployee = user,
   returnPath = "/dashboard",
   selectedCapacitacionId = "",
@@ -3408,7 +4627,8 @@ async function renderDashboardPage({
   const logoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
   const viewingOtherDashboard = user?.role === "admin" && user?.rowId !== selected.rowId;
   const capacitadorView = role === "capacitador";
-  const { visible, programadas, finalizadasSinDiplomas, birthdayEvents, calendarCapacitaciones, calendarNotes } = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: selected });
+  const resolvedDashboardData = dashboardData || await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: selected });
+  const { visible, programadas, finalizadasSinDiplomas, birthdayEvents, calendarCapacitaciones, calendarNotes } = resolvedDashboardData;
   const selectedCapacitacion = String(selectedCapacitacionId || "").trim()
     ? visible.find((item) => item.rowId === String(selectedCapacitacionId || "").trim())
     : null;
@@ -3426,14 +4646,17 @@ async function renderDashboardPage({
     });
 
   const sideContent = `
-    <div class="hero-callout">
+    <div class="hero-callout hero-callout-compact">
       <img class="hero-logo" src="${logoPath}" alt="Desarrollo EG" />
-      <span class="eyebrow">Sesión</span>
-      <h2>${escapeHtml(selected.nombre || "Usuario")}</h2>
+      <div>
+        <span class="eyebrow">Sesión</span>
+        <h2>${escapeHtml(selected.nombre || "Usuario")}</h2>
+        <p>${escapeHtml(selected.correo || "")}</p>
+      </div>
     </div>
     <div class="hero-note">
       <strong>${escapeHtml(role)}</strong>
-      <p>${escapeHtml(selected.correo || "")}</p>
+      <p>Panel activo</p>
     </div>
   `;
 
@@ -3514,6 +4737,13 @@ async function renderDashboardPage({
       </div>
     `
     : "";
+  const pedidosPanel = user?.role === "admin"
+    ? renderPedidosAdminDashboardPanel({
+        data: pedidosData || {},
+        year: pedidosData?.requestedYear || pedidosData?.year || new Date().getFullYear(),
+        embedded: true,
+      })
+    : "";
   const dashboardTabs = [
     {
       id: "calendar",
@@ -3546,6 +4776,13 @@ async function renderDashboardPage({
           id: "gestion",
           label: "Gestión",
           content: managementPanel,
+        }]
+      : []),
+    ...(pedidosPanel
+      ? [{
+          id: "pedidos",
+          label: "Pedidos",
+          content: pedidosPanel,
         }]
       : []),
   ].filter((tab) => Boolean(tab.content));
@@ -3918,6 +5155,207 @@ async function renderDashboardPage({
             button.disabled = false;
           };
           let calendarInstance = null;
+          const initPedidosPanel = (panel) => {
+            if (!panel) return;
+            const loading = panel.querySelector("[data-pedidos-loading]");
+            const root = panel.querySelector("[data-pedidos-root]");
+            const content = root?.querySelector("[data-pedidos-panel]") || panel.querySelector("[data-pedidos-panel]");
+            if (!content) return;
+            if (root) root.style.display = "block";
+            if (loading) loading.style.display = "none";
+
+            const normalizeText = (value) => String(value || "")
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .trim()
+              .toUpperCase();
+            const state = {
+              scope: String(content.dataset.scope || "pedidos").trim() || "pedidos",
+              status: String(content.dataset.status || "all").trim() || "all",
+              type: String(content.dataset.type || "all").trim() || "all",
+              search: String(content.dataset.search || "").trim(),
+              year: String(content.dataset.year || new Date().getFullYear()).trim(),
+              facturadorId: String(content.dataset.facturadorId || "").trim(),
+              estatalMin: String(content.dataset.estatalMin || "32000").trim(),
+              municipalMin: String(content.dataset.municipalMin || "9794.98").trim(),
+            };
+            const rows = Array.from(content.querySelectorAll("[data-pedidos-row]"));
+            const branchRows = Array.from(content.querySelectorAll("[data-pedidos-branch-row]"));
+            const scopeButtons = Array.from(content.querySelectorAll("[data-pedidos-scope]"));
+            const statusButtons = Array.from(content.querySelectorAll("[data-pedidos-status]"));
+            const typeButtons = Array.from(content.querySelectorAll("[data-pedidos-type]"));
+            const yearInput = content.querySelector("[data-pedidos-year]");
+            const facturadorInput = content.querySelector("[data-pedidos-facturador]");
+            const estatalMinInput = content.querySelector("[data-pedidos-estatal-min]");
+            const municipalMinInput = content.querySelector("[data-pedidos-municipal-min]");
+            const searchInput = content.querySelector("[data-pedidos-search]");
+            const applyBtn = content.querySelector("[data-pedidos-apply]");
+            const resetBtn = content.querySelector("[data-pedidos-reset]");
+            const refreshBtn = content.querySelector("[data-pedidos-refresh]");
+            const visibleCount = content.querySelector("[data-pedidos-visible-count]");
+            const totalCount = content.querySelector("[data-pedidos-total-count]");
+            const visibleLabel = content.querySelector("[data-pedidos-visible-label]");
+            const stats = content.querySelector("[data-pedidos-stats]");
+            const pedidosView = content.querySelector('[data-pedidos-view="pedidos"]');
+            const sucursalesView = content.querySelector('[data-pedidos-view="sucursales"]');
+            const updateButtonState = (buttons, attr, activeValue) => {
+              buttons.forEach((button) => {
+                const value = String(button.getAttribute(attr) || "all").trim();
+                const isActive = value === activeValue;
+                button.classList.toggle("is-active", isActive);
+                button.setAttribute("aria-pressed", isActive ? "true" : "false");
+              });
+            };
+            const renderLocal = () => {
+              const query = normalizeText(state.search);
+              const matchesFilters = (row) => {
+                const status = String(row.dataset.status || "otros").trim();
+                const type = String(row.dataset.type || "otros").trim();
+                const haystack = normalizeText(row.dataset.search || "");
+                return (state.status === "all" || status === state.status)
+                  && (state.type === "all" || type === state.type)
+                  && (!query || haystack.includes(query));
+              };
+              const visibleOrderRows = rows.filter(matchesFilters);
+              const visibleBranchRows = branchRows.filter(matchesFilters);
+              rows.forEach((row) => { row.hidden = true; });
+              branchRows.forEach((row) => { row.hidden = true; });
+              if (state.scope === "pedidos") {
+                visibleOrderRows.forEach((row) => { row.hidden = false; });
+              }
+              if (state.scope === "sucursales") {
+                visibleBranchRows.forEach((row) => { row.hidden = false; });
+              }
+              if (pedidosView) pedidosView.hidden = state.scope !== "pedidos";
+              if (sucursalesView) sucursalesView.hidden = state.scope !== "sucursales";
+              const activeRows = state.scope === "sucursales" ? visibleBranchRows : visibleOrderRows;
+              const visible = activeRows.length;
+              if (visibleCount) visibleCount.textContent = String(visible);
+              if (totalCount) totalCount.textContent = String(state.scope === "sucursales" ? branchRows.length : rows.length);
+              if (visibleLabel) visibleLabel.textContent = state.scope === "sucursales" ? "sucursales visibles" : "pedidos visibles";
+              if (stats) {
+                stats.dataset.visible = String(visible);
+                stats.dataset.total = String(activeRows.length);
+              }
+              updateButtonState(scopeButtons, "data-pedidos-scope", state.scope);
+              updateButtonState(statusButtons, "data-pedidos-status", state.status);
+              updateButtonState(typeButtons, "data-pedidos-type", state.type);
+            };
+            const reload = () => {
+              const url = new URL("/dashboard/pedidos/panel", window.location.origin);
+              url.searchParams.set("year", state.year || String(new Date().getFullYear()));
+              if (state.scope && state.scope !== "pedidos") url.searchParams.set("scope", state.scope);
+              if (state.facturadorId) url.searchParams.set("facturadorId", state.facturadorId);
+              if (state.estatalMin) url.searchParams.set("estatalMin", state.estatalMin);
+              if (state.municipalMin) url.searchParams.set("municipalMin", state.municipalMin);
+              if (state.status && state.status !== "all") url.searchParams.set("status", state.status);
+              if (state.type && state.type !== "all") url.searchParams.set("type", state.type);
+              if (state.search) url.searchParams.set("search", state.search);
+              fetch(url.toString(), { headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
+                .then((response) => {
+                  if (!response.ok) throw new Error("HTTP " + response.status);
+                  return response.text();
+                })
+                .then((html) => {
+                  root.innerHTML = html;
+                  root.style.display = "block";
+                  panel.dataset.loaded = "true";
+                  initPedidosPanel(panel);
+                })
+                .catch((error) => {
+                  root.style.display = "block";
+                  root.innerHTML = '<div class="panel" style="margin:0;border-top-color:var(--danger);"><div class="section-head"><div><h2>No se pudo cargar pedidos</h2><p>' + String(error instanceof Error ? error.message : "Error inesperado") + '</p></div></div></div>';
+                  panel.dataset.loaded = "true";
+                });
+            };
+            statusButtons.forEach((button) => {
+              button.addEventListener("click", () => {
+                state.status = String(button.getAttribute("data-pedidos-status") || "all").trim() || "all";
+                renderLocal();
+              });
+            });
+            typeButtons.forEach((button) => {
+              button.addEventListener("click", () => {
+                state.type = String(button.getAttribute("data-pedidos-type") || "all").trim() || "all";
+                renderLocal();
+              });
+            });
+            scopeButtons.forEach((button) => {
+              button.addEventListener("click", () => {
+                state.scope = String(button.getAttribute("data-pedidos-scope") || "pedidos").trim() || "pedidos";
+                renderLocal();
+              });
+            });
+            searchInput?.addEventListener("input", (event) => {
+              state.search = String(event.target.value || "").trim();
+              renderLocal();
+            });
+            yearInput?.addEventListener("change", (event) => {
+              const next = String(event.target.value || "").trim();
+              if (next) state.year = next;
+            });
+            facturadorInput?.addEventListener("change", (event) => {
+              state.facturadorId = String(event.target.value || "").trim();
+            });
+            estatalMinInput?.addEventListener("change", (event) => {
+              state.estatalMin = String(event.target.value || "").trim();
+            });
+            municipalMinInput?.addEventListener("change", (event) => {
+              state.municipalMin = String(event.target.value || "").trim();
+            });
+            applyBtn?.addEventListener("click", reload);
+            refreshBtn?.addEventListener("click", () => {
+              const previous = new URL(window.location.href);
+              previous.searchParams.set("refresh", "1");
+              window.location.assign(previous.toString());
+            });
+            resetBtn?.addEventListener("click", () => {
+              state.scope = "pedidos";
+              state.status = "all";
+              state.type = "all";
+              state.search = "";
+              state.year = String(new Date().getFullYear());
+              state.facturadorId = "";
+              state.estatalMin = "32000";
+              state.municipalMin = "9794.98";
+              reload();
+            });
+            renderLocal();
+          };
+          const loadPedidosPanel = () => {
+            const panel = document.querySelector('[data-dashboard-tab-panel="pedidos"]');
+            if (!panel || panel.dataset.loaded === "true") return;
+            const loading = panel.querySelector("[data-pedidos-loading]");
+            const root = panel.querySelector("[data-pedidos-root]");
+            if (!root) return;
+            if (root.querySelector("[data-pedidos-panel]")) {
+              panel.dataset.loaded = "true";
+              initPedidosPanel(panel);
+              return;
+            }
+            const year = new Date().getFullYear();
+            const url = "/dashboard/pedidos/panel?year=" + encodeURIComponent(String(year));
+            fetch(url, { headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
+              .then((response) => {
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                return response.text();
+              })
+              .then((html) => {
+                root.innerHTML = html;
+                root.style.display = "block";
+                if (loading) loading.style.display = "none";
+                panel.dataset.loaded = "true";
+                initPedidosPanel(panel);
+              })
+              .catch((error) => {
+                if (loading) {
+                  loading.style.display = "none";
+                }
+                root.style.display = "block";
+                root.innerHTML = '<div class="panel" style="margin:0;border-top-color:var(--danger);"><div class="section-head"><div><h2>No se pudo cargar pedidos</h2><p>' + String(error instanceof Error ? error.message : "Error inesperado") + '</p></div></div></div>';
+                panel.dataset.loaded = "true";
+              });
+          };
           const loadDeferredPanel = async (panelId) => {
             const panel = document.querySelector('[data-dashboard-tab-panel="' + panelId + '"]');
             if (!panel || panel.dataset.loaded === "true") return;
@@ -3964,6 +5402,9 @@ async function renderDashboardPage({
             }
             if (nextTab === "ley") {
               loadDeferredPanel("ley");
+            }
+            if (nextTab === "pedidos") {
+              loadPedidosPanel();
             }
             if (focus) {
               tabs.find((button) => button.dataset.dashboardTab === nextTab)?.focus();
@@ -4234,14 +5675,15 @@ async function renderDashboardPage({
     secondaryAction: headerAction2,
     sideContent,
     headExtra: "",
+    mainClass: "dashboard-main",
     bodyContent: `
       <section class="dashboard-tabs" data-dashboard-tabs>
         <div class="dashboard-tabs-nav" role="tablist" aria-label="Secciones del dashboard">
           ${dashboardTabsNav}
         </div>
+        ${dashboardMobileBar}
         ${dashboardTabPanels}
       </section>
-      ${dashboardMobileBar}
     `,
     bodyScripts: calendarBootstrap,
     footer: "",
@@ -4284,7 +5726,7 @@ homeRouter.get("/auth/google/start", async (req, res) => {
   const state = crypto.randomBytes(24).toString("hex");
   const secure = isRequestSecure(req);
   res.setHeader("Set-Cookie", `${getOAuthStateCookieName()}=${encodeURIComponent(state)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secure ? "; Secure" : ""}`);
-  res.redirect(buildGoogleAuthUrl(state));
+  res.redirect(buildGoogleAuthUrl(state, getGoogleOAuthRedirectUri(req)));
 });
 
 homeRouter.get("/auth/google/callback", async (req, res) => {
@@ -4319,13 +5761,14 @@ homeRouter.get("/auth/google/callback", async (req, res) => {
   }
 
   try {
-    const profile = await exchangeGoogleAuthCode(code);
+    const profile = await exchangeGoogleAuthCode(code, getGoogleOAuthRedirectUri(req));
     const employee = await authenticateEmployeeByEmail(profile.email);
     const token = await createSessionForEmployee(employee);
     res.setHeader("Set-Cookie", [
       buildCookieHeader(token, { secure }),
       buildClearOAuthStateCookieHeader({ secure }),
     ]);
+    void warmPortalDashboardCaches().catch(() => {});
     res.redirect("/dashboard");
   } catch (loginError) {
     res.setHeader("Set-Cookie", buildClearOAuthStateCookieHeader({ secure }));
@@ -4366,11 +5809,19 @@ homeRouter.get("/dashboard", async (req, res) => {
     return;
   }
 
-  const employees = await listEmployeesForPortal({ runAsUserEmail: user.correo });
+  const [employees, dashboardData, pedidosData] = await Promise.all([
+    listEmployeesForPortal({ runAsUserEmail: user.correo }),
+    getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
+    user.role === "admin"
+      ? fetchPedidosLeyAdminDashboardData({ year: new Date().getFullYear() }).catch(() => null)
+      : Promise.resolve(null),
+  ]);
   const calendarView = normalizeCalendarView(req.query.calendar);
   res.type("html").send(await renderDashboardPage({
     user,
     employees,
+    dashboardData,
+    pedidosData,
     returnPath: "/dashboard",
     calendarView,
     calendarPath: req.path,
@@ -4385,7 +5836,10 @@ homeRouter.get("/dashboard/capacitador/:rowId", async (req, res) => {
     return;
   }
 
-  const employees = await listEmployeesForPortal({ runAsUserEmail: user.correo });
+  const [employees, dashboardData] = await Promise.all([
+    listEmployeesForPortal({ runAsUserEmail: user.correo }),
+    getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
+  ]);
   const target = employees.find((item) => item.rowId === String(req.params.rowId || ""));
   if (!target) {
     res.status(404).type("html").send(renderLoginPage("No encontramos el dashboard solicitado."));
@@ -4401,6 +5855,7 @@ homeRouter.get("/dashboard/capacitador/:rowId", async (req, res) => {
   res.type("html").send(await renderDashboardPage({
     user,
     employees,
+    dashboardData,
     selectedEmployee: target,
     returnPath: `/dashboard/capacitador/${encodeURIComponent(target.rowId)}`,
     calendarView,
@@ -4416,7 +5871,10 @@ homeRouter.get("/dashboard/capacitacion/:rowId", async (req, res) => {
     return;
   }
 
-  const employees = await listEmployeesForPortal({ runAsUserEmail: user.correo });
+  const [employees, dashboardData] = await Promise.all([
+    listEmployeesForPortal({ runAsUserEmail: user.correo }),
+    getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
+  ]);
   const employeeParam = String(req.query.employee || "").trim();
   const targetEmployee = employees.find((item) => item.rowId === employeeParam) || user;
   const returnTo = String(req.query.returnTo || "").trim();
@@ -4431,6 +5889,7 @@ homeRouter.get("/dashboard/capacitacion/:rowId", async (req, res) => {
   res.type("html").send(await renderDashboardPage({
     user,
     employees,
+    dashboardData,
     selectedEmployee: targetEmployee,
     selectedCapacitacionId: req.params.rowId,
     returnPath: safeReturnTo,
@@ -4479,16 +5938,92 @@ homeRouter.get("/dashboard/general", async (req, res) => {
     return;
   }
 
-  const employees = await listEmployeesForPortal({ runAsUserEmail: user.correo });
+  const [employees, dashboardData, pedidosData] = await Promise.all([
+    listEmployeesForPortal({ runAsUserEmail: user.correo }),
+    getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
+    fetchPedidosLeyAdminDashboardData({ year: new Date().getFullYear() }).catch(() => null),
+  ]);
   const calendarView = normalizeCalendarView(req.query.calendar);
   res.type("html").send(await renderDashboardPage({
     user,
     employees,
+    dashboardData,
+    pedidosData,
     returnPath: "/dashboard/general",
     calendarView,
     calendarPath: req.path,
     calendarQuery: req.query,
   }));
+});
+
+homeRouter.get("/dashboard/pedidos", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.redirect("/login");
+    return;
+  }
+
+  if (user.role !== "admin") {
+    res.status(403).type("html").send(renderLoginPage("Solo los administradores pueden abrir pedidos."));
+    return;
+  }
+
+  try {
+    const year = String(req.query.year || "").trim();
+    const forceRefresh = String(req.query.refresh || "") === "1";
+    const data = await fetchPedidosLeyAdminDashboardData({
+      year,
+      forceRefresh,
+      facturadorId: String(req.query.facturadorId || "").trim() || undefined,
+      thresholds: {
+        estatalMin: req.query.estatalMin,
+        municipalMin: req.query.municipalMin,
+      },
+    });
+    data.status = String(req.query.status || "all").trim() || "all";
+    data.type = String(req.query.type || "all").trim() || "all";
+    data.scope = String(req.query.scope || "pedidos").trim() || "pedidos";
+    data.search = String(req.query.search || "").trim();
+    data.queryString = req.url.includes("?") ? req.url.split("?")[1] : "";
+    res.type("html").send(renderPedidosLeyAdminPage({ user, data }));
+  } catch (error) {
+    res.status(500).type("html").send(renderLoginPage(error instanceof Error ? error.message : "No se pudo cargar el panel de pedidos."));
+  }
+});
+
+homeRouter.get("/dashboard/pedidos/panel", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).type("html").send(renderLoginPage("No autenticado"));
+    return;
+  }
+
+  if (user.role !== "admin") {
+    res.status(403).type("html").send(renderLoginPage("Solo los administradores pueden abrir pedidos."));
+    return;
+  }
+
+  try {
+    const year = String(req.query.year || "").trim();
+    const forceRefresh = String(req.query.refresh || "") === "1";
+    const data = await fetchPedidosLeyAdminDashboardData({
+      year,
+      forceRefresh,
+      facturadorId: String(req.query.facturadorId || "").trim() || undefined,
+      thresholds: {
+        estatalMin: req.query.estatalMin,
+        municipalMin: req.query.municipalMin,
+      },
+    });
+    data.status = String(req.query.status || "all").trim() || "all";
+    data.type = String(req.query.type || "all").trim() || "all";
+    data.scope = String(req.query.scope || "pedidos").trim() || "pedidos";
+    data.search = String(req.query.search || "").trim();
+    data.queryString = req.url.includes("?") ? req.url.split("?")[1] : "";
+    res.type("html").send(renderPedidosDashboardFragment({ user, data, year }));
+  } catch (error) {
+    res.status(500).type("html").send(renderLoginPage(error instanceof Error ? error.message : "No se pudo cargar el panel de pedidos."));
+  }
 });
 
 homeRouter.get("/pedidos-sin-liberacion", async (req, res) => {

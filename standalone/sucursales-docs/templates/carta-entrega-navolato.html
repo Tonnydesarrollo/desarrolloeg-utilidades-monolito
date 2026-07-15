@@ -1,0 +1,371 @@
+<style>
+  .delivery-letter {
+    font-size: 12px;
+    line-height: 1.48;
+    color: #111827;
+    max-width: 790px;
+    margin: 0 auto;
+  }
+
+  .delivery-date-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 24px;
+  }
+
+  .delivery-recipient {
+    margin: 0 0 18px;
+    max-width: 470px;
+    text-align: left;
+  }
+
+  .delivery-recipient-line {
+    margin: 0 0 3px;
+    text-align: left;
+  }
+
+  .delivery-recipient-line + .delivery-recipient-line {
+    margin-top: 0;
+  }
+
+  .field-line,
+  .field-block {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-transform: uppercase;
+    outline: none;
+    padding: 0 2px 1px;
+    margin: 0;
+    border-bottom: 1px solid rgba(91, 100, 115, 0.72);
+  }
+
+  .field-line {
+    display: inline-block;
+    min-width: 150px;
+    vertical-align: baseline;
+    text-align: center;
+    letter-spacing: 0.01em;
+  }
+
+  .recipient-line.combined-line {
+    display: block;
+    line-height: 1.25;
+  }
+
+  .recipient-line.combined-line .field-line {
+    display: inline-block;
+  }
+
+  .field-block {
+    display: block;
+    width: 100%;
+    min-height: 34px;
+    resize: none;
+    overflow: hidden;
+    text-align: left;
+    line-height: 1.25;
+  }
+
+  .field-date {
+    width: 260px;
+    min-width: 260px;
+    text-align: center;
+  }
+
+  .field-company {
+    min-width: 220px;
+  }
+
+  .field-sucursal-label {
+    min-width: 175px;
+  }
+
+  .field-address {
+    min-height: 34px;
+  }
+
+  .address-wrap {
+    display: block;
+    margin: 6px 0 10px;
+  }
+
+  .field-address-block {
+    width: 100%;
+    min-height: 24px;
+    padding: 0 2px 3px;
+    border: 0;
+    border-bottom: 1px solid rgba(91, 100, 115, 0.72);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-transform: uppercase;
+    outline: none;
+    overflow: hidden;
+    line-height: 1.2;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .letter-body {
+    max-width: 760px;
+  }
+
+  .letter-paragraph {
+    margin: 0 0 12px;
+    text-align: justify;
+  }
+
+  .letter-opening {
+    text-indent: 0;
+  }
+
+  .letter-inline-sentence {
+    display: inline;
+  }
+
+  .letter-inline-field {
+    display: inline-block;
+    vertical-align: baseline;
+    margin: 0 2px;
+  }
+
+  .letter-inline-field .field-line {
+    min-width: 0;
+  }
+
+  .letter-company-row {
+    margin: 0 0 2px;
+    text-align: left;
+  }
+
+  .letter-company-row .field-line[data-field="empresa"] {
+    min-width: 210px;
+  }
+
+  .letter-company-row .field-line[data-field="label"] {
+    min-width: 160px;
+  }
+
+  .letter-signature {
+    margin-top: 28px;
+    text-align: center;
+  }
+
+  .letter-signature-label {
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+
+  .letter-signature-space {
+    min-height: 96px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+
+  .letter-signature-image {
+    max-width: 250px;
+    max-height: 96px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .letter-signature-empty {
+    width: 250px;
+    height: 96px;
+  }
+
+  .letter-signature-name,
+  .letter-signature-role {
+    margin: 0;
+  }
+
+  .letter-signature-name .field-line,
+  .letter-signature-role .field-line {
+    min-width: 360px;
+  }
+
+  .field-line[data-autosize="width"] {
+    width: auto;
+    min-width: 190px;
+  }
+
+  .field-line[data-field="fecha_carta"] {
+    min-width: 260px;
+  }
+
+  .field-line[data-field="destinatario_nombre"] {
+    min-width: 300px;
+  }
+
+  .field-line[data-field="destinatario_puesto"] {
+    min-width: 280px;
+  }
+
+  .field-line[data-field="destinatario_municipio"] {
+    min-width: 160px;
+  }
+
+  .field-line[data-field="nombre_firma"],
+  .field-line[data-field="puesto_firma"] {
+    min-width: 360px;
+  }
+
+  .recipient-line .field-line[data-autosize="width"] {
+    min-width: 0;
+  }
+
+  .recipient-line .field-line[data-field="destinatario_nombre"] {
+    min-width: 288px;
+  }
+
+  .recipient-line .field-line[data-field="destinatario_linea2"] {
+    min-width: 400px;
+    text-align: left;
+  }
+
+  .field-block[data-field="direccion_google"] {
+    min-height: 34px;
+  }
+</style>
+
+<section class="delivery-letter">
+  <div class="delivery-date-row">
+    <input class="field-line field-date" type="text" data-field="fecha_carta" data-autosize="width" data-inline-field="fecha_carta" data-uppercase="true" value="{{fecha_carta}}" aria-label="Fecha de carta">
+  </div>
+
+  <div class="delivery-recipient">
+    <p class="delivery-recipient-line recipient-line">
+      <input class="field-line" type="text" data-tight="true" data-field="destinatario_nombre" data-autosize="width" data-inline-field="destinatario_nombre" data-uppercase="true" value="{{destinatario_nombre}}" aria-label="Destinatario nombre">
+    </p>
+    <p class="delivery-recipient-line recipient-line combined-line">
+      <input class="field-line" type="text" data-tight="true" data-field="destinatario_linea2" data-autosize="width" data-inline-field="destinatario_linea2" data-uppercase="true" value="{{destinatario_linea2}}" aria-label="Destinatario linea dos">
+    </p>
+  </div>
+
+  <div class="letter-body">
+    <p class="letter-paragraph letter-opening">
+      Por medio de la presente, le envío un cordial saludo.
+    </p>
+    <p class="letter-paragraph letter-company-row">
+      Me dirijo a usted para hacer de su conocimiento la entrega de la unidad USB con la información del Programa Interno de Protección Civil de la empresa
+      <span class="letter-inline-field">
+        <input class="field-line field-company" type="text" data-field="empresa" data-autosize="width" data-inline-field="empresa" data-uppercase="true" value="{{empresa}}" aria-label="Empresa">
+      </span>
+      <span class="letter-inline-sentence">, sucursal</span>
+      <span class="letter-inline-field">
+        <input class="field-line field-sucursal-label" type="text" data-field="label" data-autosize="width" data-inline-field="label" data-uppercase="true" value="{{label}}" aria-label="Sucursal">
+      </span>
+      <span class="letter-inline-sentence">.</span>
+    </p>
+    <p class="letter-paragraph">
+      La unidad se encuentra ubicada en la siguiente dirección:
+    </p>
+    <div class="address-wrap">
+      <div class="field-address-block" contenteditable="true" data-field="direccion_google" data-autosize="height" data-inline-field="direccion_google" data-uppercase="true" role="textbox" aria-label="Direccion">{{direccion_google}}</div>
+    </div>
+    <p class="letter-paragraph">
+      Con la intención de su integración del expediente y dar cumplimiento a la Normatividad.
+    </p>
+
+    <p class="letter-paragraph">
+      Sin otro particular, y atento a cualquier duda o aclaración al respecto, me despido de Usted enviándole un cordial saludo.
+    </p>
+  </div>
+
+  <div class="letter-signature">
+    <div class="letter-signature-label">ATENTAMENTE</div>
+    <div class="letter-signature-space">{{{firma_image_html}}}</div>
+    <p class="letter-signature-name">
+      <input class="field-line" type="text" data-field="nombre_firma" data-autosize="width" data-inline-field="nombre_firma" data-uppercase="true" value="{{nombre_firma}}" aria-label="Nombre firma">
+    </p>
+    <p class="letter-signature-role">
+      <input class="field-line" type="text" data-field="puesto_firma" data-autosize="width" data-inline-field="puesto_firma" data-uppercase="true" value="{{puesto_firma}}" aria-label="Puesto firma">
+    </p>
+  </div>
+</section>
+
+<script>
+  (() => {
+    const READY_FLAG = "__LETTER_READY__";
+    const AUTOSIZE_PADDING = 24;
+    const AUTOSIZE_PADDING_TIGHT = 10;
+    const measurer = document.createElement("canvas").getContext("2d");
+
+    function syncWidth(target) {
+      const minWidth = target.dataset.minWidth ? Number(target.dataset.minWidth) : 190;
+      const padding = target.dataset.tight === "true" ? AUTOSIZE_PADDING_TIGHT : AUTOSIZE_PADDING;
+      const computed = window.getComputedStyle(target);
+      measurer.font = computed.font;
+      const text = target.value || target.placeholder || "";
+      const measured = text ? measurer.measureText(text).width : 0;
+      const next = Math.max(minWidth, measured + padding);
+      target.style.width = `${Math.ceil(next)}px`;
+    }
+
+    function syncHeight(target) {
+      target.style.height = "auto";
+      target.style.height = `${Math.max(34, target.scrollHeight)}px`;
+    }
+
+    function syncLayout(target) {
+      if (target.dataset.autosize === "height") {
+        syncHeight(target);
+        return;
+      }
+      if (target.dataset.autosize === "width") {
+        syncWidth(target);
+      }
+    }
+
+    function syncInlineField(target) {
+      const key = target.dataset.inlineField;
+      if (!key) return;
+      const value = String(target.isContentEditable ? target.textContent || "" : target.value || "");
+      if (target.dataset.uppercase === "true") {
+        const upper = value.toLocaleUpperCase("es-MX");
+        if (target.isContentEditable) {
+          if ((target.textContent || "") !== upper) target.textContent = upper;
+        } else if (target.value !== upper) {
+          target.value = upper;
+        }
+      }
+      parent.postMessage({ type: "carta-inline-field", name: key, value }, "*");
+    }
+
+    function wireTarget(target) {
+      syncLayout(target);
+      target.addEventListener("input", () => {
+        syncLayout(target);
+        syncInlineField(target);
+      });
+      target.addEventListener("focus", () => syncLayout(target));
+      if (target.isContentEditable) {
+        target.addEventListener("blur", () => {
+          syncLayout(target);
+          syncInlineField(target);
+        });
+      }
+    }
+
+    function render() {
+      document.querySelectorAll("[data-autosize]").forEach((target) => syncLayout(target));
+      window[READY_FLAG] = true;
+    }
+
+    document.querySelectorAll("[data-autosize], [data-inline-field]").forEach(wireTarget);
+    document.querySelectorAll("input[data-uppercase='true']").forEach((target) => {
+      const upper = String(target.value || "").toLocaleUpperCase("es-MX");
+      if (target.value !== upper) target.value = upper;
+    });
+
+    window[READY_FLAG] = false;
+    window.addEventListener("resize", render);
+    render();
+  })();
+</script>

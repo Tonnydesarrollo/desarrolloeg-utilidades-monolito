@@ -288,7 +288,7 @@
 
       /* RESET Y CONFIGURACIÃ“N DE PÃGINA (Se mantienen igual) */
       *{box-sizing:border-box}
-      @page{size:letter;margin:10mm 8mm}
+      @page{size:letter;margin:10mm 8mm 28mm}
       html,body{margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;color:#222;background:transparent;font-size:13px}
 
       /* CONTENEDOR PRINCIPAL (Se mantienen igual) */
@@ -296,14 +296,16 @@
         width:215.9mm;
         max-width:215.9mm;
         margin:5mm auto;
-        padding:8mm 10mm 20mm;
+        padding:8mm 10mm 28mm;
         background:#fff;
         border-radius:6px;
         position:relative;
+        display:flex;
+        flex-direction:column;
         box-shadow:0 6px 18px rgba(0,0,0,0.08);
         overflow:hidden;
       }
-      .content{position:relative;z-index:1;padding-bottom:15mm}
+      .content{position:relative;z-index:1;padding-bottom:0;flex:1}
       
       /* BOTONERA (Se mantienen igual) */
       .botonera{text-align:right;margin-bottom:12px}
@@ -344,6 +346,9 @@
       
       /* TABLA DE DETALLES (Se mantienen igual) */
       table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-bottom:15px;table-layout:fixed;border:none;}
+      thead{display:table-header-group;}
+      tbody{display:table-row-group;}
+      tr{page-break-inside:avoid;break-inside:avoid;}
       thead th{
         background:#f0f3f8;
         border:none;
@@ -449,21 +454,48 @@
       .firma-puesto{font-size: 0.68rem; color: #555; margin-bottom: 0;}
 
       /* FOOTER (Se mantienen igual) */
-      .footer-bar{position:absolute;left:0;right:0;bottom:0;height:12mm;background:#b3202a;color:#fff;font-size:0.72rem;display:flex;align-items:center;padding:0 10mm;z-index:2}
-      .footer-bar-inner{display:flex;width:100%;justify-content:space-between}
+      .footer-bar{
+        position:relative;
+        margin-top:auto;
+        left:0;
+        right:0;
+        min-height:12mm;
+        background:#b3202a;
+        color:#fff;
+        font-size:0.68rem;
+        display:flex;
+        align-items:center;
+        padding:1.8mm 10mm;
+        z-index:2;
+      }
+      .footer-bar-inner{
+        display:flex;
+        width:100%;
+        justify-content:space-between;
+        gap:12px;
+        flex-wrap:wrap;
+        line-height:1.2;
+      }
 
       /* MEDIA PRINT (Ajuste de tamaÃ±o de imagen para impresiÃ³n) */
 @media print{
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
   .botonera{display:none!important}
   .desglose-toolbar{display:none!important}
-  .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 12mm}
+  .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 10mm;display:block!important;overflow:visible!important}
+  .content{display:block!important;overflow:visible!important}
         html,body{font-size:10px} 
         table{font-size:0.65rem}
         thead th{padding:6px 4px;}
         td{padding:5px 4px}
-        .footer-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;height:12mm!important;padding:0 5mm!important}
-        .content{padding-bottom:15mm!important}
+        .footer-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;min-height:12mm!important;padding:1mm 5mm!important}
+        .content{padding-bottom:0!important}
+        table{break-inside:auto!important}
+        thead{display:table-header-group!important}
+        tbody{display:table-row-group!important}
+        tr{break-inside:avoid!important;page-break-inside:avoid!important}
+        .footer-bar-inner{gap:6px!important}
+        .footer-bar-inner > div{max-width:48%}
 
         .firma-block img{max-height:55px} /* ReducciÃ³n ligera en impresiÃ³n */
         .firma-wrapper{flex-basis: 50%; min-width: 200px;}
@@ -487,6 +519,30 @@
     <% /* helper formato moneda */ %>
     <%  function fmtMoney(v){ 
 var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2}); } %>
+    <%
+      function fmtDate(v) {
+        var text = String(v || '').trim();
+        if (!text) return '';
+        var isoLike = text.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+        if (isoLike) {
+          return isoLike[3].padStart(2, '0') + '/' + isoLike[2].padStart(2, '0') + '/' + isoLike[1];
+        }
+        var slash = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+        if (slash) {
+          var a = Number(slash[1]);
+          var b = Number(slash[2]);
+          var year = slash[3];
+          var month = a > 12 && b <= 12 ? b : a;
+          var day = a > 12 && b <= 12 ? a : b;
+          return String(day).padStart(2, '0') + '/' + String(month).padStart(2, '0') + '/' + year;
+        }
+        var date = new Date(text);
+        if (!isNaN(date.getTime())) {
+          return new Intl.DateTimeFormat('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+        }
+        return text;
+      }
+    %>
 
     <% 
       /* DetecciÃ³n de todas lineas servicio (mantiene tu lÃ³gica) */
@@ -592,7 +648,9 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
 
     <div class="empresa-nombre">
      <%= data.empresa && data.empresa.razonSocial ? data.empresa.razonSocial : '' %>
+      <% if (String(data.empresaId || '').trim() !== '25') { %>
       <u><div class="proveedor-nombre">No. de proveedor: 3067702 </div></u>
+      <% } %>
     </div>
   </div>
 
@@ -616,7 +674,7 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
     </div>
     <div class="fecha-label">
       Fecha:
-      <%= data.cotizacion && data.cotizacion.FECHA ? data.cotizacion.FECHA : '' %>
+      <%= fmtDate(data.cotizacion && data.cotizacion.FECHA ? data.cotizacion.FECHA : '') %>
     </div>
   </div>
 

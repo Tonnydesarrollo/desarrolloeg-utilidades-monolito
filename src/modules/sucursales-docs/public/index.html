@@ -237,7 +237,7 @@
 
     .selected-card {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
       gap: 10px;
     }
 
@@ -416,11 +416,13 @@
             <select id="document-type">
               <option value="carta-compromiso-municipal">Carta Compromiso Municipal</option>
               <option value="carta-entrega-culiacan">Carta de Entrega Culiacan</option>
+              <option value="carta-entrega-navolato">Carta de Entrega Navolato</option>
               <option value="cedula-simulacro">Cedula de Simulacro</option>
             </select>
+            <div class="hint" id="document-hint">Elige el formato a generar. Algunos documentos usan plantilla HTML y otros PDF directo.</div>
           </div>
 
-          <div class="field">
+          <div class="field" id="signer-field">
             <label for="signer">Quien firma</label>
             <select id="signer"></select>
             <div class="hint">Al seleccionar un empleado se cargan su firma, nombre y puesto, pero sigues pudiendo editarlos.</div>
@@ -430,6 +432,10 @@
             <div class="mini-card"><span>ID</span><strong id="meta-id">-</strong></div>
             <div class="mini-card"><span>Tienda</span><strong id="meta-tienda">-</strong></div>
             <div class="mini-card"><span>Label</span><strong id="meta-label">-</strong></div>
+            <div class="mini-card"><span>Municipio</span><strong id="meta-municipio">-</strong></div>
+            <div class="mini-card"><span>Estado</span><strong id="meta-estado">-</strong></div>
+            <div class="mini-card"><span>Tipo</span><strong id="meta-tipo">-</strong></div>
+            <div class="mini-card"><span>Empresa</span><strong id="meta-empresa">-</strong></div>
           </div>
 
           <div class="actions">
@@ -466,6 +472,7 @@
       cedulaChoices: {},
       cedulaInlineFields: {},
       cedulaExtraFields: {},
+      previewObjectUrl: "",
       busy: false,
     };
 
@@ -477,9 +484,15 @@
       branch: document.getElementById("branch"),
       documentType: document.getElementById("document-type"),
       signer: document.getElementById("signer"),
+      signerField: document.getElementById("signer-field"),
       metaId: document.getElementById("meta-id"),
       metaTienda: document.getElementById("meta-tienda"),
       metaLabel: document.getElementById("meta-label"),
+      metaMunicipio: document.getElementById("meta-municipio"),
+      metaEstado: document.getElementById("meta-estado"),
+      metaTipo: document.getElementById("meta-tipo"),
+      metaEmpresa: document.getElementById("meta-empresa"),
+      documentHint: document.getElementById("document-hint"),
       loadingStatus: document.getElementById("loading-status"),
       previewStatus: document.getElementById("preview-status"),
       previewFrame: document.getElementById("preview-frame"),
@@ -493,14 +506,33 @@
       return els.documentType.value || "carta-compromiso-municipal";
     }
 
+    function isStaticPdfTemplate(templateId = getTemplateId()) {
+      return false;
+    }
+
     function getDocumentTitle(templateId) {
       switch (templateId) {
         case "cedula-simulacro":
           return "Cedula de Simulacro";
         case "carta-entrega-culiacan":
           return "Carta de Entrega Culiacan";
+        case "carta-entrega-navolato":
+          return "Carta de Entrega Navolato";
         default:
           return "Carta Compromiso Municipal";
+      }
+    }
+
+    function syncDocumentMode() {
+      els.signerField.hidden = false;
+      els.openBtn.textContent = "Abrir HTML";
+      els.documentHint.textContent = "Elige el formato a generar. Algunos documentos usan plantilla HTML editable y otros campos ajustables antes de previsualizar o descargar.";
+    }
+
+    function revokePreviewObjectUrl() {
+      if (state.previewObjectUrl) {
+        URL.revokeObjectURL(state.previewObjectUrl);
+        state.previewObjectUrl = "";
       }
     }
 
@@ -508,6 +540,7 @@
       document.querySelectorAll(".doc-cedula").forEach((node) => {
         node.hidden = true;
       });
+      syncDocumentMode();
     }
 
     function setBusy(nextBusy, message) {
@@ -542,6 +575,10 @@
       els.metaId.textContent = row ? row.id : "-";
       els.metaTienda.textContent = row ? row.tienda : "-";
       els.metaLabel.textContent = row ? row.label : "-";
+      els.metaMunicipio.textContent = row ? row.municipio : "-";
+      els.metaEstado.textContent = row ? row.estado : "-";
+      els.metaTipo.textContent = row ? row.tipo : "-";
+      els.metaEmpresa.textContent = row ? row.empresa : "-";
     }
 
     function renderBranchOptions(rows) {
@@ -551,7 +588,12 @@
       }
 
       els.branch.innerHTML = rows
-        .map((row) => `<option value="${row.id}">${row.tienda} | ${row.label}</option>`)
+        .map((row) => {
+          const main = [row.tienda, row.label].filter(Boolean).join(" | ");
+          const extra = [row.municipio, row.estado].filter(Boolean).join(" · ");
+          const typeText = row.tipo ? ` · ${row.tipo}` : "";
+          return `<option value="${row.id}">${main}${extra ? ` · ${extra}` : ""}${typeText}</option>`;
+        })
         .join("");
     }
 
@@ -573,7 +615,7 @@
 
       state.filteredRows = !query
         ? [...state.rows]
-        : state.rows.filter((row) => `${row.id} ${row.tienda} ${row.label}`.toLowerCase().includes(query));
+        : state.rows.filter((row) => `${row.id} ${row.tienda} ${row.label} ${row.municipio} ${row.estado} ${row.tipo} ${row.empresa}`.toLowerCase().includes(query));
 
       renderBranchOptions(state.filteredRows);
 
@@ -660,6 +702,15 @@
       return res.json();
     }
 
+    async function fetchPdfResponse(url, options = {}) {
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Error ${res.status}`);
+      }
+      return res;
+    }
+
     function fillSignerFields(employee) {
       if (!employee) return;
       state.cartaInlineFields = {
@@ -730,6 +781,8 @@
     async function previewDocument(openInNewTab) {
       try {
         setBusy(true, "Renderizando documento...");
+        revokePreviewObjectUrl();
+
         const res = await fetch(apiUrl("preview"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -742,6 +795,7 @@
         }
 
         const html = await res.text();
+        els.previewFrame.removeAttribute("src");
         els.previewFrame.srcdoc = html;
         els.previewStatus.textContent = "Vista previa actualizada";
         els.previewStatus.classList.remove("error");
@@ -764,17 +818,11 @@
     async function downloadPdf() {
       try {
         setBusy(true, "Generando PDF...");
-        const res = await fetch(apiUrl("pdf"), {
+        const res = await fetchPdfResponse(apiUrl("pdf"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(getPayload()),
         });
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `Error ${res.status}`);
-        }
-
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const header = res.headers.get("Content-Disposition") || "";
@@ -847,6 +895,7 @@
 
     async function bootstrap() {
       try {
+        syncDocumentMode();
         await Promise.all([loadRows(), loadEmployees()]);
         els.loadingStatus.textContent = `${state.rows.length} sucursales y ${state.employees.length} firmantes listos`;
         await loadPreset();
@@ -908,6 +957,8 @@
         setError(error.message || "No se pudo restaurar la carta.");
       }
     });
+
+    window.addEventListener("beforeunload", revokePreviewObjectUrl);
 
     bootstrap();
   </script>
