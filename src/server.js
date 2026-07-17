@@ -41,3 +41,24 @@ async function shutdown(signal) {
 
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
+
+process.on("unhandledRejection", (reason) => {
+  console.error(
+    "[monolito] promesa rechazada sin manejar:",
+    reason instanceof Error ? reason.message : reason
+  );
+});
+
+process.on("uncaughtException", (error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  const isTransientBrowserError =
+    message.includes("Execution context was destroyed") ||
+    message.includes("Target closed") ||
+    message.includes("Session closed") ||
+    message.includes("most likely because of a navigation");
+
+  console.error("[monolito] excepcion no capturada:", message);
+  if (!isTransientBrowserError) {
+    process.exit(1);
+  }
+});

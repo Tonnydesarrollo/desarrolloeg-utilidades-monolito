@@ -10,6 +10,9 @@ import { google } from "googleapis";
 
 const { Client, LocalAuth } = pkg;
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
+const WHATSAPP_USER_AGENT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
+const WHATSAPP_INITIALIZE_TIMEOUT_MS = 90000;
 
 const serviceState = {
   enabled: false,
@@ -1130,16 +1133,133 @@ async function resolveFlowConfirmation(map, jid, client, text, collectMessage) {
   return true;
 }
 
-async function saveIncomingMedia(msg, context, options = {}) {
-  if (!msg.hasMedia) return false;
-  const logger = getLogger();
+function serializeError(error) {
+  if (!error) return "";
+  if (error instanceof Error) return error.message || error.name || String(error);
+  return String(error);
+}
+
+async function getMediaDebugInfo(msg) {
+  const page = msg.client?.pupPage;
+  const msgId = msg.id?._serialized;
+  if (!page || !msgId) return null;
+
+  try {
+    return await page.evaluate(async (messageId) => {
+      const target =
+        window.Store.Msg.get(messageId) || (await window.Store.Msg.getMessagesById([messageId]))?.messages?.[0];
+      if (!target) return { found: false };
+
+      return {
+        found: true,
+        type: target.type || "",
+        mimetype: target.mimetype || target.mediaData?.mimetype || "",
+        filename: target.filename || "",
+        size: target.size || target.mediaData?.size || 0,
+        mediaStage: target.mediaData?.mediaStage || "",
+        hasDirectPath: Boolean(target.directPath),
+        hasMediaKey: Boolean(target.mediaKey),
+        hasEncFilehash: Boolean(target.encFilehash),
+        hasFilehash: Boolean(target.filehash),
+        isViewOnce: Boolean(target.isViewOnce),
+        isGif: Boolean(target.isGif),
+      };
+    }, msgId);
+  } catch (error) {
+    return { diagnosticError: serializeError(error) };
+  }
+}
+
+async function downloadMediaFallback(msg) {
+  const page = msg.client?.pupPage;
+  const msgId = msg.id?._serialized;
+  if (!page || !msgId) return null;
+
+  const result = await page.evaluate(async (messageId) => {
+    const target =
+      window.Store.Msg.get(messageId) || (await window.Store.Msg.getMessagesById([messageId]))?.messages?.[0];
+    if (!target || !target.mediaData) {
+      return { ok: false, error: "message_or_media_not_found" };
+    }
+
+    const errors = [];
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        if (target.mediaData.mediaStage !== "RESOLVED") {
+          await target.downloadMedia({
+            downloadEvenIfExpensive: true,
+            rmrReason: 1,
+          });
+        }
+
+        if (target.mediaData.mediaStage === "REUPLOADING" || target.mediaData.mediaStage === "FETCHING") {
+          await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+          continue;
+        }
+
+        if (target.mediaData.mediaStage?.includes?.("ERROR")) {
+          errors.push(`media_stage_${target.mediaData.mediaStage}`);
+          continue;
+        }
+
+        const mockQpl = {
+          addAnnotations() {
+            return this;
+          },
+          addPoint() {
+            return this;
+          },
+        };
+        const decryptedMedia = await window.Store.DownloadManager.downloadAndMaybeDecrypt({
+          directPath: target.directPath,
+          encFilehash: target.encFilehash,
+          filehash: target.filehash,
+          mediaKey: target.mediaKey,
+          mediaKeyTimestamp: target.mediaKeyTimestamp,
+          type: target.type,
+          signal: new AbortController().signal,
+          downloadQpl: mockQpl,
+        });
+        const data = await window.WWebJS.arrayBufferToBase64Async(decryptedMedia);
+        return {
+          ok: true,
+          data,
+          mimetype: target.mimetype || target.mediaData?.mimetype || "",
+          filename: target.filename || "",
+          filesize: target.size || target.mediaData?.size || 0,
+          mediaStage: target.mediaData?.mediaStage || "",
+        };
+      } catch (error) {
+        errors.push(error?.message || error?.name || String(error));
+        await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+      }
+    }
+
+    return {
+      ok: false,
+      error: errors.filter(Boolean).join(" | ") || "fallback_download_failed",
+      mediaStage: target.mediaData?.mediaStage || "",
+      hasDirectPath: Boolean(target.directPath),
+      hasMediaKey: Boolean(target.mediaKey),
+      mimetype: target.mimetype || target.mediaData?.mimetype || "",
+    };
+  }, msgId);
+
+  if (result?.ok && result.data) return result;
+  if (result) {
+    throw new Error(JSON.stringify(result).slice(0, 500));
+  }
+  return null;
+}
+
+async function downloadMessageMedia(msg, logger) {
   let media = null;
   let lastError = null;
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     try {
       media = await msg.downloadMedia();
-      if (media?.data) break;
+      if (media?.data) return { media, lastError: null };
     } catch (error) {
       lastError = error;
       logger.warn(
@@ -1148,13 +1268,44 @@ async function saveIncomingMedia(msg, context, options = {}) {
           type: msg.type,
           hasMedia: msg.hasMedia,
           mimetype: msg._data?.mimetype || msg.mimetype || "",
-          error: error instanceof Error ? error.message : String(error),
+          error: serializeError(error),
         },
         "media download attempt failed"
       );
     }
 
-    await wait(800 * attempt);
+    await wait(900 * attempt);
+  }
+
+  const diagnostic = await getMediaDebugInfo(msg);
+  logger.warn({ diagnostic, lastError: serializeError(lastError) }, "media download diagnostic");
+
+  try {
+    media = await downloadMediaFallback(msg);
+    if (media?.data) {
+      logger.info({ diagnostic }, "media downloaded through fallback");
+      return { media, lastError: null };
+    }
+  } catch (error) {
+    lastError = error;
+    logger.warn({ diagnostic, error: serializeError(error) }, "media fallback download failed");
+  }
+
+  return { media: null, lastError };
+}
+
+async function saveIncomingMedia(msg, context, options = {}) {
+  if (!msg.hasMedia) return false;
+  const logger = getLogger();
+  context.pendingDownloads = (context.pendingDownloads || 0) + 1;
+  let media = null;
+  let lastError = null;
+  try {
+    const result = await downloadMessageMedia(msg, logger);
+    media = result.media;
+    lastError = result.lastError;
+  } finally {
+    context.pendingDownloads = Math.max(0, (context.pendingDownloads || 1) - 1);
   }
 
   if (!media?.data) {
@@ -1167,7 +1318,7 @@ async function saveIncomingMedia(msg, context, options = {}) {
       logger.warn({ replyError }, "failed to notify media download failure");
     }
     if (lastError) {
-      logger.warn({ lastError }, "media download failed after retries");
+      logger.warn({ lastError: serializeError(lastError) }, "media download failed after retries");
     }
     return false;
   }
@@ -1209,6 +1360,14 @@ async function finalizeFlow(map, jid, client, options) {
 
   if (context.uploading) {
     await client.sendMessage(jid, options.waitMessage);
+    return true;
+  }
+
+  if (Number(context.pendingDownloads || 0) > 0) {
+    await client.sendMessage(
+      jid,
+      `Estoy descargando ${context.pendingDownloads} adjunto(s). Espera mi confirmacion de "Archivo recibido" antes de escribir LISTO.`
+    );
     return true;
   }
 
@@ -1416,7 +1575,7 @@ async function handleImage(msg) {
     return;
   }
 
-  const media = await msg.downloadMedia();
+  const { media } = await downloadMessageMedia(msg, logger);
   if (!media?.data) {
     await msg.reply("No se pudo descargar la imagen.");
     return;
@@ -1760,6 +1919,8 @@ function isRetryableInitializeError(error) {
   const normalized = message.toLowerCase();
   return (
     normalized.includes("execution context was destroyed") ||
+    normalized.includes("timeout after") ||
+    normalized.includes("auth timeout") ||
     normalized.includes("target closed") ||
     normalized.includes("session closed") ||
     normalized.includes("most likely because of a navigation") ||
@@ -1772,6 +1933,10 @@ function isRetryableInitializeError(error) {
 function createWhatsAppClient(config) {
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: config.sessionDir }),
+    authTimeoutMs: 45000,
+    takeoverOnConflict: true,
+    takeoverTimeoutMs: 0,
+    userAgent: WHATSAPP_USER_AGENT,
     puppeteer: {
       executablePath: config.chromePath,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -1821,6 +1986,17 @@ function createWhatsAppClient(config) {
   });
 
   return client;
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 async function destroyWhatsAppClient(client) {
@@ -1953,7 +2129,7 @@ async function bootWhatsAppService(config) {
     runtime.client = client;
 
     try {
-      await client.initialize();
+      await withTimeout(client.initialize(), WHATSAPP_INITIALIZE_TIMEOUT_MS, "whatsapp initialize");
       return serviceState;
     } catch (error) {
       const retryable = attempt < maxInitializeAttempts && isRetryableInitializeError(error);
