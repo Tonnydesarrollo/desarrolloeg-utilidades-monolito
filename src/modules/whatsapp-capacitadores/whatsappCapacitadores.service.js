@@ -1131,8 +1131,45 @@ async function resolveFlowConfirmation(map, jid, client, text, collectMessage) {
 
 async function saveIncomingMedia(msg, context, options = {}) {
   if (!msg.hasMedia) return false;
-  const media = await msg.downloadMedia();
-  if (!media?.data) return false;
+  const logger = getLogger();
+  let media = null;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      media = await msg.downloadMedia();
+      if (media?.data) break;
+    } catch (error) {
+      lastError = error;
+      logger.warn(
+        {
+          attempt,
+          type: msg.type,
+          hasMedia: msg.hasMedia,
+          mimetype: msg._data?.mimetype || msg.mimetype || "",
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "media download attempt failed"
+      );
+    }
+
+    await wait(800 * attempt);
+  }
+
+  if (!media?.data) {
+    context.failedDownloads = (context.failedDownloads || 0) + 1;
+    try {
+      await msg.reply(
+        "Recibi el adjunto, pero WhatsApp no me dejo descargarlo. Reenvialo y espera mi confirmacion antes de escribir LISTO."
+      );
+    } catch (replyError) {
+      logger.warn({ replyError }, "failed to notify media download failure");
+    }
+    if (lastError) {
+      logger.warn({ lastError }, "media download failed after retries");
+    }
+    return false;
+  }
 
   const tmpDir = await ensureTmpDir();
   const extension = mime.extension(media.mimetype || "") || "jpg";
@@ -1141,6 +1178,12 @@ async function saveIncomingMedia(msg, context, options = {}) {
   const localPath = path.join(tmpDir, filename);
   await fs.promises.writeFile(localPath, Buffer.from(media.data, "base64"));
   context.files.push(localPath);
+  context.failedDownloads = 0;
+  try {
+    await msg.reply(`Archivo recibido: ${path.basename(localPath)}`);
+  } catch (replyError) {
+    logger.warn({ replyError }, "failed to confirm media download");
+  }
   return true;
 }
 
@@ -1169,7 +1212,13 @@ async function finalizeFlow(map, jid, client, options) {
   }
 
   if (!context.files.length) {
-    await client.sendMessage(jid, options.emptyMessage);
+    const failedDownloads = Number(context.failedDownloads || 0);
+    await client.sendMessage(
+      jid,
+      failedDownloads > 0
+        ? `No tengo archivos guardados. Detecte ${failedDownloads} adjunto(s), pero WhatsApp no me dejo descargarlos. Reenvialos y espera mi confirmacion antes de escribir LISTO.`
+        : options.emptyMessage
+    );
     return true;
   }
 
@@ -1985,3 +2034,4 @@ export async function startWhatsAppCapacitadoresService() {
 
   return serviceState.startPromise;
 }
+
