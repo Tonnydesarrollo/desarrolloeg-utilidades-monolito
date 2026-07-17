@@ -307,6 +307,7 @@ function getConfig() {
     botName: readEnv(["WHATSAPP_CAP_BOT_NAME", "BOT_NAME"], "Bot"),
     saveMedia: readBoolean(["WHATSAPP_CAP_SAVE_MEDIA", "SAVE_MEDIA"], false),
     allowedNumbers: splitList(readEnv(["WHATSAPP_CAP_ALLOWED_NUMBERS", "ALLOWED_NUMBERS"], "")).map(normalizePhone),
+    allowLidFallback: readBoolean(["WHATSAPP_CAP_ALLOW_LID_FALLBACK", "ALLOW_LID_FALLBACK"], true),
     sessionDir,
     tmpDir,
     chromePath: readEnv(
@@ -1790,6 +1791,7 @@ function createWhatsAppClient(config) {
     serviceState.connected = true;
     serviceState.readyAt = new Date().toISOString();
     serviceState.qrPayload = null;
+    serviceState.lastError = null;
     runtime.logger.info("whatsapp connected");
   });
 
@@ -1843,11 +1845,23 @@ async function handleIncomingMessage(msg) {
   const config = ensureRuntimeConfig();
   const logger = getLogger();
 
-  if (!msg || msg.fromMe) return;
+  if (!msg) return;
   const jid = msg.from;
+  logger.info(
+    {
+      from: jid,
+      fromMe: Boolean(msg.fromMe),
+      type: msg.type,
+      hasMedia: Boolean(msg.hasMedia),
+      body: String(getTextMessage(msg) || "").slice(0, 80),
+    },
+    "incoming whatsapp message"
+  );
+  if (msg.fromMe) return;
   if (!jid || jid.includes("@g.us")) return;
 
   let resolvedNumber = jid.split("@")[0];
+  let lidFallback = false;
   if (jid.endsWith("@lid")) {
     try {
       const contact = await msg.getContact();
@@ -1856,6 +1870,7 @@ async function handleIncomingMessage(msg) {
     } catch (error) {
       logger.warn({ error, from: jid }, "failed to resolve @lid contact");
     }
+    lidFallback = normalizePhone(resolvedNumber) === normalizePhone(jid.split("@")[0]);
   }
 
   const normalizedNumber = normalizePhone(resolvedNumber);
@@ -1866,8 +1881,9 @@ async function handleIncomingMessage(msg) {
 
   const allowedByConfig = config.allowedNumbers.length === 0 || config.allowedNumbers.includes(normalizedNumber);
   const allowedByEmployees = employees ? employees.phoneSet.has(normalizedNumber) : false;
-  if (!allowedByConfig || (!allowedByEmployees && config.allowedNumbers.length === 0)) {
-    logger.warn({ from: jid, normalizedNumber }, "number not allowed");
+  const allowedByLidFallback = Boolean(jid.endsWith("@lid") && lidFallback && config.allowLidFallback);
+  if (!allowedByConfig || (!allowedByEmployees && config.allowedNumbers.length === 0 && !allowedByLidFallback)) {
+    logger.warn({ from: jid, normalizedNumber, allowedByLidFallback }, "number not allowed");
     return;
   }
 
