@@ -3,6 +3,7 @@ import path from "path";
 import readline from "readline";
 import mime from "mime-types";
 import qrcode from "qrcode-terminal";
+import QRCode from "qrcode";
 import P from "pino";
 import pkg from "whatsapp-web.js";
 import { google } from "googleapis";
@@ -19,6 +20,7 @@ const serviceState = {
   lastError: null,
   sessionDir: "",
   connected: false,
+  qrPayload: null,
   startPromise: null,
 };
 
@@ -1729,6 +1731,7 @@ function createWhatsAppClient(config) {
   client.on("qr", (qr) => {
     serviceState.status = "awaiting_qr";
     serviceState.qrGeneratedAt = new Date().toISOString();
+    serviceState.qrPayload = qr;
     qrcode.generate(qr, { small: true });
     runtime.logger.info("QR generado, escanear en WhatsApp");
   });
@@ -1737,12 +1740,14 @@ function createWhatsAppClient(config) {
     serviceState.status = "ready";
     serviceState.connected = true;
     serviceState.readyAt = new Date().toISOString();
+    serviceState.qrPayload = null;
     runtime.logger.info("whatsapp connected");
   });
 
   client.on("auth_failure", (message) => {
     serviceState.status = "auth_failure";
     serviceState.connected = false;
+    serviceState.qrPayload = null;
     serviceState.lastError = String(message || "auth failure");
     runtime.logger.error({ message }, "auth failure");
   });
@@ -1750,6 +1755,7 @@ function createWhatsAppClient(config) {
   client.on("disconnected", (reason) => {
     serviceState.status = "disconnected";
     serviceState.connected = false;
+    serviceState.qrPayload = null;
     serviceState.lastError = String(reason || "disconnected");
     runtime.logger.warn({ reason }, "connection closed");
   });
@@ -1855,6 +1861,7 @@ async function bootWhatsAppService(config) {
   serviceState.startedAt = new Date().toISOString();
   serviceState.readyAt = null;
   serviceState.qrGeneratedAt = null;
+  serviceState.qrPayload = null;
   serviceState.connected = false;
   serviceState.sessionDir = config.sessionDir;
   serviceState.lastError = null;
@@ -1933,6 +1940,19 @@ export function getWhatsAppCapacitadoresStatus() {
 
 export async function getWhatsAppCapacitadoresQrScreenshot() {
   if (serviceState.status !== "awaiting_qr") return null;
+
+  if (serviceState.qrPayload) {
+    try {
+      return await QRCode.toBuffer(serviceState.qrPayload, {
+        type: "png",
+        errorCorrectionLevel: "M",
+        margin: 2,
+        scale: 8,
+      });
+    } catch (error) {
+      getLogger().warn({ error }, "qr png generation failed");
+    }
+  }
 
   const page = runtime.client?.pupPage;
   if (!page) return null;
