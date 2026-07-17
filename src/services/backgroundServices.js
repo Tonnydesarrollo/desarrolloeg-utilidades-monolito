@@ -2,6 +2,7 @@ import { startJobScheduler, getJobSchedulerStatus } from "../modules/jobs/servic
 import {
   getWhatsAppCapacitadoresStatus,
   startWhatsAppCapacitadoresService,
+  stopWhatsAppCapacitadoresService,
 } from "../modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
 
 let started = false;
@@ -23,4 +24,9 @@ export function getBackgroundServicesStatus() {
     scheduler: getJobSchedulerStatus(),
     whatsappCapacitadores: getWhatsAppCapacitadoresStatus(),
   };
+}
+
+export async function stopBackgroundServices() {
+  await stopWhatsAppCapacitadoresService();
+  started = false;
 }

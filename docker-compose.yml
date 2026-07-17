@@ -33,6 +33,7 @@ services:
     image: desarrolloeg-utilidades-monolito:latest
     container_name: desarrolloeg-monolito
     restart: unless-stopped
+    stop_grace_period: 35s
     ports:
       - "7000:7000"
     env_file:

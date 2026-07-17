@@ -2035,3 +2035,21 @@ export async function startWhatsAppCapacitadoresService() {
   return serviceState.startPromise;
 }
 
+export async function stopWhatsAppCapacitadoresService() {
+  clearInterval(runtime.refreshTimer);
+  runtime.refreshTimer = null;
+
+  const client = runtime.client;
+  runtime.client = null;
+  serviceState.startPromise = null;
+
+  if (client) {
+    await destroyWhatsAppClient(client);
+  }
+
+  serviceState.connected = false;
+  serviceState.status = serviceState.enabled ? "stopped" : "disabled";
+  serviceState.qrPayload = null;
+  return getWhatsAppCapacitadoresStatus();
+}
+
