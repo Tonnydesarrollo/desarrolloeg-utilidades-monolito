@@ -10,9 +10,7 @@ import { google } from "googleapis";
 
 const { Client, LocalAuth } = pkg;
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
-const WHATSAPP_USER_AGENT =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
-const WHATSAPP_INITIALIZE_TIMEOUT_MS = 90000;
+const WHATSAPP_BOOT_WATCHDOG_MS = 90000;
 
 const serviceState = {
   enabled: false,
@@ -1139,10 +1137,35 @@ function serializeError(error) {
   return String(error);
 }
 
+function getSerializedWid(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value._serialized) return value._serialized;
+  if (value.user && value.server) return `${value.user}@${value.server}`;
+  return "";
+}
+
+function ensureMessageSerializedId(msg) {
+  const id = msg?.id || msg?._data?.id;
+  if (!id) return "";
+  if (typeof id === "string") return id;
+  if (id._serialized) return id._serialized;
+
+  const remote = getSerializedWid(id.remote) || msg.from || getSerializedWid(msg?._data?.from);
+  const messageId = id.id || msg?._data?.id?.id || "";
+  if (!remote || !messageId) return "";
+
+  const serialized = `${Boolean(id.fromMe)}_${remote}_${messageId}`;
+  id._serialized = serialized;
+  if (msg.id && typeof msg.id === "object") msg.id._serialized = serialized;
+  if (msg._data?.id && typeof msg._data.id === "object") msg._data.id._serialized = serialized;
+  return serialized;
+}
+
 async function getMediaDebugInfo(msg) {
-  const page = msg.client?.pupPage;
-  const msgId = msg.id?._serialized;
-  if (!page || !msgId) return null;
+  const page = runtime.client?.pupPage;
+  const msgId = ensureMessageSerializedId(msg);
+  if (!page || !msgId) return { hasPage: Boolean(page), hasMessageId: Boolean(msgId) };
 
   try {
     return await page.evaluate(async (messageId) => {
@@ -1171,8 +1194,8 @@ async function getMediaDebugInfo(msg) {
 }
 
 async function downloadMediaFallback(msg) {
-  const page = msg.client?.pupPage;
-  const msgId = msg.id?._serialized;
+  const page = runtime.client?.pupPage;
+  const msgId = ensureMessageSerializedId(msg);
   if (!page || !msgId) return null;
 
   const result = await page.evaluate(async (messageId) => {
@@ -1255,6 +1278,7 @@ async function downloadMediaFallback(msg) {
 async function downloadMessageMedia(msg, logger) {
   let media = null;
   let lastError = null;
+  const messageId = ensureMessageSerializedId(msg);
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     try {
@@ -1265,9 +1289,11 @@ async function downloadMessageMedia(msg, logger) {
       logger.warn(
         {
           attempt,
+          messageId,
           type: msg.type,
           hasMedia: msg.hasMedia,
           mimetype: msg._data?.mimetype || msg.mimetype || "",
+          mediaStage: msg._data?.mediaData?.mediaStage || "",
           error: serializeError(error),
         },
         "media download attempt failed"
@@ -1920,6 +1946,7 @@ function isRetryableInitializeError(error) {
   return (
     normalized.includes("execution context was destroyed") ||
     normalized.includes("timeout after") ||
+    normalized.includes("watchdog after") ||
     normalized.includes("auth timeout") ||
     normalized.includes("target closed") ||
     normalized.includes("session closed") ||
@@ -1933,10 +1960,6 @@ function isRetryableInitializeError(error) {
 function createWhatsAppClient(config) {
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: config.sessionDir }),
-    authTimeoutMs: 45000,
-    takeoverOnConflict: true,
-    takeoverTimeoutMs: 0,
-    userAgent: WHATSAPP_USER_AGENT,
     puppeteer: {
       executablePath: config.chromePath,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -1986,17 +2009,6 @@ function createWhatsAppClient(config) {
   });
 
   return client;
-}
-
-function withTimeout(promise, timeoutMs, label) {
-  let timer = null;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timeout after ${timeoutMs}ms`)), timeoutMs);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
 }
 
 async function destroyWhatsAppClient(client) {
@@ -2129,7 +2141,15 @@ async function bootWhatsAppService(config) {
     runtime.client = client;
 
     try {
-      await withTimeout(client.initialize(), WHATSAPP_INITIALIZE_TIMEOUT_MS, "whatsapp initialize");
+      const initializePromise = client.initialize();
+      const watchdog = new Promise((_, reject) => {
+        setTimeout(() => {
+          if (serviceState.status === "ready" || serviceState.status === "awaiting_qr") return;
+          reject(new Error(`whatsapp initialize watchdog after ${WHATSAPP_BOOT_WATCHDOG_MS}ms`));
+        }, WHATSAPP_BOOT_WATCHDOG_MS).unref();
+      });
+
+      await Promise.race([initializePromise, watchdog]);
       return serviceState;
     } catch (error) {
       const retryable = attempt < maxInitializeAttempts && isRetryableInitializeError(error);
