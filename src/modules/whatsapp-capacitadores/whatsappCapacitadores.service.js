@@ -11,9 +11,6 @@ import { google } from "googleapis";
 const { Client, LocalAuth } = pkg;
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 const WHATSAPP_BOOT_WATCHDOG_MS = 90000;
-const DEFAULT_WHATSAPP_WEB_VERSION = "2.3000.1043553106-alpha";
-const DEFAULT_WHATSAPP_WEB_VERSION_REMOTE_PATH =
-  "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html";
 
 const serviceState = {
   enabled: false,
@@ -319,11 +316,8 @@ function getConfig() {
       ["WHATSAPP_CAP_CHROME_PATH", "CHROME_PATH"],
       getDefaultChromePath()
     ),
-    webVersion: readEnv(["WHATSAPP_CAP_WEB_VERSION"], DEFAULT_WHATSAPP_WEB_VERSION),
-    webVersionRemotePath: readEnv(
-      ["WHATSAPP_CAP_WEB_VERSION_REMOTE_PATH"],
-      DEFAULT_WHATSAPP_WEB_VERSION_REMOTE_PATH
-    ),
+    webVersion: readEnv(["WHATSAPP_CAP_WEB_VERSION"], ""),
+    webVersionRemotePath: readEnv(["WHATSAPP_CAP_WEB_VERSION_REMOTE_PATH"], ""),
     keywordCapacitaciones: normalizeText(
       readEnv(["WHATSAPP_CAP_KEYWORD_CAPACITACIONES", "KEYWORD_CAPACITACIONES"], "CAPACITACIONES")
     ),
@@ -2016,19 +2010,24 @@ async function recoverWhatsAppClient(client, reason) {
 }
 
 function createWhatsAppClient(config) {
-  const client = new Client({
+  const clientOptions = {
     authStrategy: new LocalAuth({ dataPath: config.sessionDir }),
-    webVersion: config.webVersion,
-    webVersionCache: {
-      type: "remote",
-      remotePath: config.webVersionRemotePath,
-      strict: true,
-    },
     puppeteer: {
       executablePath: config.chromePath,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     },
-  });
+  };
+
+  if (config.webVersion && config.webVersionRemotePath) {
+    clientOptions.webVersion = config.webVersion;
+    clientOptions.webVersionCache = {
+      type: "remote",
+      remotePath: config.webVersionRemotePath,
+      strict: true,
+    };
+  }
+
+  const client = new Client(clientOptions);
 
   client.on("qr", (qr) => {
     serviceState.status = "awaiting_qr";
