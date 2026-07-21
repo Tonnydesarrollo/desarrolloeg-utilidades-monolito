@@ -80,6 +80,39 @@ if (data && data.centros) {
     ? data.cotizacion.desglose
     : [];
 
+  function normalizarTextoGarantia(valor) {
+    return String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function lineaRequiereGarantiaCondicionada(linea) {
+    var texto = [
+      linea && linea.descripcion,
+      linea && linea.codigo,
+      linea && linea.catalogoDescripcion,
+      linea && linea.tipo
+    ].map(normalizarTextoGarantia).join(" ");
+
+    return (
+      /\bPIPC\b/.test(texto) ||
+      texto.indexOf("PLAN DE CONTINGENCIA") !== -1 ||
+      texto.indexOf("PLAN DE CONTINGENCIAS") !== -1 ||
+      texto.indexOf("PROGRAMA INTERNO DE PROTECCION CIVIL") !== -1
+    );
+  }
+
+  var lineasCotizacion = [];
+  (data && Array.isArray(data.centros) ? data.centros : []).forEach(function(centro) {
+    if (centro && Array.isArray(centro.lineas)) {
+      lineasCotizacion = lineasCotizacion.concat(centro.lineas);
+    }
+  });
+  var mostrarGarantiaCondicionada = lineasCotizacion.some(lineaRequiereGarantiaCondicionada);
+
   var desgloseCatalogo = {
     pipc: {
       tag: "PIPC",
@@ -944,11 +977,13 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
   <div class="info-box">
     <h3>Garantías</h3>
     <ul>
+      <% if (mostrarGarantiaCondicionada) { %>
       <li>
         <strong>Condicionada:</strong> En el caso de cualquier aclaración ante las autoridades
         correspondientes por los trabajos realizados, la responsabilidad recae en la validación
         del Programa Interno de Protección Civil hasta el total cumplimiento normativo.
       </li>
+      <% } %>
       <li>
         <strong>Confidencialidad de la información:</strong> Privacidad de los datos, resultados
         y conclusiones derivados de cualquier trabajo realizado en sus instalaciones.
