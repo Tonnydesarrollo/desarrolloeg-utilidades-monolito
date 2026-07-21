@@ -38,7 +38,6 @@ whatsappCapacitadoresRouter.get("/qr", (_req, res) => {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="refresh" content="10" />
     <title>${title}</title>
     <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
     <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
@@ -80,13 +79,34 @@ whatsappCapacitadoresRouter.get("/qr", (_req, res) => {
       .muted {
         color: #555;
       }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin: 16px 0;
+      }
+      a.button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 999px;
+        background: #111827;
+        color: #fff;
+        font-weight: 700;
+        text-decoration: none;
+      }
     </style>
   </head>
   <body>
     <main>
       <div class="card">
         <h1>${title}</h1>
-        <p class="muted">${refreshNotice}</p>
+        <p class="muted">${qrAvailable ? "Escanea este QR sin recargar la pagina. Si expira, usa Actualizar QR." : refreshNotice}</p>
+        <div class="actions">
+          <a class="button" href="/whatsapp-capacitadores/qr">Actualizar QR</a>
+        </div>
         <p><strong>Estado:</strong> ${status.status}</p>
         <p><strong>Conectado:</strong> ${status.connected ? "si" : "no"}</p>
         <p><strong>QR generado:</strong> ${status.qrGeneratedAt || "no"}</p>
