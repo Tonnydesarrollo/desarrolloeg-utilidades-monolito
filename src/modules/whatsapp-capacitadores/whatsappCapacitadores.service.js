@@ -31,6 +31,7 @@ const runtime = {
   client: null,
   driveClientPromise: null,
   refreshTimer: null,
+  reconnectTimer: null,
 };
 
 const menuContext = new Map();
@@ -1957,6 +1958,29 @@ function isRetryableInitializeError(error) {
   );
 }
 
+function clearReconnectTimer() {
+  clearTimeout(runtime.reconnectTimer);
+  runtime.reconnectTimer = null;
+}
+
+function scheduleWhatsAppReconnect(reason) {
+  const config = runtime.config;
+  if (!config?.enabled || runtime.reconnectTimer) return;
+
+  serviceState.status = "restarting";
+  serviceState.connected = false;
+  runtime.logger?.warn({ reason }, "scheduling whatsapp reconnect");
+
+  runtime.reconnectTimer = setTimeout(() => {
+    runtime.reconnectTimer = null;
+    serviceState.startPromise = bootWhatsAppService(config).catch((error) => {
+      markServiceError(error);
+      serviceState.startPromise = null;
+      throw error;
+    });
+  }, 2500);
+}
+
 function createWhatsAppClient(config) {
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: config.sessionDir }),
@@ -1975,6 +1999,7 @@ function createWhatsAppClient(config) {
   });
 
   client.on("ready", () => {
+    clearReconnectTimer();
     serviceState.status = "ready";
     serviceState.connected = true;
     serviceState.readyAt = new Date().toISOString();
@@ -1989,6 +2014,10 @@ function createWhatsAppClient(config) {
     serviceState.qrPayload = null;
     serviceState.lastError = String(message || "auth failure");
     runtime.logger.error({ message }, "auth failure");
+    serviceState.startPromise = null;
+    if (runtime.client === client) runtime.client = null;
+    void destroyWhatsAppClient(client);
+    scheduleWhatsAppReconnect(message || "auth_failure");
   });
 
   client.on("disconnected", (reason) => {
@@ -1997,6 +2026,10 @@ function createWhatsAppClient(config) {
     serviceState.qrPayload = null;
     serviceState.lastError = String(reason || "disconnected");
     runtime.logger.warn({ reason }, "connection closed");
+    serviceState.startPromise = null;
+    if (runtime.client === client) runtime.client = null;
+    void destroyWhatsAppClient(client);
+    scheduleWhatsAppReconnect(reason || "disconnected");
   });
 
   client.on("message", async (msg) => {
@@ -2193,6 +2226,7 @@ export function getWhatsAppCapacitadoresStatus() {
     startedAt: serviceState.startedAt,
     readyAt: serviceState.readyAt,
     qrGeneratedAt: serviceState.qrGeneratedAt,
+    qrAvailable: Boolean(serviceState.qrPayload),
     lastError: serviceState.lastError,
     sessionDir,
     connected: serviceState.connected,
@@ -2200,7 +2234,7 @@ export function getWhatsAppCapacitadoresStatus() {
 }
 
 export async function getWhatsAppCapacitadoresQrScreenshot() {
-  if (serviceState.status !== "awaiting_qr") return null;
+  if (!serviceState.qrPayload && serviceState.status !== "awaiting_qr") return null;
 
   if (serviceState.qrPayload) {
     try {
@@ -2248,6 +2282,7 @@ export async function startWhatsAppCapacitadoresService() {
 }
 
 export async function stopWhatsAppCapacitadoresService() {
+  clearReconnectTimer();
   clearInterval(runtime.refreshTimer);
   runtime.refreshTimer = null;
 

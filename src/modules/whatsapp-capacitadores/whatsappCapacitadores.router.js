@@ -28,7 +28,7 @@ whatsappCapacitadoresRouter.get("/qr.png", async (_req, res) => {
 
 whatsappCapacitadoresRouter.get("/qr", (_req, res) => {
   const status = getWhatsAppCapacitadoresStatus();
-  const qrAvailable = status.status === "awaiting_qr";
+  const qrAvailable = Boolean(status.qrAvailable);
   const title = "WhatsApp Capacitadores QR";
   const refreshNotice = qrAvailable ? "Actualiza cada 10 segundos." : "No hay QR disponible en este momento.";
 
