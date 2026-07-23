@@ -1,4 +1,5 @@
 import { runJob } from "./jobRunner.js";
+import { executeTrackedJob } from "./jobExecutionTracker.js";
 
 const schedulerState = {
   initialized: false,
@@ -141,7 +142,7 @@ async function executeScheduledJob(jobId) {
   entry.lastError = null;
 
   try {
-    const result = await runJob(jobId);
+    const result = await executeTrackedJob(jobId, () => runJob(jobId), { source: "scheduler" });
     entry.lastFinishedAt = new Date().toISOString();
     entry.lastResult = {
       ok: result?.ok ?? true,

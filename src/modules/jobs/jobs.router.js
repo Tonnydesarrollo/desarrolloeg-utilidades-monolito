@@ -4,12 +4,50 @@ import XLSX from 'xlsx';
 import crypto from 'crypto';
 import { listJobs, runJob } from './services/jobRunner.js';
 import { getJobSchedulerStatus } from './services/jobScheduler.js';
+import { executeTrackedJob, getJobExecutionHistory, getLatestJobExecution } from './services/jobExecutionTracker.js';
 import { canRunSingletonServices, getClusterCoordinatorStatus } from '../../services/clusterCoordinator.js';
 import { enviarPedidosManual, normalizePedidoRow } from './native/pedidos/manualAppsheet.service.js';
 
 export const jobsRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const manualPedidoJobs = new Map();
+
+function buildJobsView() {
+  const jobs = listJobs();
+  const scheduler = getJobSchedulerStatus();
+  const schedulerById = new Map(scheduler.map((entry) => [entry.jobId, entry]));
+
+  const enrichedJobs = jobs.map((job) => {
+    const currentScheduler = schedulerById.get(job.id) || null;
+    return {
+      ...job,
+      scheduler: currentScheduler,
+      lastExecution: getLatestJobExecution(job.id),
+    };
+  });
+
+  const failingJobs = enrichedJobs.filter((job) => {
+    const schedulerError = Boolean(job.scheduler?.lastError);
+    const executionError = Boolean(job.lastExecution?.error) && job.lastExecution?.status === "failed";
+    return schedulerError || executionError;
+  });
+
+  const runningJobs = enrichedJobs.filter((job) => job.scheduler?.running || job.lastExecution?.status === "running");
+
+  return {
+    ok: true,
+    jobs: enrichedJobs,
+    scheduler,
+    summary: {
+      totalJobs: enrichedJobs.length,
+      configuredJobs: enrichedJobs.filter((job) => job.configured).length,
+      enabledJobs: scheduler.filter((entry) => entry.enabled).length,
+      runningJobs: runningJobs.length,
+      failingJobs: failingJobs.length,
+      failingJobIds: failingJobs.map((job) => job.id),
+    },
+  };
+}
 
 function normalizeHeader(value) {
   return String(value || "")
@@ -82,9 +120,40 @@ function updateManualPedidoJob(jobId, patch) {
 }
 
 jobsRouter.get('/', (_req, res) => {
+  res.json(buildJobsView());
+});
+
+jobsRouter.get('/health', (_req, res) => {
+  const view = buildJobsView();
+  const failures = view.jobs
+    .filter((job) => Boolean(job.scheduler?.lastError) || Boolean(job.lastExecution?.error))
+    .map((job) => ({
+      id: job.id,
+      description: job.description,
+      configured: job.configured,
+      lastError: job.scheduler?.lastError || job.lastExecution?.error || null,
+      lastExecution: job.lastExecution,
+      scheduler: job.scheduler,
+    }));
+
+  res.status(failures.length > 0 ? 503 : 200).json({
+    ok: failures.length === 0,
+    summary: view.summary,
+    failures,
+  });
+});
+
+jobsRouter.get('/history/:jobId', (req, res) => {
+  const jobId = String(req.params.jobId || "").trim();
+  if (!jobId) {
+    return res.status(400).json({ ok: false, error: 'Job invalido.' });
+  }
+
   res.json({
-    jobs: listJobs(),
-    scheduler: getJobSchedulerStatus(),
+    ok: true,
+    jobId,
+    history: getJobExecutionHistory(jobId),
+    latest: getLatestJobExecution(jobId),
   });
 });
 
@@ -165,7 +234,7 @@ jobsRouter.post('/:jobId/run', async (req, res) => {
   }
 
   try {
-    const result = await runJob(req.params.jobId);
+    const result = await executeTrackedJob(req.params.jobId, () => runJob(req.params.jobId), { source: 'manual' });
     res.status(result.ok ? 200 : 500).json(result);
   } catch (error) {
     res.status(400).json({

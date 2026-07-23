@@ -146,9 +146,11 @@ export function normalizePlaneacionMonthFromCsv(value) {
   const text = String(value).trim();
   if (!text) return null;
   const parsed = Number(text);
-  if (!Number.isFinite(parsed)) return text;
-  if (parsed < 0) return null;
-  return parsed + 1;
+  if (!Number.isFinite(parsed)) return null;
+  if (!Number.isInteger(parsed)) return null;
+  if (parsed <= 0) return null;
+  if (parsed > 12) return null;
+  return parsed;
 }
 
 function getVencimientoEstatal(row) {

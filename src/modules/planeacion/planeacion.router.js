@@ -267,12 +267,22 @@ planeacionApiRouter.post('/migrate-casaley-csv', async (_req, res) => {
         }
 
         try {
+          const normalizedAssignedMonth = normalizePlaneacionMonthFromCsv(assignedMonth);
+          if (assignedMonth && normalizedAssignedMonth === null) {
+            failures.push({
+              tienda,
+              title,
+              error: `Mes de planeacion invalido: ${assignedMonth}`,
+            });
+            continue;
+          }
+
           await updateBranchPlaneacionInAppSheet({
             ID: appsheetIdByTienda.get(tienda) || '',
             TIENDA: tienda,
             'DIRECCION GOOGLE': street,
             'lat/lng': latLng,
-            'MES PLANEACION': normalizePlaneacionMonthFromCsv(assignedMonth),
+            'MES PLANEACION': normalizedAssignedMonth,
           });
         migrated += 1;
       } catch (error) {
