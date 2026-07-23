@@ -27,8 +27,7 @@ if (Test-Path $dockerSourceContexts) {
 
 @'
 {
-  "auths": {},
-  "credsStore": "empty"
+  "auths": {}
 }
 '@ | Set-Content -LiteralPath $dockerConfigPath -Encoding ASCII
 
@@ -69,9 +68,9 @@ if (-not (Test-Path $dockerExe)) {
 }
 
 try {
-  if ((Test-Path $dockerDesktopExe) -and -not (Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue)) {
+if ((Test-Path $dockerDesktopExe) -and -not (Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue)) {
     Write-Log "Iniciando Docker Desktop"
-    Start-Process -FilePath $dockerDesktopExe
+    Start-Process -FilePath $dockerDesktopExe -WindowStyle Hidden
     Start-Sleep -Seconds 5
   }
 } catch {
