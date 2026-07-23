@@ -19,6 +19,7 @@ import { bolsaSyncRouter } from "./modules/bolsa-sync/bolsaSync.router.js";
 import { pedidosLeyApiRouter } from "./modules/pedidos-ley/pedidosLey.router.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
 import { getClusterCoordinatorStatus } from "./services/clusterCoordinator.js";
+import { getReleaseInfo } from "./services/releaseInfo.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,6 +127,7 @@ export function createApp() {
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
+      release: getReleaseInfo(),
       background: getBackgroundServicesStatus(),
       cluster: getClusterCoordinatorStatus(),
     });

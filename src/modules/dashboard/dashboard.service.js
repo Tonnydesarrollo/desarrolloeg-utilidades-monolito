@@ -3,6 +3,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { getBackgroundServicesStatus } from "../../services/backgroundServices.js";
 import { getClusterCoordinatorStatus } from "../../services/clusterCoordinator.js";
+import { getReleaseInfo } from "../../services/releaseInfo.js";
 
 const execAsync = promisify(exec);
 const LOG_LINES = 8;
@@ -439,6 +440,7 @@ function getBackgroundData() {
 }
 
 function buildSummary(services, background, pm2) {
+  const release = getReleaseInfo();
   const healthyServices = services.filter((service) => service.ok).length;
   const totalServices = services.length;
   const primaryProcess = pm2.find((proc) => proc.isMonolith) || null;
@@ -517,6 +519,7 @@ function buildSummary(services, background, pm2) {
       : "Migracion estable";
 
   return {
+    release,
     overall: {
       tone: overallTone,
       label: overallLabel,
@@ -608,6 +611,12 @@ function renderSummaryCards(summary) {
       eyebrow: "Cluster",
       value: summary.cluster.label,
       detail: summary.cluster.detail,
+    },
+    {
+      tone: "neutral",
+      eyebrow: "Release",
+      value: summary.release.id,
+      detail: `Build: ${summary.release.buildAt || "unknown"}`,
     },
     {
       tone: summary.pm2.tone,

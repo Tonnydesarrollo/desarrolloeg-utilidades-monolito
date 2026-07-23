@@ -10,13 +10,38 @@ Alcance:
 
 ## Resumen ejecutivo
 
-Estado general: operativo con incidencias.
+Estado general: operativo con incidencias y con evidencia de desalineacion entre el codigo local corregido y la version publicada en productivo.
 
 La plataforma responde y la mayoria de los modulos principales carga correctamente, pero se detectaron:
 - una ruta publica rota en WhatsApp Capacitadores
 - fallos activos en jobs de fondo
 - un posible desfase en la migracion de meses de planeacion
 - presencia de CSV locales que parecen ser soporte de migracion, no fuente de verdad del runtime
+
+## Actualizacion de segunda ronda QA
+
+Se ejecuto una segunda validacion sobre productivo despues del plan de solucion.
+
+Resultado resumido:
+- El codigo local ya contiene correcciones y las pruebas automatizadas pasan.
+- El sitio productivo sigue sin reflejar completamente todas las mejoras.
+- Persisten rutas rotas o desfasadas en `jobs` y en la raiz de WhatsApp Capacitadores.
+- Hay oportunidades claras de mejora en performance, UX y politicas de caché.
+
+Evidencia de productivo en esta segunda ronda:
+- `/whatsapp-capacitadores` sigue respondiendo `404`
+- `/jobs/health` responde `404`
+- `/jobs/history/facturas-native-sync` responde `404`
+- `/facturacion/cotizacion/html` tuvo primera carga lenta
+- `/status` tuvo primera carga lenta
+- `/SOLVENTACIONES/html` se mantiene por encima de lo ideal en tiempo de respuesta
+- `/Planeacion-ley/` responde rapido, pero sus assets se sirven con `no-store`
+
+Validaciones locales posteriores al plan:
+- `npm test` paso completo
+- `jobs` ya incluye health e historial en el codigo local
+- `whatsapp-capacitadores` ya incluye landing local
+- `normalizePlaneacionMonthFromCsv()` ya protege contra meses invalidos
 
 ## Evidencia general de ejecucion
 
@@ -38,6 +63,28 @@ Validaciones confirmadas en produccion:
 - `/whatsapp-capacitadores/health` responde `200`
 - `/whatsapp-capacitadores/qr` responde `200`
 - `/bolsa-sync/health` responde `200`
+
+Validaciones de segunda ronda en productivo:
+- `/whatsapp-capacitadores` responde `404`
+- `/whatsapp-capacitadores/health` responde `200`
+- `/whatsapp-capacitadores/qr` responde `200`
+- `/whatsapp-capacitadores/qr.png` responde `404` cuando no hay QR disponible
+- `/jobs` responde `200` con JSON
+- `/jobs/health` responde `404`
+- `/jobs/history/facturas-native-sync` responde `404`
+- `/api/branches` responde `200`
+- `/api/sync` responde `404`
+- `/api/migrate-casaley-csv` responde `404`
+- `/bolsa-sync/health` responde `200`
+
+Tiempos de carga observados en segunda ronda:
+- `/` aproximadamente 762 ms
+- `/health` aproximadamente 137 ms
+- `/status` aproximadamente 5.4 s en la primera carga
+- `/Planeacion-ley/` aproximadamente 154 ms
+- `/jobs` aproximadamente 127 ms
+- `/facturacion/cotizacion/html` aproximadamente 20.7 s en la primera carga
+- `/SOLVENTACIONES/html` aproximadamente 2.8 s
 
 Validaciones de seguridad y control:
 - Endpoints protegidos de `bolsa-sync` sin secreto responden `401`
@@ -116,6 +163,24 @@ Referencia tecnica:
 - [`appsheet.js`](./src/modules/planeacion/services/appsheet.js)
 - [`planeacion.router.js`](./src/modules/planeacion/planeacion.router.js)
 
+### 5) Desalineacion entre local y productivo
+
+Severidad: Alta
+
+Descripcion:
+- El codigo local ya contiene landing de WhatsApp Capacitadores, health e historial de jobs, y validacion del contrato de mes.
+- Sin embargo, productivo sigue devolviendo `404` en algunas rutas que ya deberian existir.
+- Esto apunta a un problema de despliegue, version publicada o promocion incompleta del release.
+
+Impacto:
+- QA y operacion ven comportamientos distintos segun ambiente.
+- Se dificulta validar que el plan de solucion quedo realmente activo.
+
+Referencia tecnica:
+- [`whatsappCapacitadores.router.js`](./src/modules/whatsapp-capacitadores/whatsappCapacitadores.router.js)
+- [`jobs.router.js`](./src/modules/jobs/jobs.router.js)
+- [`planeacion.router.js`](./src/modules/planeacion/planeacion.router.js)
+
 ## Tickets de mejora
 
 ### QA-001 - Corregir ruta base de WhatsApp Capacitadores
@@ -184,6 +249,68 @@ Descripcion:
 Criterio de aceptacion:
 - Cualquier persona del equipo puede identificar rapidamente la fuente de verdad actual.
 
+### QA-006 - Alinear despliegue entre local y productivo
+
+Tipo: Release / Despliegue
+Prioridad: Alta
+
+Descripcion:
+- Verificar que el commit o build publicado en produccion incluya la version corregida de WhatsApp Capacitadores, Jobs y Planeacion.
+- Confirmar que no existe un artefacto intermedio o build anterior aun sirviendose al publico.
+
+Criterio de aceptacion:
+- Las rutas que ya fueron corregidas en local deben comportarse igual en productivo.
+- No debe existir desalineacion entre ambiente local y productivo.
+
+### QA-007 - Mejorar tiempos de primera carga en modulos pesados
+
+Tipo: Performance
+Prioridad: Alta
+
+Descripcion:
+- Optimizar `facturacion/cotizacion/html`, `status` y `SOLVENTACIONES/html`.
+- Revisar si el problema es de renderizado, carga de datos o payload excesivo.
+
+Criterio de aceptacion:
+- La primera carga debe quedar en rangos razonables para usuario final.
+- Las recargas no deben depender de un "second hit" para sentirse rápidas.
+
+### QA-008 - Revisar politica de caché en Planeacion
+
+Tipo: Performance / tecnica
+Prioridad: Media
+
+Descripcion:
+- Los assets de Planeacion se sirven con `no-store, no-cache`.
+- Valorar si los recursos versionados pueden servirse con caché controlado.
+
+Criterio de aceptacion:
+- El navegador debe poder reutilizar assets inmutables sin romper la actualizacion del modulo.
+
+### QA-009 - Fortalecer UX de navegacion por modulo
+
+Tipo: UX/UI
+Prioridad: Media
+
+Descripcion:
+- Homogeneizar las entradas de modulo para que cada uno tenga landing clara o dashboard comprensible.
+- Evitar que un usuario final tenga que conocer URLs tecnicas para operar.
+
+Criterio de aceptacion:
+- Cada modulo principal debe tener una entrada con acciones claras, estado visible y regreso facil.
+
+### QA-010 - Añadir documentacion operativa visible
+
+Tipo: Documentacion
+Prioridad: Media
+
+Descripcion:
+- Incluir una guia de rutas y responsabilidades para soporte y operacion.
+- Marcar de forma clara que es UI de usuario final, que es health y que es endpoint tecnico.
+
+Criterio de aceptacion:
+- El equipo puede navegar el sistema sin depender de conocimiento tribal.
+
 ## Revision de CSV locales
 
 Conclusiones de la revision:
@@ -195,6 +322,25 @@ Conclusiones de la revision:
 Interpretacion:
 - `branches.csv` y `csvStore.js` parecen ser soporte o legado.
 - El reemplazo real del almacenamiento en runtime no fue una base de datos local, sino AppSheet.
+
+## Revision de performance y UX
+
+Observaciones de segunda ronda:
+- `Planeacion` carga rapido y su ruta base esta bien resuelta en productivo.
+- `WhatsApp Capacitadores` mejora en el codigo local, pero productivo aun no refleja la landing base.
+- `Jobs` necesita una experiencia mas guiada para usuarios operativos.
+- `status` y `SOLVENTACIONES` muestran latencias perceptibles en primera carga.
+- `facturacion/cotizacion/html` presenta una primera carga muy lenta y es la mayor friccion para usuario final entre las rutas medidas.
+
+Buenas practicas observadas:
+- Hay pruebas automatizadas locales para los cambios clave.
+- El contrato de mes en Planeacion fue endurecido.
+- Se agrego trazabilidad de jobs en codigo local.
+
+Buenas practicas por reforzar:
+- Separar claramente vista operativa de API tecnica.
+- Reducir politicas de no-cache sobre assets versionados.
+- Alinear version publicada con version de rama local.
 
 ## Recomendaciones
 
@@ -214,3 +360,14 @@ El riesgo mayor esta en:
 
 El area de Planeacion usa AppSheet como fuente de verdad operativa.
 Los CSV locales se observan como soporte de migracion o legado, no como almacenamiento principal del runtime.
+
+## Conclusión actualizada de segunda ronda
+
+El trabajo de correccion en local fue efectivo, pero el productivo aun muestra síntomas de desalineacion de despliegue y algunos puntos de UX/performance a mejorar.
+
+Prioridades inmediatas:
+1. Alinear productivo con el codigo corregido.
+2. Resolver la ruta base de WhatsApp Capacitadores.
+3. Publicar la experiencia operativa de Jobs.
+4. Optimizar los módulos con primera carga lenta.
+5. Definir y documentar la vigencia de los CSV locales.

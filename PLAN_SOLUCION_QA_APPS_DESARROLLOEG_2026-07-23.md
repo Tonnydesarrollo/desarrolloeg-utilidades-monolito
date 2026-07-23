@@ -468,6 +468,8 @@ Implementado en codigo:
 - Endpoint `/jobs/history/:jobId` para revisar ejecuciones recientes.
 - Contrato de mes de Planeacion endurecido para evitar corrimientos silenciosos.
 - Migracion de Planeacion con validacion explicita de mes invalido.
+- Identificador de release expuesto en `/health` y en el dashboard.
+- Docker y `docker-compose` preparados para inyectar `APP_RELEASE_VERSION`, `APP_BUILD_SHA` y `APP_BUILD_TIMESTAMP`.
 - Pruebas automatizadas de contrato para WhatsApp, jobs y Planeacion.
 
 Pendiente para una fase posterior:
@@ -475,3 +477,106 @@ Pendiente para una fase posterior:
 - Documentacion formal de la vigencia de CSV legacy, si el equipo quiere retirarlos.
 - Persistencia historica de jobs si se necesita auditar ejecuciones entre reinicios.
 - Alertamiento externo o tablero de monitoreo, si no existe ya en infraestructura.
+
+## Actualizacion del reporte de QA
+
+El reporte de QA fue actualizado con una segunda ronda de validacion y ya contiene una nueva brecha importante:
+
+- el codigo local muestra las correcciones
+- el productivo sigue desalineado en rutas que deberian existir
+- por lo tanto, la solucion ya no es solo de codigo, sino tambien de release y despliegue
+
+Eso agrega un frente nuevo al plan: asegurar que la version publicada en produccion sea la misma que el equipo valida localmente.
+
+## Epica 6: Alinear despliegue entre local y productivo
+
+### Objetivo
+
+Cerrar la diferencia entre el estado del codigo local corregido y la version que esta sirviendo productivo.
+
+### Problema observado
+
+La segunda ronda de QA reporta que:
+
+- `/whatsapp-capacitadores` sigue respondiendo `404` en productivo
+- `/jobs/health` responde `404` en productivo
+- `/jobs/history/:jobId` responde `404` en productivo
+- local ya contiene landing, health e historial
+
+Esto sugiere una de estas causas:
+
+- el build publicado no incluye el commit mas reciente
+- el despliegue apunta a un artefacto anterior
+- la aplicacion productiva no se reinicio con la version nueva
+- existe otra capa delante del monolito sirviendo una version vieja
+
+### Tareas
+
+#### 6.1 Confirmar commit desplegado
+
+- Identificar el SHA exacto que esta corriendo en productivo.
+- Compararlo contra el commit que contiene la solucion local.
+- Registrar esa diferencia como evidencia.
+
+#### 6.2 Validar pipeline o flujo de despliegue
+
+- Revisar si el despliegue se hace con Docker, PM2, GitHub Actions, Fly, VPS manual u otro mecanismo.
+- Verificar que el flujo use el artefacto correcto.
+- Confirmar que no exista cache de build, imagen vieja o contenedor sin recrear.
+
+#### 6.3 Verificar reinicio real del proceso
+
+- Asegurar que el proceso de Node o el contenedor hayan sido recreados.
+- Validar que la version expuesta por los endpoints cambie tras el despliegue.
+- Si existe pagina de status o health, agregar version o commit visible.
+
+#### 6.4 Hacer smoke test post-despliegue
+
+- Probar `/whatsapp-capacitadores`.
+- Probar `/jobs/health`.
+- Probar `/jobs/history/facturas-native-sync`.
+- Probar `/Planeacion-ley/`.
+- Confirmar que el comportamiento de productivo coincide con local.
+
+#### 6.5 Agregar identificacion de version al runtime
+
+Recomendacion:
+
+- Exponer `commit`, `build timestamp` o `release version` en `/health` o `/status`.
+
+Esto permite detectar rapido cuando productivo esta atrasado sin depender de sospecha manual.
+
+### Criterios de aceptacion
+
+- Productivo responde con las rutas nuevas que ya existen en local.
+- El equipo puede saber que commit esta desplegado.
+- Hay evidencia de que el deploy corresponde al codigo validado.
+- QA deja de reportar diferencias entre local y productivo para las rutas corregidas.
+
+### Riesgos
+
+- Si solo se repite el deploy sin verificar SHA, puede volver a publicarse una version vieja.
+- Si el runtime no expone version, el problema sera mas dificil de diagnosticar en el futuro.
+
+## Backlog actualizado
+
+### Prioridad alta
+
+1. Confirmar y corregir el commit desplegado en productivo.
+2. Validar que `/whatsapp-capacitadores`, `/jobs/health` y `/jobs/history/:jobId` existan en productivo.
+3. Exponer version o commit en health/status.
+
+### Prioridad media
+
+4. Mantener la documentacion de fuente de verdad en Planeacion.
+5. Decidir si los CSV legacy siguen vivos.
+6. Definir persistencia historica para jobs.
+
+### Prioridad baja
+
+7. Mejoras de performance y caché observadas en la segunda ronda de QA.
+
+## Proxima accion recomendada
+
+Antes de tocar mas funcionalidad, resolver la desalineacion de despliegue.
+Si productivo no refleja el codigo local, cualquier nuevo cambio quedara sujeto a la misma incertidumbre.

@@ -30,6 +30,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APP_RELEASE_VERSION: ${APP_RELEASE_VERSION:-0.1.0}
+        APP_BUILD_SHA: ${APP_BUILD_SHA:-unknown}
+        APP_BUILD_TIMESTAMP: ${APP_BUILD_TIMESTAMP:-unknown}
     image: desarrolloeg-utilidades-monolito:latest
     container_name: desarrolloeg-monolito
     restart: unless-stopped

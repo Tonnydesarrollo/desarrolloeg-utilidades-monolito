@@ -1,8 +1,15 @@
 FROM node:22-bookworm-slim
 
+ARG APP_RELEASE_VERSION=0.1.0
+ARG APP_BUILD_SHA=unknown
+ARG APP_BUILD_TIMESTAMP=unknown
+
 ENV NODE_ENV=production \
     PORT=7000 \
-    WHATSAPP_CAP_CHROME_PATH=/usr/bin/chromium
+    WHATSAPP_CAP_CHROME_PATH=/usr/bin/chromium \
+    APP_RELEASE_VERSION=${APP_RELEASE_VERSION} \
+    APP_BUILD_SHA=${APP_BUILD_SHA} \
+    APP_BUILD_TIMESTAMP=${APP_BUILD_TIMESTAMP}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
