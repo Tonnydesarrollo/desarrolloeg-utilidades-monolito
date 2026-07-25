@@ -172,6 +172,11 @@ function getBranchAddress(row) {
   return String(row.address || row.street || row['DIRECCION GOOGLE'] || row['Direccion Google'] || row['DIRECCION'] || row['Direccion'] || '').trim();
 }
 
+function shouldCachePlaneacionAsset(filePath) {
+  const fileName = path.basename(filePath);
+  return /^index-[A-Za-z0-9_-]+\.(js|css)$/i.test(fileName);
+}
+
 planeacionApiRouter.get('/branches', async (_req, res) => {
   try {
     const rows = await getBranchesCached();
@@ -429,8 +434,14 @@ planeacionApiRouter.post('/branches/create', async (req, res) => {
 planeacionRouter.use(
   express.static(publicDir, {
     setHeaders(res, filePath) {
-      if (filePath.endsWith('index.html') || filePath.includes(`${path.sep}assets${path.sep}`)) {
+      const isIndexHtml = filePath.endsWith('index.html');
+      const isAsset = filePath.includes(`${path.sep}assets${path.sep}`);
+      if (isIndexHtml) {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      } else if (isAsset && shouldCachePlaneacionAsset(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (isAsset) {
+        res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
       }
     },
   })

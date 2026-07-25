@@ -2,6 +2,7 @@ import express from "express";
 import {
   getWhatsAppCapacitadoresQrScreenshot,
   getWhatsAppCapacitadoresStatus,
+  restartWhatsAppCapacitadoresForQr,
 } from "./whatsappCapacitadores.service.js";
 
 export const whatsappCapacitadoresRouter = express.Router();
@@ -261,6 +262,13 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
               </div>
               <span>→</span>
             </a>
+            <a class="link-card" href="/status">
+              <div>
+                <strong>Volver al portal</strong>
+                <span>Regresa al estado general del monolito.</span>
+              </div>
+              <span>→</span>
+            </a>
           </div>
           <pre>${escapeHtml(JSON.stringify(status, null, 2))}</pre>
         </aside>
@@ -294,11 +302,20 @@ whatsappCapacitadoresRouter.get("/qr.png", async (_req, res) => {
   return res.send(screenshot);
 });
 
-whatsappCapacitadoresRouter.get("/qr", (_req, res) => {
+whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
   const status = getWhatsAppCapacitadoresStatus();
   const qrAvailable = Boolean(status.qrAvailable);
   const title = "WhatsApp Capacitadores QR";
   const refreshNotice = qrAvailable ? "Actualiza cada 10 segundos." : "No hay QR disponible en este momento.";
+  const screenshot = qrAvailable ? await getWhatsAppCapacitadoresQrScreenshot() : null;
+  const qrImageHtml = qrAvailable && screenshot
+    ? `<img src="data:image/png;base64,${screenshot.toString("base64")}" alt="QR de WhatsApp" />`
+    : `
+      <div class="qr-empty">
+        <div class="qr-empty-badge">Esperando QR</div>
+        <p>Cuando el bot emita un nuevo codigo de reconexion, aparecerá aqui sin pasos extra.</p>
+        <p class="muted">Mientras tanto, puedes volver a cargar la pantalla o revisar el health del bot.</p>
+      </div>`;
 
   res.type("html");
   res.send(`<!doctype html>
@@ -334,6 +351,31 @@ whatsappCapacitadoresRouter.get("/qr", (_req, res) => {
         border-radius: 12px;
         border: 1px solid #ddd;
         background: #fff;
+      }
+      .qr-empty {
+        display: grid;
+        place-items: center;
+        min-height: 360px;
+        border-radius: 12px;
+        border: 1px dashed #bbb;
+        background:
+          radial-gradient(circle at top, rgba(17, 24, 39, 0.04), transparent 42%),
+          #fff;
+        text-align: center;
+        padding: 24px;
+      }
+      .qr-empty-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #111827;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 12px;
       }
       pre {
         white-space: pre-wrap;
@@ -374,15 +416,46 @@ whatsappCapacitadoresRouter.get("/qr", (_req, res) => {
         <p class="muted">${qrAvailable ? "Escanea este QR sin recargar la pagina. Si expira, usa Actualizar QR." : refreshNotice}</p>
         <div class="actions">
           <a class="button" href="/whatsapp-capacitadores/qr">Actualizar QR</a>
+          <a class="button" href="/whatsapp-capacitadores">Volver al inicio</a>
+          <a class="button" href="/whatsapp-capacitadores/health">Ver health</a>
+          <form method="post" action="/whatsapp-capacitadores/qr/restart" style="display:inline;">
+            <button class="button" type="submit">Forzar nuevo QR</button>
+          </form>
+          ${qrAvailable ? `<a class="button" href="/whatsapp-capacitadores/qr.png?t=${Date.now()}" target="_blank" rel="noreferrer">Abrir PNG</a>` : ""}
         </div>
         <p><strong>Estado:</strong> ${status.status}</p>
         <p><strong>Conectado:</strong> ${status.connected ? "si" : "no"}</p>
         <p><strong>QR generado:</strong> ${status.qrGeneratedAt || "no"}</p>
-        ${qrAvailable ? `<img src="/whatsapp-capacitadores/qr.png?t=${Date.now()}" alt="QR de WhatsApp" />` : ""}
+        ${qrImageHtml}
         <h2>Health</h2>
         <pre>${JSON.stringify(status, null, 2)}</pre>
       </div>
     </main>
   </body>
 </html>`);
+});
+
+whatsappCapacitadoresRouter.post("/qr/restart", async (_req, res) => {
+  try {
+    await restartWhatsAppCapacitadoresForQr();
+    res.redirect("/whatsapp-capacitadores/qr");
+  } catch (error) {
+    console.error("ERROR EN /whatsapp-capacitadores/qr/restart:", error);
+    res.status(500).type("html").send(`<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WhatsApp Capacitadores QR</title>
+  </head>
+  <body>
+    <main style="font-family:system-ui,sans-serif;padding:24px;max-width:900px;margin:0 auto;">
+      <h1>No se pudo reiniciar la sesión QR</h1>
+      <p>Intenta de nuevo en unos segundos o revisa el health del bot.</p>
+      <pre>${escapeHtml(error instanceof Error ? error.message : String(error))}</pre>
+      <p><a href="/whatsapp-capacitadores/qr">Volver al QR</a></p>
+    </main>
+  </body>
+</html>`);
+  }
 });

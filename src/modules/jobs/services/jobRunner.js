@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { jobRegistry } from './jobRegistry.js';
+import { getJobConfigurationState, jobRegistry } from './jobRegistry.js';
 import { syncFacturasNative } from '../native/facturas/syncFacturasNative.js';
 import { syncPedidosNative } from '../native/pedidos/syncPedidosNative.js';
 import { exportCasaleyAllNative, syncCasaleyNative } from '../native/casaley/syncCasaleyNative.js';
@@ -15,27 +15,26 @@ const nativeHandlers = {
   'pedidos-native-sync': syncPedidosNative,
 };
 
-function isConfigured(job) {
-  if (Array.isArray(job.requiredEnv) && job.requiredEnv.length > 0) {
-    return job.requiredEnv.every((envName) => Boolean(process.env[envName]));
-  }
-  if (job.type === 'native') return true;
-  return Boolean(process.env[job.cwdEnv]);
-}
-
 export function listJobs() {
   return Object.values(jobRegistry).map((job) => ({
     id: job.id,
     description: job.description,
     type: job.type || 'external',
     cwd: job.cwdEnv ? (process.env[job.cwdEnv] || '') : '',
-    configured: isConfigured(job),
+    requiredEnv: Array.isArray(job.requiredEnv) ? [...job.requiredEnv] : [],
+    ...getJobConfigurationState(job.id),
   }));
 }
 
 export function runJob(jobId) {
   const job = jobRegistry[jobId];
   if (!job) throw new Error(`Job no encontrado: ${jobId}`);
+
+  const configuration = getJobConfigurationState(jobId);
+  if (!configuration.configured) {
+    const missing = configuration.missingEnv.length > 0 ? configuration.missingEnv.join(", ") : "variables requeridas";
+    throw new Error(`Faltan credenciales para ${jobId}: ${missing}`);
+  }
 
   if (job.type === 'native') {
     const handler = nativeHandlers[jobId];

@@ -95,3 +95,32 @@ export const jobRegistry = {
     ],
   },
 };
+
+export function getJobDefinition(jobId) {
+  return jobRegistry[String(jobId || "").trim()] || null;
+}
+
+export function getJobRequiredEnv(jobId) {
+  return Array.isArray(getJobDefinition(jobId)?.requiredEnv)
+    ? [...getJobDefinition(jobId).requiredEnv]
+    : [];
+}
+
+export function getMissingJobEnv(jobId) {
+  return getJobRequiredEnv(jobId).filter((envName) => {
+    const value = process.env[envName];
+    return value === undefined || value === null || String(value).trim() === "";
+  });
+}
+
+export function getJobConfigurationState(jobId) {
+  const definition = getJobDefinition(jobId);
+  const requiredEnv = getJobRequiredEnv(jobId);
+  const missingEnv = getMissingJobEnv(jobId);
+  return {
+    exists: Boolean(definition),
+    requiredEnv,
+    missingEnv,
+    configured: Boolean(definition) && missingEnv.length === 0,
+  };
+}

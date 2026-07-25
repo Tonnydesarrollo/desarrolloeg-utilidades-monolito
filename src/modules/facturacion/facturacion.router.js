@@ -2,9 +2,10 @@ import express from "express";
 import fetch from "node-fetch";
 import driveRoutes from "./routes/drive.js";
 import { construirDataHTML } from "./services/construirDataHTML.js";
-import { obtenerCotizacionCompleta, mapaSucursales, mapaProveedores } from "./services/appsheet.js";
+import { obtenerCotizacionCompleta, mapaSucursales, mapaProveedores, prewarmFacturacionCaches } from "./services/appsheet.js";
 
 export const facturacionRouter = express.Router();
+prewarmFacturacionCaches();
 
 facturacionRouter.use(express.json());
 facturacionRouter.get(['/', ''], (_req, res) => {

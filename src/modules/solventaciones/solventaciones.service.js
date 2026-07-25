@@ -39,6 +39,15 @@ const COMPANY_BRANDING = {
 };
 const COMPANY_LOGO_FALLBACK_PATH = path.join(projectRoot, "standalone", "sucursales-docs", "assets", "logo.png");
 const PDF_IMAGE_CACHE = new Map();
+const REPORT_CACHE = new Map();
+const PCSINALOA_READ_CACHE = new Map();
+const PCSINALOA_TOKEN_CACHE_TTL_MS = Number(process.env.PCSINALOA_TOKEN_CACHE_TTL_MS || 10 * 60 * 1000);
+const PCSINALOA_READ_CACHE_TTL_MS = Number(process.env.PCSINALOA_READ_CACHE_TTL_MS || 2 * 60 * 1000);
+const PCSINALOA_TOKEN_STATE = {
+  token: "",
+  expiraEn: 0,
+  promise: null,
+};
 const PCSINALOA_LOGIN_PAYLOAD = {
   VA: "login",
   usuario: "contacto.gga.sc@gmail.com",
@@ -163,6 +172,26 @@ async function fetchWithRetry(url, options) {
       await new Promise((resolve) => setTimeout(resolve, getRetryDelayMs(attempt)));
     }
   }
+}
+
+function getCachedPcsinaloaRead(cacheKey) {
+  const cached = PCSINALOA_READ_CACHE.get(cacheKey);
+  if (cached && cached.expiraEn > Date.now()) {
+    return cached.promise;
+  }
+
+  return null;
+}
+
+function setCachedPcsinaloaRead(cacheKey, promise, ttlMs = PCSINALOA_READ_CACHE_TTL_MS) {
+  PCSINALOA_READ_CACHE.set(cacheKey, { expiraEn: Date.now() + ttlMs, promise });
+  return promise;
+}
+
+function invalidatePcsinaloaToken() {
+  PCSINALOA_TOKEN_STATE.token = "";
+  PCSINALOA_TOKEN_STATE.expiraEn = 0;
+  PCSINALOA_TOKEN_STATE.promise = null;
 }
 
 async function postJsonWithRetry(url, options) {
@@ -388,25 +417,57 @@ function buildImagesFromRow(row) {
   return parseImageList(rawImages);
 }
 
-async function loginPcsinaloa() {
-  const res = await fetchWithRetry(PCSINALOA_LOGIN_URL, {
-    method: "POST",
-    headers: PCSINALOA_LOGIN_HEADERS,
-    body: JSON.stringify(PCSINALOA_LOGIN_PAYLOAD),
-  });
-
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`Login PCSinaloa fallido (${res.status}): ${text.slice(0, 300)}`);
+async function loginPcsinaloa(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && PCSINALOA_TOKEN_STATE.token && PCSINALOA_TOKEN_STATE.expiraEn > now) {
+    return PCSINALOA_TOKEN_STATE.token;
   }
 
-  const data = JSON.parse(text);
-  const token = data?.data?.user?.sessionToken;
-  if (!token) {
-    throw new Error("PCSinaloa no devolvio sessionToken");
+  if (!forceRefresh && PCSINALOA_TOKEN_STATE.promise) {
+    return PCSINALOA_TOKEN_STATE.promise;
   }
 
-  return token;
+  const promise = (async () => {
+    const res = await fetchWithRetry(PCSINALOA_LOGIN_URL, {
+      method: "POST",
+      headers: PCSINALOA_LOGIN_HEADERS,
+      body: JSON.stringify(PCSINALOA_LOGIN_PAYLOAD),
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`Login PCSinaloa fallido (${res.status}): ${text.slice(0, 300)}`);
+    }
+
+    const data = JSON.parse(text);
+    const token = data?.data?.user?.sessionToken;
+    if (!token) {
+      throw new Error("PCSinaloa no devolvio sessionToken");
+    }
+
+    const expiresInRaw =
+      data?.data?.user?.expiresInMs ??
+      data?.data?.user?.sessionExpiresInMs ??
+      data?.data?.expiresInMs ??
+      PCSINALOA_TOKEN_CACHE_TTL_MS;
+    const expiresInMs = Number(expiresInRaw);
+    const ttlMs = Number.isFinite(expiresInMs) && expiresInMs > 0
+      ? Math.min(Math.max(expiresInMs, 60_000), PCSINALOA_TOKEN_CACHE_TTL_MS)
+      : PCSINALOA_TOKEN_CACHE_TTL_MS;
+
+    PCSINALOA_TOKEN_STATE.token = token;
+    PCSINALOA_TOKEN_STATE.expiraEn = Date.now() + ttlMs;
+    return token;
+  })();
+
+  PCSINALOA_TOKEN_STATE.promise = promise;
+  try {
+    return await promise;
+  } finally {
+    if (PCSINALOA_TOKEN_STATE.promise === promise) {
+      PCSINALOA_TOKEN_STATE.promise = null;
+    }
+  }
 }
 
 async function pcsinaloaReadBySolicitudId(token, solicitudId) {
@@ -465,6 +526,36 @@ async function pcsinaloaReadIncidenciaEvidenciaList(token, incidenciaId) {
   const contenido = data?.data;
   const registros = Array.isArray(contenido) ? contenido : (contenido ? [contenido] : []);
   return registros;
+}
+
+async function pcsinaloaReadBySolicitudIdCacheada(solicitudId) {
+  const cacheKey = `solicitud:${String(solicitudId || "").trim()}`;
+  const cached = getCachedPcsinaloaRead(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const token = await loginPcsinaloa();
+    return pcsinaloaReadBySolicitudId(token, solicitudId);
+  })();
+
+  return setCachedPcsinaloaRead(cacheKey, promise);
+}
+
+async function pcsinaloaReadIncidenciaEvidenciaListCacheada(incidenciaId) {
+  const cacheKey = `incidencia:${String(incidenciaId || "").trim()}`;
+  const cached = getCachedPcsinaloaRead(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const token = await loginPcsinaloa();
+    return pcsinaloaReadIncidenciaEvidenciaList(token, incidenciaId);
+  })();
+
+  return setCachedPcsinaloaRead(cacheKey, promise);
 }
 
 function normalizarAdjuntosIncidencia(imageList) {
@@ -774,6 +865,18 @@ function buildTopCounts(items, getLabel, getWeight, limit = 3) {
 }
 
 export async function obtenerSolventacionesCompleto(query = {}) {
+  const cacheKey = JSON.stringify({
+    tienda: String(query.tienda || query.TIENDA || "").trim(),
+    razonSocial: String(query.razonSocial || query.razon_social || query["razon social"] || "").trim(),
+    municipio: String(query.municipio || query.MUNICIPIO || "").trim(),
+  });
+  const cached = REPORT_CACHE.get(cacheKey);
+  const now = Date.now();
+  if (cached && cached.expiraEn > now) {
+    return cached.promise;
+  }
+
+  const promise = (async () => {
   const filtros = {
     tienda: String(query.tienda || query.TIENDA || "").trim(),
     razonSocial: String(query.razonSocial || query.razon_social || query["razon social"] || "").trim(),
@@ -810,7 +913,6 @@ export async function obtenerSolventacionesCompleto(query = {}) {
       return true;
     });
 
-  const token = await loginPcsinaloa();
   const visitadas = await Promise.all(
     visitadasFiltradas.map(async (item) => {
       const solicitudId = String(item.solicitudId || "").trim();
@@ -818,14 +920,14 @@ export async function obtenerSolventacionesCompleto(query = {}) {
 
       if (solicitudId) {
         try {
-          const rawIncidencias = await pcsinaloaReadBySolicitudId(token, solicitudId);
+          const rawIncidencias = await pcsinaloaReadBySolicitudIdCacheada(solicitudId);
           const incidenciasBase = sortIncidenciasForReport(rawIncidencias);
           incidencias = await Promise.all(
             incidenciasBase.map(async (inc) => {
               const adjuntosIncidencia = normalizarAdjuntosIncidencia(inc.image_list || inc.imageList || []);
               let evidenciasDetalle = [];
               try {
-                evidenciasDetalle = await pcsinaloaReadIncidenciaEvidenciaList(token, inc.incidencia_id);
+                evidenciasDetalle = await pcsinaloaReadIncidenciaEvidenciaListCacheada(inc.incidencia_id);
               } catch (err) {
                 evidenciasDetalle = [];
                 inc.errorEvidencias = err.message;
@@ -980,6 +1082,15 @@ export async function obtenerSolventacionesCompleto(query = {}) {
     items: visitadas,
     advertencias: [],
   };
+  })();
+
+  REPORT_CACHE.set(cacheKey, { expiraEn: now + Math.max(30_000, APPSHEET_TIMEOUT_MS), promise });
+  try {
+    return await promise;
+  } catch (err) {
+    REPORT_CACHE.delete(cacheKey);
+    throw err;
+  }
 }
 
 export async function prepararSolventacionesPdf(reporte) {

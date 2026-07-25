@@ -57,6 +57,12 @@ Variables nuevas recomendadas:
 - `PORTAL_SESSION_TTL_HOURS`
 - `PORTAL_EMPLOYEES_CACHE_TTL_MS`
 - `PORTAL_SESSION_COOKIE_NAME`
+- `PORTAL_QA_ACCESS_ENABLED`
+- `PORTAL_QA_ACCESS_TOKEN`
+- `PORTAL_QA_ACCESS_EMAIL`
+- `PORTAL_QA_ACCESS_NAME`
+- `PORTAL_QA_ACCESS_PUESTO`
+- `PORTAL_QA_ACCESS_ROW_ID`
 - `PORTAL_APPSHEET_TABLE_EMPLEADOS`
 - `PORTAL_EMPLEADOS_*`
 - `PORTAL_GOOGLE_CLIENT_ID`
@@ -91,7 +97,23 @@ Variables nuevas recomendadas:
 
    - `PORTAL_CONSTANCIAS_BASE_URL`
 
-12. Reinicia el contenedor para que tome las nuevas variables.
+12. Si necesitas habilitar acceso temporal de QA al dashboard admin, activa:
+
+   - `PORTAL_QA_ACCESS_ENABLED=1`
+   - `PORTAL_QA_ACCESS_TOKEN`
+   - `PORTAL_QA_ACCESS_EMAIL` con un correo real de empleado/admin para que el dashboard cargue datos de AppSheet correctamente.
+
+13. Reinicia el contenedor para que tome las nuevas variables.
+
+### Acceso QA controlado
+
+Cuando `PORTAL_QA_ACCESS_ENABLED=1`, la pantalla de login muestra un formulario adicional para entrar al portal con un token de QA.
+
+- El token se valida antes de crear la sesion.
+- La sesion resultante queda firmada igual que el flujo normal.
+- Si se define `PORTAL_QA_ACCESS_EMAIL`, el portal usa ese empleado real como contexto de AppSheet.
+- Si no se define correo, el acceso sigue existiendo, pero es recomendable usar un correo de admin ya registrado para no perder datos del dashboard.
+- El acceso QA debe desactivarse cuando termine la validacion.
 
 Notas:
 

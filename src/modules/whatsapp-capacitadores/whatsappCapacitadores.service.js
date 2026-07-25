@@ -32,6 +32,7 @@ const runtime = {
   driveClientPromise: null,
   refreshTimer: null,
   reconnectTimer: null,
+  intentionalStop: false,
 };
 
 const menuContext = new Map();
@@ -2005,6 +2006,7 @@ async function recoverWhatsAppClient(client, reason) {
   if (runtime.client === client) runtime.client = null;
 
   await destroyWhatsAppClient(client);
+  if (runtime.intentionalStop) return;
   if (config) await clearWhatsAppLocalSession(config, reason);
   scheduleWhatsAppReconnect(reason || "disconnected");
 }
@@ -2313,6 +2315,7 @@ export async function startWhatsAppCapacitadoresService() {
   const config = getConfig();
   serviceState.enabled = config.enabled;
   serviceState.sessionDir = config.sessionDir;
+  runtime.intentionalStop = false;
 
   if (!config.enabled) {
     serviceState.status = "disabled";
@@ -2338,6 +2341,7 @@ export async function stopWhatsAppCapacitadoresService() {
   const client = runtime.client;
   runtime.client = null;
   serviceState.startPromise = null;
+  runtime.intentionalStop = true;
 
   if (client) {
     await destroyWhatsAppClient(client);
@@ -2347,5 +2351,26 @@ export async function stopWhatsAppCapacitadoresService() {
   serviceState.status = serviceState.enabled ? "stopped" : "disabled";
   serviceState.qrPayload = null;
   return getWhatsAppCapacitadoresStatus();
+}
+
+export async function restartWhatsAppCapacitadoresForQr() {
+  const config = getConfig();
+  const sessionRoot = config.sessionDir;
+
+  await stopWhatsAppCapacitadoresService();
+
+  try {
+    await fs.promises.rm(sessionRoot, { recursive: true, force: true, maxRetries: 5 });
+  } catch (error) {
+    getLogger().warn({ error, sessionRoot }, "failed to clear whatsapp session root");
+  }
+
+  try {
+    fs.mkdirSync(sessionRoot, { recursive: true });
+  } catch (error) {
+    getLogger().warn({ error, sessionRoot }, "failed to recreate whatsapp session root");
+  }
+
+  return startWhatsAppCapacitadoresService();
 }
 

@@ -14,6 +14,24 @@
       background: #f3f4f6;
       color: #111827;
     }
+    .skip-link {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      z-index: 20;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #111827;
+      border: 1px solid #d1d5db;
+      font-weight: 800;
+      text-decoration: none;
+      transform: translateY(-180%);
+      transition: transform 180ms ease;
+    }
+    .skip-link:focus {
+      transform: translateY(0);
+    }
     .page {
       max-width: 1400px;
       margin: 0 auto;
@@ -36,6 +54,36 @@
       margin: 6px 0 0;
       color: #6b7280;
       font-size: 13px;
+    }
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .workflow-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .workflow-card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .workflow-card span {
+      display: block;
+      color: #6b7280;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .panel-topline {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
     }
     .btn {
       border: 0;
@@ -68,6 +116,12 @@
       font-size: 14px;
       text-transform: uppercase;
       letter-spacing: 0.08em;
+    }
+    .panel-subtitle {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 0 0 12px;
+      line-height: 1.5;
     }
     .hint {
       font-size: 12px;
@@ -172,25 +226,47 @@
     @media (max-width: 700px) {
       .row-grid { grid-template-columns: 1fr; }
       .header { flex-direction: column; align-items: flex-start; }
+      .workflow { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <div class="page">
+  <a class="skip-link" href="#pedidos-main">Saltar al contenido principal</a>
+  <main id="pedidos-main" class="page" role="main" aria-label="Pedidos manuales">
     <div class="header">
       <div>
         <h1>Pedidos manuales</h1>
-        <p class="sub">Carga por CSV o captura manual para guardar en la tabla de pedidos.</p>
+        <p class="sub">Carga por CSV o captura manual para guardar en la tabla de pedidos. El flujo recomendado sigue siendo importar, revisar y guardar.</p>
       </div>
       <div class="actions">
         <a class="btn secondary" href="/jobs">Volver a jobs</a>
+        <a class="btn secondary" href="/jobs/view">Vista operativa</a>
+        <a class="btn secondary" href="/status">Portal</a>
+      </div>
+    </div>
+
+    <div class="workflow">
+      <div class="workflow-card">
+        <strong>1. Cargar</strong>
+        <span>Sube CSV o Excel, o pega filas listas para revisar.</span>
+      </div>
+      <div class="workflow-card">
+        <strong>2. Revisar</strong>
+        <span>Corrige la tabla antes de enviar el lote.</span>
+      </div>
+      <div class="workflow-card">
+        <strong>3. Guardar</strong>
+        <span>Cuando todo está validado, envía el lote a AppSheet y confirma el resultado.</span>
       </div>
     </div>
 
     <div class="grid">
       <div class="panel">
-        <h2>Importar CSV o Excel</h2>
-        <p class="hint">
+        <div class="panel-topline">
+          <h2>Importar CSV o Excel</h2>
+          <span class="muted">Entrada masiva</span>
+        </div>
+        <p class="panel-subtitle">
           Puedes subir un archivo con columnas como <strong>ESTABLECIMIENTO</strong>,
           <strong>IMPORTE</strong>, <strong>PEDIDO</strong>, <strong>DESCRIPCION</strong> y
           <strong>PROVEEDOR</strong>. Tambien acepta variantes como <strong>No. tienda</strong>
@@ -216,8 +292,11 @@
       </div>
 
       <div class="panel">
-        <h2>Captura manual</h2>
-        <p class="hint">Agrega una fila a la vez, revisa la tabla y luego envía todo a AppSheet.</p>
+        <div class="panel-topline">
+          <h2>Captura manual</h2>
+          <span class="muted">Una fila por vez</span>
+        </div>
+        <p class="panel-subtitle">Agrega una fila, revisa la tabla y deja solo la informacion lista para enviar.</p>
 
         <div class="row-grid">
           <div>
@@ -264,10 +343,10 @@
           </table>
         </div>
 
-        <div id="status" class="status muted">Sin filas cargadas.</div>
+        <div id="status" class="status muted" aria-live="polite" aria-atomic="true">Sin filas cargadas.</div>
       </div>
     </div>
-  </div>
+  </main>
 
   <script>
     (function() {
@@ -364,7 +443,7 @@
             ESTABLECIMIENTO: out.ESTABLECIMIENTO || out['NO. TIENDA'] || out['NO TIENDA'] || out.TIENDA || '',
             IMPORTE: out.IMPORTE || '',
             PEDIDO: out.PEDIDO || out['NO. PEDIDO'] || out['NO PEDIDO'] || '',
-            DESCRIPCION: out.DESCRIPCION || out.DESCRIPCION || out.CONCEPTO || '',
+            DESCRIPCION: out.DESCRIPCION || out.CONCEPTO || '',
             PROVEEDOR: out.PROVEEDOR || ''
           };
         });
@@ -401,11 +480,11 @@
             continue;
           }
           if (data.status === 'failed') {
-            return { ok: false, error: data.error || 'La importación falló.' };
+            return { ok: false, error: data.error || 'La importacion fallo.' };
           }
           return data;
         }
-        return { ok: false, error: 'La importación sigue en proceso. Déjala correr un poco más y vuelve a consultar.' };
+        return { ok: false, error: 'La importacion sigue en proceso. Dejala correr un poco mas y vuelve a consultar.' };
       }
 
       async function importFile() {
@@ -432,7 +511,7 @@
           setStatus('Archivo recibido. Procesando en segundo plano...', 'muted');
           var job = await waitForJob(data.jobId);
           if (!job.ok) {
-            setStatus(job.error || 'No se pudo completar la importación.', 'err');
+            setStatus(job.error || 'No se pudo completar la importacion.', 'err');
             return;
           }
           var result = job.result || job;
@@ -460,14 +539,14 @@
         });
         var data = await readResponseData(response);
         if (!response.ok) {
-          setStatus((data.error || 'No se pudo guardar la información.') + (data.raw ? '\n\n' + data.raw : ''), 'err');
+          setStatus((data.error || 'No se pudo guardar la informacion.') + (data.raw ? '\n\n' + data.raw : ''), 'err');
           return;
         }
         if (data.queued && data.jobId) {
           setStatus('Filas recibidas. Procesando en segundo plano...', 'muted');
           var job = await waitForJob(data.jobId);
           if (!job.ok) {
-            setStatus(job.error || 'No se pudo completar la importación.', 'err');
+            setStatus(job.error || 'No se pudo completar la importacion.', 'err');
             return;
           }
           var result = job.result || job;
@@ -476,7 +555,7 @@
           return;
         }
         if (!data.ok) {
-          setStatus(data.error || 'No se pudo guardar la información.', 'err');
+          setStatus(data.error || 'No se pudo guardar la informacion.', 'err');
           return;
         }
         setStatus('Guardadas ' + data.total + ' fila(s). Agregadas: ' + data.added + '. Editadas: ' + data.edited + '.', 'ok');
@@ -522,7 +601,7 @@
         try {
           var pasted = parseLooseCsv(csvPaste.value);
           if (!pasted.length) {
-            setStatus('No se encontraron filas válidas en el texto pegado.', 'err');
+            setStatus('No se encontraron filas validas en el texto pegado.', 'err');
             return;
           }
           pasted.forEach(pushRow);

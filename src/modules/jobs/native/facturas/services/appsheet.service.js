@@ -54,6 +54,10 @@ async function fetchExistingRows() {
   return Array.isArray(response.data) ? response.data : (response.data?.Rows || response.data?.rows || []);
 }
 
+function getRowKeyValue(row) {
+  return row?.[KEY_COLUMN] ?? row?.id ?? row?.['Row ID'] ?? null;
+}
+
 async function writeRows(action, rows) {
   if (!rows.length) return;
 
@@ -103,7 +107,7 @@ export async function enviarAAppSheet(rows) {
   const existingRows = await fetchExistingRows();
   const existingIds = new Set(
     existingRows
-      .map(row => row?.[KEY_COLUMN] ?? row?.id ?? row?.['Row ID'] ?? null)
+      .map(getRowKeyValue)
       .filter(value => value !== null && value !== undefined && String(value).trim() !== '')
       .map(value => String(value))
   );
@@ -149,4 +153,48 @@ export async function enviarAAppSheet(rows) {
     }
     await sleep(3000);
   }
+}
+
+export async function eliminarDeAppSheet(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { deleted: 0, skipped: 0 };
+  }
+
+  if (ID_AS_STRING) {
+    rows = rows.map(r => ({ ...r, id: r.id != null ? String(r.id) : r.id }));
+  }
+
+  const existingRows = await fetchExistingRows();
+  const existingIds = new Set(
+    existingRows
+      .map(getRowKeyValue)
+      .filter(value => value !== null && value !== undefined && String(value).trim() !== '')
+      .map(value => String(value))
+  );
+
+  const rowsToDelete = [];
+  const skippedRows = [];
+  for (const row of rows) {
+    const keyValue = getRowKeyValue(row);
+    if (keyValue === null || keyValue === undefined || String(keyValue).trim() === '') {
+      skippedRows.push(row);
+      continue;
+    }
+    if (!existingIds.has(String(keyValue))) {
+      skippedRows.push(row);
+      continue;
+    }
+    rowsToDelete.push({ [KEY_COLUMN]: keyValue });
+  }
+
+  for (let i = 0; i < rowsToDelete.length; i += CHUNK_SIZE) {
+    const chunk = rowsToDelete.slice(i, i + CHUNK_SIZE);
+    await writeRows('Delete', chunk);
+    await sleep(3000);
+  }
+
+  return {
+    deleted: rowsToDelete.length,
+    skipped: skippedRows.length,
+  };
 }

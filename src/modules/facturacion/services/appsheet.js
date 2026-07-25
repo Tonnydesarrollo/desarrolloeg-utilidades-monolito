@@ -16,6 +16,8 @@ const appsheetAgent = new https.Agent({
 });
 
 const cachedTables = new Map();
+const cachedCotizacionesCompletas = new Map();
+let facturacionWarmupStarted = false;
 
 let appsheetActive = 0;
 const appsheetQueue = [];
@@ -123,12 +125,12 @@ async function leerTablaAppSheetCacheada(nombreTabla, ttlMs = APPSHEET_CACHE_TTL
 }
 
 export async function obtenerCotizacion(cotizacionId) {
-  const rows = await leerTablaAppSheet("COTIZACIONES_VARIOS_CT");
+  const rows = await leerTablaAppSheetCacheada("COTIZACIONES_VARIOS_CT");
   return rows.find(r => String(r["Row ID"] || r.ID) === String(cotizacionId)) || null;
 }
 
 export async function buscarConceptosPorCotizacion(cotizacionId) {
-  const rows = await leerTablaAppSheet("CONCEPTOS_VARIOS_CT");
+  const rows = await leerTablaAppSheetCacheada("CONCEPTOS_VARIOS_CT");
   return rows.filter(r => String(r.COTIZACION) === String(cotizacionId));
 }
 
@@ -245,89 +247,127 @@ export async function mapaProveedores() {
 }
 
 export async function obtenerCotizacionCompleta(cotizacionId) {
-  const cotizacion = await obtenerCotizacion(cotizacionId);
-  if (!cotizacion) throw new Error("Cotizacion no encontrada");
-
-  const [conceptos, empresas, sucursales, catalogo, proveedores] = await Promise.all([
-    buscarConceptosPorCotizacion(cotizacionId),
-    mapaEmpresas(),
-    mapaSucursales(),
-    mapaCatalogo(),
-    mapaProveedores()
-  ]);
-
-  const empresa = empresas[cotizacion["RAZON SOCIAL"]] || {};
-
-  if (empresa.logo && !empresa.logoUrl) {
-    try {
-      const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
-      empresa.logoUrl = logoUrl;
-      await actualizarFilaAppSheet("EMPRESAS", { ID: empresa.id, LOGOURL: logoUrl });
-    } catch (err) {
-      console.error("No se pudo generar LOGOURL:", err.message);
-    }
+  const cacheKey = String(cotizacionId || "").trim();
+  const cached = cachedCotizacionesCompletas.get(cacheKey);
+  const now = Date.now();
+  if (cached && cached.expiraEn > now) {
+    return cached.promise;
   }
 
-  const proveedor = proveedores[cotizacion.PROVEEDOR] || null;
-  const titulo = cotizacion.TITULO || cotizacion["TITULO"] || "";
-  const centroDeTrabajoRaw = cotizacion.CENTRO_DE_TRABAJO || cotizacion["CENTRO_DE_TRABAJO"] || cotizacion["CENTRO DE TRABAJO"] || "";
-  const formaPago = cotizacion.formaPago || cotizacion["Forma pago"] || cotizacion["Forma Pago"] || cotizacion["FORMA PAGO"] || cotizacion.paymentTerms || "";
-  const centroDeTrabajoIds = Array.isArray(centroDeTrabajoRaw) ? centroDeTrabajoRaw : String(centroDeTrabajoRaw).split(/[,;]+/g).map(v => v.trim()).filter(Boolean);
-  const centroDeTrabajoCount = centroDeTrabajoIds.length;
-  const centroDeTrabajoUnicoId = centroDeTrabajoCount === 1 ? centroDeTrabajoIds[0] : "";
-  const centroDeTrabajoUnico = centroDeTrabajoUnicoId ? (sucursales[centroDeTrabajoUnicoId] || {}) : {};
-  const porCentro = {};
+  const promise = (async () => {
+    const cotizacion = await obtenerCotizacion(cotizacionId);
+    if (!cotizacion) throw new Error("Cotizacion no encontrada");
 
-  conceptos.forEach(c => {
-    const ctId = c.CENTRO_DE_TRABAJO;
-    if (!ctId) return;
-    const suc = sucursales[ctId] || {};
+    const [conceptos, empresas, sucursales, catalogo, proveedores] = await Promise.all([
+      buscarConceptosPorCotizacion(cotizacionId),
+      mapaEmpresas(),
+      mapaSucursales(),
+      mapaCatalogo(),
+      mapaProveedores()
+    ]);
 
-    if (!porCentro[ctId]) {
-      porCentro[ctId] = {
-        centro_id: ctId,
-        centro_nombre: suc.nombre || ctId,
-        tienda: suc.tienda || "",
-        domicilio: suc.domicilio || "",
-        municipio: suc.municipio || {},
-        estado: suc.estado || {},
-        conceptos: []
-      };
+    const empresa = empresas[cotizacion["RAZON SOCIAL"]] || {};
+
+    if (empresa.logo && !empresa.logoUrl) {
+      void (async () => {
+        try {
+          const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
+          if (!logoUrl) return;
+          empresa.logoUrl = logoUrl;
+          await actualizarFilaAppSheet("EMPRESAS", { ID: empresa.id, LOGOURL: logoUrl });
+        } catch (err) {
+          console.error("No se pudo generar LOGOURL:", err.message);
+        }
+      })();
     }
 
-    const cat = catalogo[c.CONCEPTO] || {};
-    porCentro[ctId].conceptos.push({
-      concepto_id: c.CONCEPTO,
-      concepto_nombre: cat.nombre || c.CONCEPTO,
-      tipo: cat.tipo || "",
-      catalogo_codigo: cat.codigo || cat.id || c.CONCEPTO || "",
-      descripcion_catalogo: cat.descripcion || "",
-      cantidad: Number(c.CANTIDAD || 0),
-      precio: Number(c.PRECIO || 0),
-      subtotal: Number(c.SUBTOTAL || 0),
-      iva: Number(c["TOTAL IVA"] || 0),
-      total: Number(c.TOTAL || 0)
-    });
-  });
+    const proveedor = proveedores[cotizacion.PROVEEDOR] || null;
+    const titulo = cotizacion.TITULO || cotizacion["TITULO"] || "";
+    const centroDeTrabajoRaw = cotizacion.CENTRO_DE_TRABAJO || cotizacion["CENTRO_DE_TRABAJO"] || cotizacion["CENTRO DE TRABAJO"] || "";
+    const formaPago = cotizacion.formaPago || cotizacion["Forma pago"] || cotizacion["Forma Pago"] || cotizacion["FORMA PAGO"] || cotizacion.paymentTerms || "";
+    const centroDeTrabajoIds = Array.isArray(centroDeTrabajoRaw) ? centroDeTrabajoRaw : String(centroDeTrabajoRaw).split(/[,;]+/g).map(v => v.trim()).filter(Boolean);
+    const centroDeTrabajoCount = centroDeTrabajoIds.length;
+    const centroDeTrabajoUnicoId = centroDeTrabajoCount === 1 ? centroDeTrabajoIds[0] : "";
+    const centroDeTrabajoUnico = centroDeTrabajoUnicoId ? (sucursales[centroDeTrabajoUnicoId] || {}) : {};
+    const porCentro = {};
 
-  return {
-    empresaId: cotizacion["RAZON SOCIAL"],
-    empresa,
-    cotizacion: {
-      id: cotizacion["Row ID"],
-      fecha: cotizacion.FECHA,
-      proveedor,
-      titulo,
-      formaPago,
-      centroDeTrabajoIds,
-      centroDeTrabajoCount,
-      centroNombre: centroDeTrabajoUnico.nombre || centroDeTrabajoUnicoId || ""
-    },
-    firma: proveedor ? {
-      firmaUrl: proveedor.firmaUrl,
-      nombre: proveedor.firmaNombre,
-      puesto: proveedor.firmaPuesto
-    } : null,
-    conceptos_por_centro: porCentro
-  };
+    conceptos.forEach(c => {
+      const ctId = c.CENTRO_DE_TRABAJO;
+      if (!ctId) return;
+      const suc = sucursales[ctId] || {};
+
+      if (!porCentro[ctId]) {
+        porCentro[ctId] = {
+          centro_id: ctId,
+          centro_nombre: suc.nombre || ctId,
+          tienda: suc.tienda || "",
+          domicilio: suc.domicilio || "",
+          municipio: suc.municipio || {},
+          estado: suc.estado || {},
+          conceptos: []
+        };
+      }
+
+      const cat = catalogo[c.CONCEPTO] || {};
+      porCentro[ctId].conceptos.push({
+        concepto_id: c.CONCEPTO,
+        concepto_nombre: cat.nombre || c.CONCEPTO,
+        tipo: cat.tipo || "",
+        catalogo_codigo: cat.codigo || cat.id || c.CONCEPTO || "",
+        descripcion_catalogo: cat.descripcion || "",
+        cantidad: Number(c.CANTIDAD || 0),
+        precio: Number(c.PRECIO || 0),
+        subtotal: Number(c.SUBTOTAL || 0),
+        iva: Number(c["TOTAL IVA"] || 0),
+        total: Number(c.TOTAL || 0)
+      });
+    });
+
+    return {
+      empresaId: cotizacion["RAZON SOCIAL"],
+      empresa,
+      cotizacion: {
+        id: cotizacion["Row ID"],
+        fecha: cotizacion.FECHA,
+        proveedor,
+        titulo,
+        formaPago,
+        centroDeTrabajoIds,
+        centroDeTrabajoCount,
+        centroNombre: centroDeTrabajoUnico.nombre || centroDeTrabajoUnicoId || ""
+      },
+      firma: proveedor ? {
+        firmaUrl: proveedor.firmaUrl,
+        nombre: proveedor.firmaNombre,
+        puesto: proveedor.firmaPuesto
+      } : null,
+      conceptos_por_centro: porCentro
+    };
+  })();
+
+  cachedCotizacionesCompletas.set(cacheKey, { expiraEn: now + APPSHEET_CACHE_TTL_MS, promise });
+  try {
+    return await promise;
+  } catch (err) {
+    cachedCotizacionesCompletas.delete(cacheKey);
+    throw err;
+  }
+}
+
+export function prewarmFacturacionCaches() {
+  if (facturacionWarmupStarted) return;
+  facturacionWarmupStarted = true;
+
+  if (!process.env.APPSHEET_APP_ID || !process.env.APPSHEET_API_KEY) {
+    return;
+  }
+
+  setTimeout(() => {
+    void Promise.allSettled([
+      mapaEmpresas(),
+      mapaSucursales(),
+      mapaCatalogo(),
+      mapaProveedores(),
+    ]);
+  }, 1500);
 }

@@ -17,9 +17,9 @@ const CONFIG = {
   appsheetKeyLiberaciones: process.env.PEDIDOS_APPSHEET_KEY_LIBERACIONES || "LIBERACION",
   usePublicPdf: String(process.env.PEDIDOS_USE_PUBLIC_PDF || "").trim() === "1",
   maxRows: Number(process.env.PEDIDOS_MAX_ROWS || "0"),
-  retryMax: Number(process.env.PEDIDOS_RETRY_MAX || "4"),
+  retryMax: Number(process.env.PEDIDOS_RETRY_MAX || "1"),
   retryBaseMs: Number(process.env.PEDIDOS_RETRY_BASE_MS || "750"),
-  fetchTimeoutMs: Number(process.env.PEDIDOS_FETCH_TIMEOUT_MS || "20000"),
+  fetchTimeoutMs: Number(process.env.PEDIDOS_FETCH_TIMEOUT_MS || "120000"),
   appsheetDelayMs: Number(process.env.PEDIDOS_APPSHEET_DELAY_MS || "600"),
   forceRefresh: String(process.env.PEDIDOS_FORCE_REFRESH || "").trim() === "1",
   outputDir: process.env.PEDIDOS_OUTPUT_DIR || path.resolve(process.cwd(), "src", "modules", "jobs", "native", "pedidos", "data")
@@ -86,6 +86,11 @@ async function fetchWithRetry(url, options = {}, meta = {}) {
       return res;
     } catch (err) {
       lastErr = err;
+      const isAbort = String(err?.name || "").toLowerCase() === "aborterror" || /aborted/i.test(String(err?.message || ""));
+      if (isAbort && attempt < CONFIG.retryMax) {
+        await sleep(CONFIG.retryBaseMs * Math.pow(2, attempt) + Math.floor(Math.random() * 250));
+        continue;
+      }
       if (attempt >= CONFIG.retryMax) break;
       await sleep(CONFIG.retryBaseMs * Math.pow(2, attempt) + Math.floor(Math.random() * 250));
     } finally {

@@ -2,7 +2,7 @@ import fs from 'fs';
 import { iniciarSesionWeb } from './services/clubfactura.session.js';
 import { loginClubFactura } from './services/clubfactura.auth.js';
 import { obtenerFacturasEmitidas } from './services/clubfactura.facturas.js';
-import { enviarAAppSheet } from './services/appsheet.service.js';
+import { eliminarDeAppSheet, enviarAAppSheet } from './services/appsheet.service.js';
 import { descargarXml } from './services/clubfactura.download.js';
 import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from '../../services/localReplica.js';
 import { loadJobState, saveJobState } from '../../services/jobState.js';
@@ -64,6 +64,54 @@ function extractUuidFromXmlText(xmlText) {
   if (!xmlText) return null;
   const match = /UUID\s*=\s*["']([^"']+)["']/i.exec(xmlText);
   return match?.[1] || null;
+}
+
+function normalizeCancelacionValue(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function isFacturaCancelada(factura = {}) {
+  const estatusCancelacion = normalizeCancelacionValue(factura?.estatusCancelacion);
+  if (estatusCancelacion === 1) {
+    return true;
+  }
+
+  const statusText = String(factura?.estatusPagoDesc || factura?.estatusDesc || factura?.status || "").trim().toUpperCase();
+  return /CANCEL/.test(statusText);
+}
+
+function writeCancelledCsv(path, rows) {
+  const header = ['id', 'serieFolio', 'RFC', 'estatusCancelacion', 'estatusPagoDesc'];
+  const lines = [header.join(',')];
+  for (const r of rows) {
+    const values = [
+      r.id,
+      r.serieFolio,
+      r.RFC,
+      r.estatusCancelacion,
+      r.estatusPagoDesc,
+    ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`);
+    lines.push(values.join(','));
+  }
+  fs.writeFileSync(path, lines.join('\n'), 'utf8');
+}
+
+function writeCancelledCleanupCsv(path, rows) {
+  const header = ['id', 'serieFolio', 'RFC', 'estatusCancelacion', 'estatusPagoDesc', 'accion'];
+  const lines = [header.join(',')];
+  for (const r of rows) {
+    const values = [
+      r.id,
+      r.serieFolio,
+      r.RFC,
+      r.estatusCancelacion,
+      r.estatusPagoDesc,
+      'DELETE',
+    ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`);
+    lines.push(values.join(','));
+  }
+  fs.writeFileSync(path, lines.join('\n'), 'utf8');
 }
 
 function getDumpDir() {
@@ -207,26 +255,33 @@ export async function syncFacturasNative() {
 
     const snapshotPath = resolveDumpFile('cfdis_snapshot.json');
     const snapshot = loadReplica(snapshotPath);
+    const cancelledRows = acumuladas.filter((row) => isFacturaCancelada(row));
+    const activeRows = acumuladas.filter((row) => !isFacturaCancelada(row));
+    const { deleted, skipped: skippedDeletes } = cancelledRows.length > 0
+      ? await eliminarDeAppSheet(cancelledRows)
+      : { deleted: 0, skipped: 0 };
     const { changedRows: toUpload, unchangedRows } = FORCE_RESYNC
-      ? { changedRows: acumuladas, unchangedRows: [] }
-      : diffRowsAgainstReplica(acumuladas, 'id', snapshot.rows, {
+      ? { changedRows: activeRows, unchangedRows: [] }
+      : diffRowsAgainstReplica(activeRows, 'id', snapshot.rows, {
           entryMatchesRow: isLegacyFacturasReplicaMatch,
         });
-    const missingUuid = acumuladas.filter(r => !r.UUID);
+    const missingUuid = activeRows.filter(r => !r.UUID);
 
-    writeCsv(resolveDumpFile('cfdis_all.csv'), acumuladas);
+    writeCsv(resolveDumpFile('cfdis_all.csv'), activeRows);
     writeCsv(resolveDumpFile('cfdis_to_upload.csv'), toUpload);
+    writeCancelledCsv(resolveDumpFile('cfdis_cancelled.csv'), cancelledRows);
+    writeCancelledCleanupCsv(resolveDumpFile('cfdis_cancelled_deleted.csv'), cancelledRows);
     writeUuidMissingCsv(resolveDumpFile('cfdis_uuid_missing.csv'), missingUuid);
 
     if (toUpload.length > 0) {
       await enviarAAppSheet(toUpload);
     }
 
-    saveReplicaRows(snapshotPath, acumuladas, 'id', { mergeWithExisting: true });
+    saveReplicaRows(snapshotPath, activeRows, 'id', { mergeWithExisting: true });
     if (INCREMENTAL_SYNC && !FORCE_RESYNC) {
       const companyIds = empresasToProcess.map((empresa) => String(empresa.id));
       for (const companyId of companyIds) {
-        const companyRows = acumuladas.filter((row) => String(row.PROVEEDOR || '') === String(empresas.find((empresa) => String(empresa.id) === companyId)?.proveedor || ''));
+        const companyRows = activeRows.filter((row) => String(row.PROVEEDOR || '') === String(empresas.find((empresa) => String(empresa.id) === companyId)?.proveedor || ''));
         const newest = companyRows.reduce((acc, row) => {
           const current = normalizeCursor(row);
           if (!current) return acc;
@@ -245,8 +300,11 @@ export async function syncFacturasNative() {
     return {
       ok: true,
       uploaded: toUpload.length,
+      deleted,
       unchanged: unchangedRows.length,
       total: acumuladas.length,
+      cancelled: cancelledRows.length,
+      skippedDeletes,
       missingUuid: missingUuid.length,
       incrementalSync: INCREMENTAL_SYNC,
       limits: {

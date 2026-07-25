@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   clearJobExecutionHistory,
+  classifyJobFailure,
   executeTrackedJob,
   getJobExecutionHistory,
   getLatestJobExecution,
@@ -43,4 +44,16 @@ test("job execution tracker records failures", async () => {
   assert.match(String(latest.error || ""), /boom/);
 
   clearJobExecutionHistory("failing-job");
+});
+
+test("job execution tracker classifies auth and timeout failures", () => {
+  const authFailure = classifyJobFailure(new Error("ClubFactura login fallo (409): La cuenta del usuario esta bloqueada"));
+  assert.equal(authFailure.kind, "auth_required");
+  assert.equal(authFailure.retryable, false);
+  assert.match(authFailure.recommendation, /credenciales|bloquear/i);
+
+  const timeoutFailure = classifyJobFailure(new Error("fetch failed (fetchFromAppSheet:PEDIDOS_LEY): This operation was aborted"));
+  assert.equal(timeoutFailure.kind, "timeout");
+  assert.equal(timeoutFailure.retryable, true);
+  assert.match(timeoutFailure.recommendation, /timeout|reintentos|latencia/i);
 });

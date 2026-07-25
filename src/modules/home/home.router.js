@@ -5,6 +5,7 @@ import {
   buildClearCookieHeader,
   buildGoogleAuthUrl,
   buildCookieHeader,
+  buildQaAccessEmployee,
   authenticateEmployeeByEmail,
   createSessionForEmployee,
   exchangeGoogleAuthCode,
@@ -14,10 +15,12 @@ import {
   getRouteCardsForRole,
   getOAuthStateCookieName,
   isGoogleOAuthConfigured,
+  isQaAccessEnabled,
   isRequestSecure,
   listEmployeesForPortal,
   loadAuthenticatedEmployee,
   deleteCalendarNote,
+  verifyQaAccessToken,
   upsertCalendarNote,
   updateCapacitacionDiplomas,
   updateCapacitacionStatus,
@@ -3419,6 +3422,36 @@ function getHomeStyles() {
         place-items: center;
         padding: 24px 18px;
       }
+      .skip-link {
+        position: absolute;
+        left: 16px;
+        top: 16px;
+        z-index: 60;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: #ffffff;
+        color: var(--navy);
+        border: 1px solid rgba(26,42,58,0.14);
+        box-shadow: 0 8px 24px rgba(26,42,58,0.12);
+        font-weight: 900;
+        text-decoration: none;
+        transform: translateY(-180%);
+        transition: transform 180ms ease;
+      }
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
       .auth-card {
         width: min(980px, 100%);
         background: rgba(255,255,255,0.98);
@@ -3898,13 +3931,14 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
     ${headExtra}
   </head>
   <body>
+    <a class="skip-link" href="#contenido-principal">Saltar al contenido principal</a>
     <div class="page-loader" id="page-loader" aria-hidden="true">
       <div class="page-loader-card" role="status" aria-live="polite" aria-label="Cargando">
         <div class="page-loader-spinner" aria-hidden="true"></div>
         <p class="page-loader-text">Cargando Desarrollo EG</p>
       </div>
     </div>
-    <main class="${escapeAttr(mainClass || "")}">
+    <main id="contenido-principal" role="main" aria-label="Contenido principal" class="${escapeAttr(mainClass || "")}">
       <section class="hero">
         <div class="hero-grid">
           <div>
@@ -3947,7 +3981,7 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
   </html>`;
 }
 
-function renderLoginPage(errorMessage = "") {
+function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled() } = {}) {
   const errorHtml = errorMessage ? `<div class="message error" id="message">${escapeHtml(errorMessage)}</div>` : `<div class="message" id="message"></div>`;
   const logoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
   return `<!DOCTYPE html>
@@ -3961,24 +3995,34 @@ function renderLoginPage(errorMessage = "") {
     ${getHomeStyles()}
   </head>
   <body>
+    <a class="skip-link" href="#login-main">Saltar al contenido principal</a>
     <div class="auth-shell">
-      <div class="auth-card">
+      <main id="login-main" class="auth-card" role="main" aria-label="Acceso al portal">
         <section class="auth-visual">
           <div class="auth-brand">
             <span class="auth-pill">Portal de acceso</span>
             <img class="auth-logo" src="${logoPath}" alt="Desarrollo EG" />
-            <h1>Desarrollo EG</h1>
+            <h1>Portal de Desarrollo EG</h1>
           </div>
         </section>
         <section class="auth-form">
-          <h2>Acceso</h2>
+          <h2>Iniciar sesion</h2>
+          <p class="hint" style="margin-top:0;">El portal es la entrada. Usa tu cuenta corporativa de Google y, si ya tienes una sesion activa, pasaras directo al dashboard.</p>
           <div class="field">
-            <label>Acceso con Google</label>
-            <a class="submit-btn" href="/auth/google/start" style="text-decoration:none;text-align:center;display:inline-flex;justify-content:center;align-items:center;">Continuar con Google</a>
+            <label>Acceso corporativo con Google</label>
+            <a class="submit-btn" href="/auth/google/start" style="text-decoration:none;text-align:center;display:inline-flex;justify-content:center;align-items:center;">Entrar con Google</a>
           </div>
+          ${showQaAccess ? `
+          <form class="field" method="post" action="/auth/qa/start">
+            <label for="qa-access-token">Acceso QA controlado</label>
+            <input id="qa-access-token" name="token" type="password" autocomplete="one-time-code" placeholder="Token de QA" />
+            <p class="hint" style="margin:0;">Usa este acceso solo para validar tickets con sesion de administracion.</p>
+            <button class="submit-btn" type="submit">Entrar como QA</button>
+          </form>
+          ` : ""}
           ${errorHtml}
         </section>
-      </div>
+      </main>
     </div>
   </body>
   </html>`;
@@ -4623,7 +4667,7 @@ async function renderDashboardPage({
   const selected = getEmployeeSummary(selectedEmployee);
   const role = selected.role || "capacitador";
   const routeCards = getRouteCardsForRole(role);
-  const title = role === "admin" ? "Dashboard general" : "Dashboard personal";
+  const title = role === "admin" ? "Tablero general" : "Tablero personal";
   const logoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
   const viewingOtherDashboard = user?.role === "admin" && user?.rowId !== selected.rowId;
   const capacitadorView = role === "capacitador";
@@ -5669,8 +5713,10 @@ async function renderDashboardPage({
 
   return renderLayout({
     title: `${title} | Desarrollo EG`,
-    heroTitle: role === "admin" ? "Dashboard general" : "Dashboard personal",
-    heroIntro: "",
+    heroTitle: title,
+    heroIntro: role === "admin"
+      ? "Vista administrativa para revisar actividad, capacitaciones y accesos internos sin volver al portal."
+      : "Tu tablero personal para ver capacitaciones, calendario y pendientes despues de autenticarte en el portal.",
     primaryAction: headerAction,
     secondaryAction: headerAction2,
     sideContent,
@@ -5715,6 +5761,30 @@ homeRouter.get("/login", async (req, res) => {
   }
 
   res.type("html").send(renderLoginPage());
+});
+
+homeRouter.post("/auth/qa/start", async (req, res) => {
+  if (!isQaAccessEnabled()) {
+    res.status(503).type("html").send(renderLoginPage("El acceso QA no esta habilitado en este entorno.", { showQaAccess: false }));
+    return;
+  }
+
+  const token = String(req.body?.token || req.query.token || "").trim();
+  if (!verifyQaAccessToken(token)) {
+    res.status(403).type("html").send(renderLoginPage("Token QA invalido o vencido."));
+    return;
+  }
+
+  try {
+    const secure = isRequestSecure(req);
+    const employee = buildQaAccessEmployee();
+    const sessionToken = await createSessionForEmployee(employee);
+    res.setHeader("Set-Cookie", buildCookieHeader(sessionToken, { secure }));
+    void warmPortalDashboardCaches().catch(() => {});
+    res.redirect("/dashboard");
+  } catch (error) {
+    res.status(500).type("html").send(renderLoginPage(error instanceof Error ? error.message : "No se pudo abrir el acceso QA."));
+  }
 });
 
 homeRouter.get("/auth/google/start", async (req, res) => {

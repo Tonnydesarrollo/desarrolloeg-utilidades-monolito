@@ -1,5 +1,7 @@
 import { runJob } from "./jobRunner.js";
 import { executeTrackedJob } from "./jobExecutionTracker.js";
+import { classifyJobFailure } from "./jobExecutionTracker.js";
+import { getJobConfigurationState } from "./jobRegistry.js";
 
 const schedulerState = {
   initialized: false,
@@ -137,9 +139,32 @@ async function executeScheduledJob(jobId) {
   if (!entry || !entry.enabled || !schedulerState.started) return;
   if (entry.running) return;
 
+  const configuration = getJobConfigurationState(jobId);
+  entry.configured = configuration.configured;
+  entry.requiredEnv = configuration.requiredEnv;
+  entry.missingEnv = configuration.missingEnv;
+  if (!configuration.configured) {
+    const missingText = configuration.missingEnv.length > 0 ? configuration.missingEnv.join(", ") : "variables requeridas";
+    entry.lastStartedAt = new Date().toISOString();
+    entry.lastFinishedAt = new Date().toISOString();
+    entry.lastError = `Faltan credenciales: ${missingText}`;
+    entry.lastErrorKind = "auth_required";
+    entry.lastErrorRetryable = false;
+    entry.lastErrorRecommendation = "Configurar las variables de entorno requeridas antes de reactivar el job.";
+    entry.lastResult = { ok: false };
+    entry.pausedUntil = null;
+    entry.running = false;
+    entry.nextRunAt = null;
+    return;
+  }
+
   entry.running = true;
   entry.lastStartedAt = new Date().toISOString();
   entry.lastError = null;
+  entry.lastErrorKind = null;
+  entry.lastErrorRetryable = null;
+  entry.lastErrorRecommendation = null;
+  entry.pausedUntil = null;
 
   try {
     const result = await executeTrackedJob(jobId, () => runJob(jobId), { source: "scheduler" });
@@ -151,16 +176,34 @@ async function executeScheduledJob(jobId) {
       result: result?.result ?? null,
     };
     if (!result?.ok) {
-      entry.lastError = result?.stderr || result?.error || "El job termino con error";
+      const failure = classifyJobFailure(result?.stderr || result?.error || null);
+      entry.lastError = result?.stderr || result?.error || failure.message || "El job termino con error";
+      entry.lastErrorKind = failure.kind;
+      entry.lastErrorRetryable = failure.retryable;
+      entry.lastErrorRecommendation = failure.recommendation;
+      if (!failure.retryable) {
+        entry.pausedUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+      }
     }
   } catch (error) {
     entry.lastFinishedAt = new Date().toISOString();
-    entry.lastError = error instanceof Error ? error.message : String(error);
+    const failure = classifyJobFailure(error);
+    entry.lastError = failure.message || (error instanceof Error ? error.message : String(error));
+    entry.lastErrorKind = failure.kind;
+    entry.lastErrorRetryable = failure.retryable;
+    entry.lastErrorRecommendation = failure.recommendation;
     entry.lastResult = { ok: false };
+    if (!failure.retryable) {
+      entry.pausedUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+    }
   } finally {
     entry.running = false;
     if (schedulerState.started && entry.enabled) {
-      scheduleNext(entry, entry.intervalMs);
+      const pausedUntil = entry.pausedUntil ? new Date(entry.pausedUntil).getTime() : 0;
+      const delayMs = pausedUntil > Date.now()
+        ? Math.max(pausedUntil - Date.now(), entry.intervalMs)
+        : entry.intervalMs;
+      scheduleNext(entry, delayMs);
     } else {
       entry.nextRunAt = null;
     }
@@ -168,11 +211,15 @@ async function executeScheduledJob(jobId) {
 }
 
 function registerIntervalJob({ jobId, label, enabled, intervalSeconds, runOnStart }) {
+  const configuration = getJobConfigurationState(jobId);
   const intervalMs = intervalSeconds * 1000;
   const entry = {
     jobId,
     label,
     enabled,
+    configured: configuration.configured,
+    requiredEnv: configuration.requiredEnv,
+    missingEnv: configuration.missingEnv,
     intervalSeconds,
     intervalMinutes: Math.round((intervalSeconds / 60) * 100) / 100,
     intervalMs,
@@ -198,7 +245,7 @@ export function startJobScheduler() {
   schedulerState.started = true;
 
   for (const entry of schedulerState.jobs.values()) {
-    if (!entry.enabled) continue;
+    if (!entry.enabled || !entry.configured) continue;
     if (entry.timeout) clearTimeout(entry.timeout);
     scheduleNext(entry, entry.runOnStart ? 0 : entry.intervalMs);
   }
@@ -218,6 +265,10 @@ export function getJobSchedulerStatus() {
     lastFinishedAt: entry.lastFinishedAt,
     lastResult: entry.lastResult,
     lastError: entry.lastError,
+    lastErrorKind: entry.lastErrorKind || null,
+    lastErrorRetryable: entry.lastErrorRetryable ?? null,
+    lastErrorRecommendation: entry.lastErrorRecommendation || null,
+    pausedUntil: entry.pausedUntil || null,
     nextRunAt: entry.nextRunAt,
   }));
 }

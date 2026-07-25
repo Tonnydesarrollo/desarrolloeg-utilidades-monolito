@@ -151,6 +151,9 @@ function buildAbsoluteUrl(baseUrl, path) {
 
 function getJobState(job) {
   if (!job.enabled) return { tone: "neutral", label: "Desactivado" };
+  if ((job.lastErrorKind || job.lastExecution?.failureKind) === "auth_required") {
+    return { tone: "warn", label: "En standby" };
+  }
   if (job.lastError) return { tone: "fail", label: "Con error" };
   if (job.running) return { tone: "ok", label: "Ejecutando" };
   if (job.lastResult?.ok) return { tone: "ok", label: "Correcto" };
@@ -161,7 +164,8 @@ function getJobState(job) {
 function getSchedulerState(jobs, started) {
   const enabledJobs = jobs.filter((job) => job.enabled);
   const runningJobs = enabledJobs.filter((job) => job.running);
-  const failingJobs = enabledJobs.filter((job) => job.lastError);
+  const blockedJobs = enabledJobs.filter((job) => (job.lastErrorKind || job.lastExecution?.failureKind) === "auth_required");
+  const failingJobs = enabledJobs.filter((job) => job.lastError && (job.lastErrorKind || job.lastExecution?.failureKind) !== "auth_required");
 
   if (!started) {
     return {
@@ -170,6 +174,7 @@ function getSchedulerState(jobs, started) {
       enabledJobs: enabledJobs.length,
       runningJobs: runningJobs.length,
       failingJobs: failingJobs.length,
+      blockedJobs: blockedJobs.length,
     };
   }
 
@@ -180,6 +185,7 @@ function getSchedulerState(jobs, started) {
       enabledJobs: 0,
       runningJobs: 0,
       failingJobs: 0,
+      blockedJobs: 0,
     };
   }
 
@@ -190,6 +196,18 @@ function getSchedulerState(jobs, started) {
       enabledJobs: enabledJobs.length,
       runningJobs: runningJobs.length,
       failingJobs: failingJobs.length,
+      blockedJobs: blockedJobs.length,
+    };
+  }
+
+  if (blockedJobs.length) {
+    return {
+      tone: "warn",
+      label: "En standby",
+      enabledJobs: enabledJobs.length,
+      runningJobs: runningJobs.length,
+      failingJobs: 0,
+      blockedJobs: blockedJobs.length,
     };
   }
 
@@ -200,6 +218,7 @@ function getSchedulerState(jobs, started) {
       enabledJobs: enabledJobs.length,
       runningJobs: runningJobs.length,
       failingJobs: 0,
+      blockedJobs: 0,
     };
   }
 
@@ -209,6 +228,7 @@ function getSchedulerState(jobs, started) {
     enabledJobs: enabledJobs.length,
     runningJobs: 0,
     failingJobs: 0,
+    blockedJobs: 0,
   };
 }
 
@@ -433,6 +453,7 @@ function getBackgroundData() {
       enabledJobs: schedulerState.enabledJobs,
       runningJobs: schedulerState.runningJobs,
       failingJobs: schedulerState.failingJobs,
+      blockedJobs: schedulerState.blockedJobs || 0,
       jobs: normalizedJobs,
     },
     whatsappCapacitadores: whatsapp,
@@ -497,6 +518,10 @@ function buildSummary(services, background, pm2) {
     overallTone = "warn";
     overallLabel = "Nodo en espera";
     overallDetail = "Otro nodo deberia estar ejecutando los servicios singleton en este momento.";
+  } else if (background.scheduler.tone === "warn" || background.whatsappCapacitadores.tone === "warn") {
+    overallTone = "warn";
+    overallLabel = "Con avisos";
+    overallDetail = "Hay jobs bloqueados o el bot aun no termina de estabilizarse.";
   } else if (
     background.whatsappCapacitadores.tone === "warn" ||
     legacyActive.length
@@ -538,7 +563,7 @@ function buildSummary(services, background, pm2) {
           ? "neutral"
           : background.scheduler.tone === "fail" || background.whatsappCapacitadores.tone === "fail"
           ? "fail"
-          : background.whatsappCapacitadores.tone === "warn"
+          : background.scheduler.tone === "warn" || background.whatsappCapacitadores.tone === "warn"
             ? "warn"
             : "ok",
     },
@@ -604,7 +629,9 @@ function renderSummaryCards(summary) {
       value: `${summary.background.ready}/${summary.background.total}`,
       detail: summary.cluster.label === "Nodo standby"
         ? "Este nodo esta en espera y no ejecuta scheduler ni WhatsApp."
-        : "Scheduler y bot de WhatsApp dentro del monolito.",
+        : summary.background.tone === "warn"
+          ? "Hay jobs bloqueados, pero no fallas activas."
+          : "Scheduler y bot de WhatsApp dentro del monolito.",
     },
     {
       tone: summary.cluster.tone,
@@ -740,6 +767,7 @@ function renderSchedulerCard(scheduler) {
         <div><dt>Habilitados</dt><dd>${escapeHtml(String(scheduler.enabledJobs))}</dd></div>
         <div><dt>Ejecutando</dt><dd>${escapeHtml(String(scheduler.runningJobs))}</dd></div>
         <div><dt>Con error</dt><dd>${escapeHtml(String(scheduler.failingJobs))}</dd></div>
+        <div><dt>En standby</dt><dd>${escapeHtml(String(scheduler.blockedJobs || 0))}</dd></div>
         <div><dt>Endpoint</dt><dd>/jobs</dd></div>
       </dl>
       <a class="inline-link" href="/jobs" target="_blank" rel="noreferrer">Ver JSON de jobs</a>
@@ -867,6 +895,25 @@ export function renderDashboardHtml(data) {
       max-width: 1280px;
       margin: 0 auto;
       padding: 30px 18px 56px;
+    }
+    .skip-link {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      z-index: 20;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: #ffffff;
+      color: var(--accent);
+      border: 1px solid rgba(33, 49, 63, 0.14);
+      box-shadow: 0 10px 30px rgba(21, 32, 43, 0.12);
+      font-weight: 900;
+      text-decoration: none;
+      transform: translateY(-180%);
+      transition: transform 180ms ease;
+    }
+    .skip-link:focus {
+      transform: translateY(0);
     }
     a { color: inherit; }
     .hero {
@@ -1012,6 +1059,31 @@ export function renderDashboardHtml(data) {
       line-height: 1.45;
     }
     section { margin-top: 26px; }
+    .details-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 14px 18px;
+    }
+    .details-panel summary {
+      cursor: pointer;
+      font-weight: 900;
+      color: var(--accent);
+      letter-spacing: -0.01em;
+    }
+    .details-panel summary::-webkit-details-marker {
+      display: none;
+    }
+    .details-panel__content {
+      padding-top: 18px;
+      display: grid;
+      gap: 18px;
+    }
+    .details-group h3 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+    }
     .section-head {
       display: flex;
       flex-wrap: wrap;
@@ -1130,14 +1202,15 @@ export function renderDashboardHtml(data) {
   </style>
 </head>
 <body>
-  <main>
+  <a class="skip-link" href="#status-main">Saltar al contenido principal</a>
+  <main id="status-main" role="main" aria-label="Estado de servicios">
     <section class="hero">
       <div class="hero-grid">
         <div>
           <h1>Estado de Servicios</h1>
-          <p>Esta pagina prioriza el estado operativo real del monolito, los servicios de fondo y la huella residual de PM2 despues de la migracion.</p>
+          <p>Vista resumida del monolito: primero salud publica, luego servicios de fondo y por ultimo el diagnostico tecnico que solo se despliega cuando hace falta.</p>
           <div class="hero-actions">
-            <a class="button primary" href="/status/status.json" target="_blank" rel="noreferrer">Ver JSON</a>
+            <a class="button primary" href="/status/status.json" target="_blank" rel="noreferrer">Ver JSON tecnico</a>
             <a class="button ghost" href="/" rel="noreferrer">Inicio</a>
             <a class="button ghost" href="/health" target="_blank" rel="noreferrer">Health</a>
             <button class="button ghost" type="button" data-refresh-now>Actualizar ahora</button>
@@ -1170,7 +1243,7 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>Servicios Publicos</h2>
-          <p class="section-copy">Se prueban los endpoints publicos que hoy representan la cara visible del monolito y sus compatibilidades de host.</p>
+          <p class="section-copy">Endpoints visibles para usuarios, integraciones y chequeos rapidos.</p>
         </div>
       </div>
       <div class="panel-grid">
@@ -1182,7 +1255,7 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>Servicios De Fondo</h2>
-          <p class="section-copy">Aqui vive lo que antes dependia de procesos separados: coordinacion del nodo, scheduler, jobs migrados y el bot de WhatsApp.</p>
+          <p class="section-copy">Coordinacion del nodo, scheduler, jobs y WhatsApp en una sola lectura.</p>
         </div>
       </div>
       <div class="panel-grid">
@@ -1196,7 +1269,7 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>Jobs Programados</h2>
-          <p class="section-copy">Cada tarjeta muestra frecuencia, siguiente corrida, ultimo resultado y si el job necesita atencion.</p>
+          <p class="section-copy">Cada tarjeta resume frecuencia, siguiente corrida y resultado reciente.</p>
         </div>
       </div>
       <div class="panel-grid">
@@ -1208,36 +1281,29 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>PM2 Y Diagnostico</h2>
-          <p class="section-copy">Los procesos <strong>stopped</strong> de abajo son legado retirado. Lo importante es que el proceso principal del monolito este sano y no haya legacy activos inesperados.</p>
+          <p class="section-copy">El proceso principal sigue visible; el legado y los retirados quedan agrupados para revisar solo cuando sea necesario.</p>
         </div>
       </div>
       <div class="panel-grid">
         ${renderProcessCards(primaryProcess)}
       </div>
-    </section>
-
-    <section>
-      <div class="section-head">
-        <div>
-          <h2>Legacy Activo O Con Alertas</h2>
-          <p class="section-copy">Solo se listan aqui procesos heredados que siguen corriendo o dejaron un estado distinto a <strong>stopped</strong>.</p>
+      <details class="details-panel">
+        <summary>Mostrar legado y procesos retirados</summary>
+        <div class="details-panel__content">
+          <div class="details-group">
+            <h3>Legacy activo o con alertas</h3>
+            <div class="panel-grid">
+              ${renderProcessCards(diagnosticProcesses)}
+            </div>
+          </div>
+          <div class="details-group">
+            <h3>Procesos retirados</h3>
+            <div class="panel-grid">
+              ${renderProcessCards(retiredProcesses)}
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="panel-grid">
-        ${renderProcessCards(diagnosticProcesses)}
-      </div>
-    </section>
-
-    <section>
-      <div class="section-head">
-        <div>
-          <h2>Procesos Retirados</h2>
-          <p class="section-copy">Referencia historica de los procesos de PM2 apagados despues de la migracion. Sus logs sirven como diagnostico, pero no implican una falla actual por si solos.</p>
-        </div>
-      </div>
-      <div class="panel-grid">
-        ${renderProcessCards(retiredProcesses)}
-      </div>
+      </details>
       <p class="footer-note">Zona horaria mostrada: ${escapeHtml(DASHBOARD_TIMEZONE)}.</p>
     </section>
   </main>

@@ -10,6 +10,12 @@ const EMPLOYEE_CACHE_TTL_MS = Number(process.env.PORTAL_EMPLOYEES_CACHE_TTL_MS |
 const SESSION_TTL_HOURS = Number(process.env.PORTAL_SESSION_TTL_HOURS || 12);
 const COOKIE_NAME = process.env.PORTAL_SESSION_COOKIE_NAME || "desarrolloeg_portal_session";
 const GOOGLE_STATE_COOKIE_NAME = process.env.PORTAL_GOOGLE_STATE_COOKIE_NAME || "desarrolloeg_portal_oauth_state";
+const QA_ACCESS_ENABLED = parseBoolean(process.env.PORTAL_QA_ACCESS_ENABLED);
+const QA_ACCESS_TOKEN = String(process.env.PORTAL_QA_ACCESS_TOKEN || "").trim();
+const QA_ACCESS_EMAIL = normalizeEmail(process.env.PORTAL_QA_ACCESS_EMAIL || "");
+const QA_ACCESS_NAME = String(process.env.PORTAL_QA_ACCESS_NAME || "QA Admin").trim();
+const QA_ACCESS_PUESTO = String(process.env.PORTAL_QA_ACCESS_PUESTO || "MEJORA CONTINUA").trim();
+const QA_ACCESS_ROW_ID = String(process.env.PORTAL_QA_ACCESS_ROW_ID || "qa-access").trim();
 const SESSION_SECRET =
   process.env.PORTAL_AUTH_SECRET ||
   process.env.PORTAL_SESSION_SECRET ||
@@ -108,49 +114,49 @@ const GENERAL_ROUTE_CARDS = [
     tone: "status",
     label: "Monolito",
     title: "Estado general",
-    description: "Monitoreo operativo, salud del sistema y accesos rÃ¡pidos a la administraciÃ³n.",
+    description: "Resumen operativo, salud del sistema y accesos rapidos a la administracion.",
     href: "/status",
   },
   {
     tone: "blue",
     label: "Automatizacion",
     title: "Jobs",
-    description: "Ejecuciones manuales y control de sincronizaciones.",
-    href: "/jobs",
+    description: "Ejecuciones manuales, estado de jobs y sincronizaciones.",
+    href: "/jobs/view",
   },
   {
     tone: "amber",
     label: "Mensajeria",
     title: "WhatsApp Capacitadores",
-    description: "SesiÃ³n, QR y estado del bot de capacitadores.",
+    description: "Sesion, QR y estado del bot de capacitadores.",
     href: "/whatsapp-capacitadores",
   },
   {
     tone: "green",
     label: "Planeacion",
-    title: "PlaneaciÃ³n Ley",
-    description: "Vista operativa para planeaciÃ³n y seguimiento interno.",
+    title: "Planeación Ley",
+    description: "Vista operativa para planeacion y seguimiento interno.",
     href: "/Planeacion-ley/",
   },
   {
     tone: "violet",
     label: "Documentos",
     title: "Sucursales Docs",
-    description: "GeneraciÃ³n de documentos y cartas desde AppSheet.",
+    description: "Generación de documentos y cartas desde AppSheet.",
     href: "/SUCURSALES-DOCS/",
   },
   {
     tone: "rose",
     label: "Control",
     title: "Faltantes Ley",
-    description: "Consulta rÃ¡pida de pendientes y faltantes.",
+    description: "Consulta rapida de pendientes y faltantes.",
     href: "/FALTANTES-LEY/",
   },
   {
     tone: "blue",
     label: "Pedidos",
     title: "Pedidos sin liberacion",
-    description: "Envio de pedidos, archivos de Drive y control de enviados para admins.",
+    description: "Envio de pedidos, archivos de Drive y control de enviados.",
     href: "/pedidos-sin-liberacion",
   },
   {
@@ -171,7 +177,7 @@ const GENERAL_ROUTE_CARDS = [
     tone: "red",
     label: "Póliza",
     title: "Póliza Ley",
-    description: "Consulta por ubicación o domicilio y descarga la página en JPEG.",
+    description: "Consulta por ubicacion o domicilio y descarga la pagina en JPEG.",
     href: "/POLIZA_LEY/",
   },
   {
@@ -191,8 +197,8 @@ const GENERAL_ROUTE_CARDS = [
   {
     tone: "slate",
     label: "Finanzas",
-    title: "FacturaciÃ³n",
-    description: "Cotizaciones y utilidades de facturaciÃ³n.",
+    title: "Facturación",
+    description: "Cotizaciones y utilidades de facturacion.",
     href: "/facturacion/cotizacion/html",
   },
   {
@@ -252,7 +258,7 @@ function hasTruthyValue(value) {
 
   const normalized = String(value).trim();
   if (!normalized) return false;
-  if (/^(0|false|no|n|none|null|n\/a|na|sin diplomas?|sin diploma|vac[iÃ­]o)$/i.test(normalized)) return false;
+  if (/^(0|false|no|n|none|null|n\/a|na|sin diplomas?|sin diploma|vac[ií]o)$/i.test(normalized)) return false;
   if (/^(y|yes|si|s[ií]|true|1)$/i.test(normalized)) return true;
 
   if ((normalized.startsWith("[") && normalized.endsWith("]")) || (normalized.startsWith("{") && normalized.endsWith("}"))) {
@@ -1184,6 +1190,40 @@ export function buildClearOAuthStateCookieHeader({ secure = false } = {}) {
   return buildClearStateCookieHeader({ secure });
 }
 
+export function isQaAccessEnabled() {
+  return QA_ACCESS_ENABLED && Boolean(QA_ACCESS_TOKEN);
+}
+
+export function verifyQaAccessToken(token) {
+  return isQaAccessEnabled() && String(token || "").trim() === QA_ACCESS_TOKEN;
+}
+
+export function buildQaAccessEmployee() {
+  if (!isQaAccessEnabled()) {
+    throw new Error("El acceso QA no esta habilitado.");
+  }
+
+  const correo = QA_ACCESS_EMAIL || "qa-access@desarrolloeg.com";
+  const puesto = QA_ACCESS_PUESTO || "MEJORA CONTINUA";
+  return {
+    rowId: QA_ACCESS_ROW_ID || "qa-access",
+    correo,
+    nombre: QA_ACCESS_NAME || "QA Admin",
+    puesto,
+    role: "admin",
+    initials: buildInitialsFromName(QA_ACCESS_NAME || correo),
+    color: "",
+    calendarColor: "",
+    permiso: "",
+    firma: "",
+    telefono: "",
+    telefono2: "",
+    capacita: false,
+    cumpleanos: "",
+    raw: null,
+  };
+}
+
 function isSecureRequest(req) {
   const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
   return req.secure || forwardedProto === "https";
@@ -1957,7 +1997,7 @@ export async function updateCapacitacionStatus(rowId, nextSuffix, runAsUserEmail
   const targetRowId = String(rowId || "").trim();
   const suffix = String(nextSuffix || "").trim().toUpperCase();
   if (!targetRowId) {
-    throw new Error("No se pudo identificar la capacitaciÃ³n.");
+    throw new Error("No se pudo identificar la capacitación.");
   }
   if (!["PROGRAMADA", "FINALIZADA"].includes(suffix)) {
     throw new Error("Estado invalido.");
@@ -1966,7 +2006,7 @@ export async function updateCapacitacionStatus(rowId, nextSuffix, runAsUserEmail
   const rows = await fetchCapacitacionesFromAppSheet(false, runAsUserEmail);
   const current = rows.find((item) => item.rowId === targetRowId);
   if (!current) {
-    throw new Error("No encontramos la capacitaciÃ³n solicitada.");
+    throw new Error("No encontramos la capacitación solicitada.");
   }
 
   const prefix = current.statusPrefix || "PENDIENTE";
