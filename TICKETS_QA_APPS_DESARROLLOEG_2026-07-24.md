@@ -19,7 +19,7 @@ Base de referencia:
 
 - Prioridad: P0
 - Area: Backend / Jobs
-- Estado: Abierto para desarrollo
+- Estado: Cerrado en prod
 - Dependencias: medicion real de timeout, trazas de error, validacion de payload
 - Problema:
   - El job presentaba abortos por timeout o latencia externa.
@@ -32,6 +32,9 @@ Base de referencia:
   - Se redujo la agresividad de reintentos para evitar ciclos innecesarios.
   - `jobs/health` ya no reporta `pedidos-native-sync` como falla activa.
   - Se revalido en prod con `POST /jobs/pedidos-native-sync/run` exitoso y `jobs/health` en `200`.
+- Validacion QA:
+  - En la revision local del `2026-07-27`, `GET /jobs/health` respondio `200` con `failingJobs: 0`.
+  - La corrida manual de `POST /jobs/pedidos-native-sync/run` completo con `ok: true`, `code: 0` y resultado operativo.
 
 ### QA-TKT-002 - Alinear despliegue productivo con el codigo validado
 
@@ -64,7 +67,7 @@ Base de referencia:
   - Introducir feedback de carga si la mejora completa no era posible de inmediato.
 - Cierre:
   - Se elimino trabajo bloqueante en la respuesta inicial.
-  - La cachÃ© caliente deja la segunda visita en tiempo casi inmediato.
+  - La cachÃƒÆ’Ã‚Â© caliente deja la segunda visita en tiempo casi inmediato.
   - La primera visita sigue siendo costosa y queda documentada como costo de calentamiento.
 
 ### QA-TKT-004 - Consolidar la experiencia de `jobs/view`
@@ -113,7 +116,7 @@ Base de referencia:
   - Revisar si el costo estaba en red, render o procesamiento.
   - Agregar feedback de carga si no se podia reducir suficiente de inmediato.
 - Cierre:
-  - Se agrego cachÃ© corta por filtros para evitar recalcular el mismo reporte.
+  - Se agrego cachÃƒÆ’Ã‚Â© corta por filtros para evitar recalcular el mismo reporte.
   - La segunda visita ya baja de forma fuerte.
   - La primera visita sigue siendo pesada y queda como observacion de performance.
 
@@ -334,11 +337,11 @@ Base de referencia:
 
 - Prioridad: P1
 - Area: Frontend / UX
-- Estado: Abierto para desarrollo
+- Estado: Cerrado en prod
 - Problema:
-  - El dashboard de administracion mezcla pestañas, chips y una rejilla grande de accesos sin una jerarquia de prioridad clara.
-  - La pantalla se comporta mas como un lanzador de apps que como un tablero orientado a decisiones.
-  - El usuario ve al mismo nivel estado general, gestion, pedidos y accesos directos a utilidades heterogeneas.
+  - El dashboard de administracion mezclaba pestañas, chips y una rejilla grande de accesos sin una jerarquia de prioridad clara.
+  - La pantalla se comportaba mas como un lanzador de apps que como un tablero orientado a decisiones.
+  - El usuario veia al mismo nivel estado general, gestion, pedidos y accesos directos a utilidades heterogeneas.
 - Alcance:
   - Agrupar los accesos del dashboard por familias funcionales.
   - Destacar las acciones primarias y relegar utilidades secundarias a una zona menos competitiva visualmente.
@@ -348,8 +351,8 @@ Base de referencia:
   - El usuario identifica en segundos donde esta el resumen, donde estan las tareas operativas y donde estan los accesos secundarios.
   - El dashboard deja de sentirse saturado y gana una narrativa de uso mas guiada.
 - Validacion QA:
-  - La ruta `/dashboard` ya puede validarse con el acceso QA habilitado en el entorno de pruebas.
-  - La estructura interna sigue mostrando tabs, barra movil y rejilla de rutas al mismo nivel, por lo que el ticket permanece abierto para ajuste de UX.
+  - En la revision local del `2026-07-27`, el dashboard admin paso a mostrar una tab inicial de calendario seguida por la gestion, pedidos y las utilidades secundarias.
+  - La seccion de accesos internos ahora separa `Acciones principales` y `Utilidades secundarias` para reducir la competencia visual.
 
 ### QA-TKT-019 - Corregir textos corruptos en las tarjetas del dashboard
 
@@ -442,7 +445,7 @@ Base de referencia:
   - La navegacion por teclado y lector de pantalla queda clara.
   - La vista ofrece un regreso claro al dashboard padre.
 - Validacion QA:
-  - En la revision del `2026-07-27`, el renderer de `dashboard/pedidos` incluye `skip-link`, `main#pedidos-main`, `Año` y `Culiacán`.
+  - En la revision del `2026-07-27`, el renderer de `dashboard/pedidos` incluye `skip-link`, `main#pedidos-main`, `AÃƒÂ±o` y `CuliacÃƒÂ¡n`.
   - Se agrego un acceso directo para volver al dashboard padre desde la propia vista.
 
 ## Definicion de terminado
@@ -457,6 +460,6 @@ Un ticket se considera terminado cuando:
 ## Nota tecnica de ejecucion
 
 - Se reforzo `facturacion/cotizacion/html` con un precalentamiento de catalogos en background para reducir el golpe inicial despues de despliegue.
-- Se reforzo `SOLVENTACIONES/html` con cachÃ© de sesion y lecturas PCSinaloa para recortar trabajo repetido entre visitas cercanas.
-- El ajuste complementa la cachÃ© corta por filtros ya documentada en `QA-TKT-006`.
+- Se reforzo `SOLVENTACIONES/html` con cachÃƒÆ’Ã‚Â© de sesion y lecturas PCSinaloa para recortar trabajo repetido entre visitas cercanas.
+- El ajuste complementa la cachÃƒÆ’Ã‚Â© corta por filtros ya documentada en `QA-TKT-006`.
 

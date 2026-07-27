@@ -116,6 +116,46 @@ function renderRouteGrid(cards, options = {}) {
   return cards.map((card) => renderCard(card, options)).join("\n");
 }
 
+function groupAdminRouteCards(cards = []) {
+  const primaryRoutes = new Set([
+    "/jobs/view",
+    "/whatsapp-capacitadores",
+    "/pedidos-sin-liberacion",
+    "/dashboard/pedidos",
+    "/FALTANTES-LEY/",
+  ]);
+
+  const secondaryRoutes = new Set([
+    "/Planeacion-ley/",
+    "/SUCURSALES-DOCS/",
+    "/SOLVENTACIONES/html",
+    "/POLIZA_LEY/",
+    "/CONSTANCIAS/",
+    "/SEPARAR-PIPC/",
+    "/facturacion/cotizacion/html",
+    "/contabilidad",
+  ]);
+
+  const primary = [];
+  const secondary = [];
+  const fallback = [];
+
+  for (const card of cards) {
+    const href = String(card?.href || "").trim();
+    if (primaryRoutes.has(href)) {
+      primary.push(card);
+      continue;
+    }
+    if (secondaryRoutes.has(href)) {
+      secondary.push(card);
+      continue;
+    }
+    fallback.push(card);
+  }
+
+  return { primary, secondary, fallback };
+}
+
 function renderEmployeeGrid(employees, basePath = portalPath("/dashboard/capacitador")) {
   if (!employees.length) {
     return `<div class="empty-state">No hay capacitadores registrados.</div>`;
@@ -1624,8 +1664,38 @@ function getHomeStyles() {
         display: grid;
         gap: 20px;
       }
-      .dashboard-tab-panel--management .portal-grid {
+      .dashboard-route-families {
+        display: grid;
         gap: 20px;
+      }
+      .dashboard-route-family {
+        display: grid;
+        gap: 14px;
+      }
+      .dashboard-route-family-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .dashboard-route-family-head h3 {
+        margin: 0;
+        font-size: 1rem;
+        font-family: "Cinzel", serif;
+        text-transform: uppercase;
+      }
+      .dashboard-route-family-head p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.45;
+        font-family: "Montserrat", sans-serif;
+      }
+      .dashboard-route-family--secondary .portal-grid {
+        gap: 14px;
+      }
+      .dashboard-route-family--secondary .card {
+        min-height: 176px;
       }
       .dashboard-tab-panel--management .panel + .panel {
         margin-top: 0;
@@ -4718,6 +4788,7 @@ async function renderDashboardPage({
   const selected = getEmployeeSummary(selectedEmployee);
   const role = selected.role || "capacitador";
   const routeCards = getRouteCardsForRole(role);
+  const groupedRouteCards = role === "admin" ? groupAdminRouteCards(routeCards) : null;
   const title = role === "admin" ? "Tablero general" : "Tablero personal";
   const logoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
   const viewingOtherDashboard = user?.role === "admin" && user?.rowId !== selected.rowId;
@@ -4771,10 +4842,38 @@ async function renderDashboardPage({
 
   const routePanel = showRoutes
     ? `
-      <div class="panel">
-        <div class="portal-grid">
-          ${renderRouteGrid(routeCards, { minimal: true })}
+      <div class="panel dashboard-route-families">
+        <div class="section-head">
+          <div>
+            <h2>Accesos internos</h2>
+            <p>Las acciones principales quedan arriba y las utilidades secundarias quedan agrupadas al final para que no compitan con la operación diaria.</p>
+          </div>
         </div>
+        <section class="dashboard-route-family dashboard-route-family--primary">
+          <div class="dashboard-route-family-head">
+            <div>
+              <h3>Acciones principales</h3>
+              <p>Atajos que resuelven la operación más frecuente del tablero administrativo.</p>
+            </div>
+          </div>
+          <div class="portal-grid">
+            ${renderRouteGrid(groupedRouteCards?.primary || routeCards.slice(0, 5), { minimal: false })}
+          </div>
+        </section>
+        <section class="dashboard-route-family dashboard-route-family--secondary">
+          <div class="dashboard-route-family-head">
+            <div>
+              <h3>Utilidades secundarias</h3>
+              <p>Herramientas de soporte que siguen disponibles, pero ya no ocupan la misma jerarquía visual.</p>
+            </div>
+          </div>
+          <div class="portal-grid">
+            ${renderRouteGrid([
+              ...(groupedRouteCards?.secondary || []),
+              ...(groupedRouteCards?.fallback || []),
+            ], { minimal: true })}
+          </div>
+        </section>
       </div>
     `
     : "";
@@ -4846,26 +4945,6 @@ async function renderDashboardPage({
       count: calendarEventCount,
       content: calendarPanel,
     },
-    {
-      id: "diplomas",
-      label: "Diplomas faltantes",
-      count: finalizadasSinDiplomas.length,
-      content: finalizadasPanel,
-    },
-    ...(role === "capacitador" && faltantesLeyPanel
-      ? [{
-          id: "ley",
-          label: "Faltantes Ley",
-          content: faltantesLeyPanel,
-        }]
-      : []),
-    ...(adminFaltantesPanel
-      ? [{
-          id: "faltantes",
-          label: "Faltantes",
-          content: adminFaltantesPanel,
-        }]
-      : []),
     ...(managementPanel
       ? [{
           id: "gestion",
@@ -4878,6 +4957,26 @@ async function renderDashboardPage({
           id: "pedidos",
           label: "Pedidos",
           content: pedidosPanel,
+        }]
+      : []),
+    ...(adminFaltantesPanel
+      ? [{
+          id: "faltantes",
+          label: "Faltantes",
+          content: adminFaltantesPanel,
+        }]
+      : []),
+    {
+      id: "diplomas",
+      label: "Diplomas faltantes",
+      count: finalizadasSinDiplomas.length,
+      content: finalizadasPanel,
+    },
+    ...(role === "capacitador" && faltantesLeyPanel
+      ? [{
+          id: "ley",
+          label: "Faltantes Ley",
+          content: faltantesLeyPanel,
         }]
       : []),
   ].filter((tab) => Boolean(tab.content));
