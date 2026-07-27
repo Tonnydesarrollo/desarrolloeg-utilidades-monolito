@@ -1434,5 +1434,47 @@ Conclusión de la octava medicion:
 - `QA-TKT-019` - Corregir textos corruptos en las tarjetas del dashboard.
 
 - Nota QA:
-  - `QA-TKT-018` sigue abierto porque la ruta `/dashboard` redirige a login sin una sesion autenticada y no fue posible validar el dashboard admin real en productivo.
+  - `QA-TKT-018` sigue abierto por la jerarquia visual y la densidad del dashboard, no por falta de acceso.
   - `QA-TKT-019` queda validado como resuelto en las superficies publicas revisadas y en la fuente actual.
+
+## Analisis QA 2026-07-27 - novena medicion
+
+Se ejecuto una nueva validacion en el ambiente `QA` con foco en flujo de usuario real, navegacion, carga percibida, accesibilidad y calidad visual.
+
+Flujo revisado:
+- Entrar al portal QA.
+- Iniciar sesion con el acceso de pruebas.
+- Abrir el dashboard.
+- Revisar el modulo de pedidos dentro del dashboard.
+- Entrar a `status`.
+- Entrar a `whatsapp-capacitadores` y a su QR.
+- Entrar a `facturacion/cotizacion/html`.
+- Entrar a `SOLVENTACIONES/html`.
+
+Resultado resumido:
+- El acceso a QA funciona y deja una sesion util para seguir recorriendo el portal.
+- El dashboard general carga y presenta el ecosistema de modulos, pero sigue siendo denso para una primera lectura.
+- `dashboard/pedidos` sigue siendo funcional, pero conserva mojibake en el copy visible y no ofrece una salida semantica tan clara como otras superficies.
+- `status` sigue siendo la mejor superficie tecnica para lectura rapida.
+- `whatsapp-capacitadores` y su QR ya son claros como entrada operativa, aunque todavia pueden reforzar retorno y accesibilidad.
+- `facturacion/cotizacion/html` sigue siendo una superficie pesada en primera visita.
+- `SOLVENTACIONES/html` sigue respondiendo, pero conserva mojibake y friccion visual.
+
+Evidencia de la novena medicion:
+- `/dashboard` responde `200` con tablero general activo.
+- `/dashboard/pedidos` responde `200`, pero sigue mostrando texto corrupto y no expone `skip-link`.
+- `/status` responde `200` y mantiene una lectura clara.
+- `/whatsapp-capacitadores` responde `200` con landing util.
+- `/whatsapp-capacitadores/qr` responde `200` y sigue siendo una pantalla util, aunque simple.
+- `/facturacion/cotizacion/html` responde `200`, pero sigue siendo una ruta de alto costo en primera carga.
+- `/SOLVENTACIONES/html` responde `200`, pero conserva mojibake.
+
+Lectura de QA:
+- La experiencia de entrada ya es consistente, pero el dashboard sigue concentrando demasiadas decisiones al mismo nivel visual.
+- `dashboard/pedidos` necesita limpieza de encoding y una mejor estructura semantica para no sentirse degradado frente al resto del portal.
+- `whatsapp-capacitadores` funciona bien como modulo, pero su navegacion puede pulirse mas para no obligar al usuario a adivinar el regreso.
+- `facturacion/cotizacion/html` y `SOLVENTACIONES/html` siguen siendo las rutas mas sensibles en friccion de uso.
+
+Conclusión de la novena medicion:
+- El portal ya es usable desde QA como usuario final, pero aun quedan pendientes claros en jerarquia visual, accesibilidad y calidad de texto.
+- Los siguientes focos deben ser `dashboard/pedidos`, `SOLVENTACIONES/html` y la reduccion de espera en los modulos pesados.

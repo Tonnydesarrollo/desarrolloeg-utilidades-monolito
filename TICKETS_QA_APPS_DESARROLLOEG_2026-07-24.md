@@ -12,6 +12,7 @@ Base de referencia:
 - El resto de tickets se documenta como cerrado o cerrado con observacion segun la evidencia en prod.
 - Cada cierre debe quedar trazado en el reporte de QA y en el estado operativo del codigo.
 - Los ambientes se separan por ruta: `https://apps.desarrolloeg.com` es prod y `https://apps.desarrolloeg.com/QA` es pruebas.
+- El alias en minusculas `https://apps.desarrolloeg.com/qa` tambien entra al mismo ambiente de pruebas.
 - El flujo operativo queda: primero se despliega a `/QA`, luego QA aprueba, y despues se despliega a prod.
 
 ### QA-TKT-001 - Estabilizar `pedidos-native-sync`
@@ -347,7 +348,7 @@ Base de referencia:
   - El usuario identifica en segundos donde esta el resumen, donde estan las tareas operativas y donde estan los accesos secundarios.
   - El dashboard deja de sentirse saturado y gana una narrativa de uso mas guiada.
 - Validacion QA:
-  - La ruta `/dashboard` sigue protegiendose con login y no fue posible validar la experiencia admin completa sin sesion autenticada.
+  - La ruta `/dashboard` ya puede validarse con el acceso QA habilitado en el entorno de pruebas.
   - La estructura interna sigue mostrando tabs, barra movil y rejilla de rutas al mismo nivel, por lo que el ticket permanece abierto para ajuste de UX.
 
 ### QA-TKT-019 - Corregir textos corruptos en las tarjetas del dashboard
@@ -423,6 +424,26 @@ Base de referencia:
   - El flujo de sincronizacion deja de persistir facturas canceladas, borra las ya guardadas en AppSheet y conserva evidencia de lo omitido.
   - La proteccion por credenciales faltantes sigue vigente como hardening adicional del mismo job.
   - El ticket queda cerrado con evidencia automatizada y sin repetir el caso de AppSheet.
+
+### QA-TKT-022 - Corregir encoding y accesibilidad de `dashboard/pedidos`
+
+- Prioridad: P2
+- Area: Frontend / UX / Accesibilidad
+- Estado: Cerrado en prod
+- Problema:
+  - La ruta `/dashboard/pedidos` respondia `200`, pero el copy visible seguia mostrando mojibake en la medicion de QA mas reciente.
+  - La vista no exponia `skip-link` ni una salida semantica tan clara como otras superficies del portal.
+- Alcance:
+  - Corregir el encoding del texto visible en el modulo.
+  - Agregar landmarks, heading principal y un salto accesible al contenido.
+  - Revisar si la pantalla necesita un regreso mas claro hacia el dashboard general.
+- Criterio de cierre:
+  - La pantalla se lee sin caracteres corruptos.
+  - La navegacion por teclado y lector de pantalla queda clara.
+  - La vista ofrece un regreso claro al dashboard padre.
+- Validacion QA:
+  - En la revision del `2026-07-27`, el renderer de `dashboard/pedidos` incluye `skip-link`, `main#pedidos-main`, `Año` y `Culiacán`.
+  - Se agrego un acceso directo para volver al dashboard padre desde la propia vista.
 
 ## Definicion de terminado
 

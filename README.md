@@ -48,6 +48,7 @@ La portada de `apps.desarrolloeg.com` funciona como portal de acceso por correo.
 
 - `https://apps.desarrolloeg.com` funciona como `prod`.
 - `https://apps.desarrolloeg.com/QA` funciona como `QA` o pruebas.
+- `https://apps.desarrolloeg.com/qa` tambien resuelve al mismo entorno de `QA`.
 - El login de QA refleja el login de prod, pero vive en su propia ruta y no comparte sesion con productivo.
 - El login productivo no debe mostrar accesos de prueba.
 - El flujo operativo queda asi:

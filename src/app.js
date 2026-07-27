@@ -17,7 +17,7 @@ import { sucursalesDocsRouter } from "./modules/sucursales-docs/sucursalesDocs.r
 import { polizaLeyRouter } from "./modules/poliza-ley/polizaLey.router.js";
 import { bolsaSyncRouter } from "./modules/bolsa-sync/bolsaSync.router.js";
 import { pedidosLeyApiRouter } from "./modules/pedidos-ley/pedidosLey.router.js";
-import { portalPath, runWithPortalContext, stripPortalBasePath } from "./modules/home/portalPath.js";
+import { portalPath, runWithPortalContext } from "./modules/home/portalPath.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
 import { getClusterCoordinatorStatus } from "./services/clusterCoordinator.js";
 import { getReleaseInfo } from "./services/releaseInfo.js";
@@ -80,11 +80,14 @@ function applyHostCompatibility(req, _res, next) {
 }
 
 function applyPortalEnvironmentCompatibility(req, res, next) {
-  const portalBasePath = req.path === "/QA" || req.path.startsWith("/QA/") ? "/QA" : "";
+  const hasPortalPrefix = /^\/qa(?:\/|$)/i.test(req.path);
+  const portalBasePath = hasPortalPrefix ? "/QA" : "";
   req.portalBasePath = portalBasePath;
 
   if (portalBasePath) {
-    req.url = preserveQuery(req, stripPortalBasePath(req.url || req.originalUrl || "/", portalBasePath));
+    const currentUrl = String(req.url || req.originalUrl || "/");
+    const rewrittenUrl = currentUrl.replace(/^\/qa(?=\/|$)/i, "") || "/";
+    req.url = preserveQuery(req, rewrittenUrl);
   }
 
   const originalRedirect = res.redirect.bind(res);

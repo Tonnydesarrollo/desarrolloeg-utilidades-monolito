@@ -65,7 +65,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pedidos Admin</title>
+  <title>Pedidos Admin | Desarrollo EG</title>
   <style>
     :root {
       --bg:#f5f7fb;
@@ -83,6 +83,23 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     }
     * { box-sizing:border-box; }
     html, body { margin:0; min-height:100%; }
+    .skip-link {
+      position:absolute;
+      left:16px;
+      top:12px;
+      z-index:20;
+      padding:10px 14px;
+      border-radius:999px;
+      background:#102133;
+      color:#fff;
+      font-weight:800;
+      transform:translateY(-180%);
+      transition:transform .18s ease;
+      box-shadow:0 10px 24px rgba(15,23,42,.20);
+    }
+    .skip-link:focus {
+      transform:translateY(0);
+    }
     body {
       font-family: "Segoe UI", "Aptos", sans-serif;
       color:var(--ink);
@@ -135,6 +152,9 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       color:var(--ink);
       font-size:11px;
       font-weight:700;
+    }
+    a.pill {
+      text-decoration:none;
     }
     .pill.strong {
       background:rgba(15,118,110,.10);
@@ -444,13 +464,15 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
   </style>
 </head>
 <body>
-  <main class="page">
+  <a class="skip-link" href="#pedidos-main">Saltar al contenido principal</a>
+  <main id="pedidos-main" class="page" role="main" aria-label="Panel administrativo de pedidos">
     <section class="hero">
       <div>
         <h1>Pedidos</h1>
         <p>Panel administrativo para revisar pedidos, cobertura por sucursal y el estado de cada pedido estatal o municipal.</p>
       </div>
       <div class="hero-meta">
+        <a class="pill" href="..">Volver al dashboard</a>
         <span class="pill">Usuario: ${username}</span>
         <span class="pill">${escapeHtml(roleLabel)}</span>
         <span class="pill" id="headerYearPill"></span>
@@ -468,7 +490,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         <summary>Configuración oculta</summary>
         <div class="advanced-grid">
           <div class="field">
-            <label for="yearInput">Ano</label>
+            <label for="yearInput">Año</label>
             <input id="yearInput" type="number" min="2020" max="2100" step="1">
           </div>
           <div class="field">
@@ -966,7 +988,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           + '<td>' + (item.order ? esc(item.order.pedido || "") : "—") + '</td>'
           + '<td>' + (item.order ? esc(item.order.status || "Sin status") : "Debe tener pedido " + title.toLowerCase()) + '</td>'
           + '<td>' + (item.order ? esc(money(item.order.importeNumber)) : "—") + '</td>'
-          + '<td>' + (item.culiacanMunicipal ? chip("Municipal Culiacan", "warn") : chip("Normal", "ok")) + '</td>'
+          + '<td>' + (item.culiacanMunicipal ? chip("Municipal Culiacán", "warn") : chip("Normal", "ok")) + '</td>'
           + '</tr>';
         const tableMarkup = (rows, emptyMessage, missing = false) => ''
           + '<div class="table-shell" style="padding-left:0;padding-right:0;margin-top:14px;">'
@@ -988,7 +1010,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           + '<div class="summary-grid" style="grid-template-columns:repeat(3, minmax(0, 1fr));margin-top:0;">'
           + '<article class="summary-card"><div class="eyebrow">Con pedido</div><div class="value">' + esc(withOrder.length) + '</div><div class="detail">Sí cumplen</div></article>'
           + '<article class="summary-card"><div class="eyebrow">Sin pedido</div><div class="value">' + esc(withoutOrder.length) + '</div><div class="detail">Deberían tenerlo</div></article>'
-          + '<article class="summary-card"><div class="eyebrow">Culiacan municipal</div><div class="value">' + esc(culiacanRows.length) + '</div><div class="detail">Asignado a Sergio Gonzalez Castillo</div></article>'
+          + '<article class="summary-card"><div class="eyebrow">Culiacán municipal</div><div class="value">' + esc(culiacanRows.length) + '</div><div class="detail">Asignado a Sergio Gonzalez Castillo</div></article>'
           + '</div>'
           + '<h3 style="margin:18px 0 0;font-size:15px;">Con pedido</h3>'
           + tableMarkup(withOrder, 'No hay sucursales con pedido ' + title.toLowerCase() + '.')
