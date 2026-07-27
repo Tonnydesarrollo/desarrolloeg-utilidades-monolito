@@ -1434,7 +1434,7 @@ Conclusión de la octava medicion:
 - `QA-TKT-019` - Corregir textos corruptos en las tarjetas del dashboard.
 
 - Nota QA:
-  - `QA-TKT-018` sigue abierto por la jerarquia visual y la densidad del dashboard, no por falta de acceso.
+  - `QA-TKT-018` ya muestra la separacion entre bloques y queda validado como atendido a nivel de jerarquia visual.
   - `QA-TKT-019` queda validado como resuelto en las superficies publicas revisadas y en la fuente actual.
 
 ## Analisis QA 2026-07-27 - novena medicion
@@ -1478,3 +1478,43 @@ Lectura de QA:
 Conclusión de la novena medicion:
 - El portal ya es usable desde QA como usuario final, pero aun quedan pendientes claros en jerarquia visual, accesibilidad y calidad de texto.
 - Los siguientes focos deben ser `dashboard/pedidos`, `SOLVENTACIONES/html` y la reduccion de espera en los modulos pesados.
+
+## Analisis QA 2026-07-27 - decima medicion
+
+Se ejecuto una nueva revision viva con sesion QA valida para confirmar el estado real de los tickets atendidos por desarrollo y detectar regresiones de front end.
+
+Flujo revisado:
+- Entrar al portal QA.
+- Abrir el dashboard general.
+- Entrar a `dashboard/pedidos`.
+- Abrir `status`.
+- Revisar `whatsapp-capacitadores` y su QR.
+- Volver a contrastar `facturacion/cotizacion/html`.
+- Revisar `SOLVENTACIONES/html`.
+
+Resultado resumido:
+- El dashboard general ya separa mejor los bloques de uso y expone `Acciones principales` y `Utilidades secundarias`.
+- `dashboard/pedidos` sigue siendo el punto mas debil de la experiencia, porque mantiene mojibake y no ofrece la misma claridad semantica que otras superficies.
+- `status` se mantiene como la superficie mas limpia para lectura tecnica.
+- `whatsapp-capacitadores` y el QR siguen siendo consistentes como entrada operativa.
+- `facturacion/cotizacion/html` sigue siendo pesada en primera carga, aunque ya no es el foco mas urgente de esta ronda.
+- `SOLVENTACIONES/html` sigue siendo util, pero conserva friccion visual por el texto corrupto.
+
+Evidencia de la decima medicion:
+- `/dashboard` responde `200`, tiene `main`, `skip-link` y la separacion visible entre `Acciones principales` y `Utilidades secundarias`.
+- `/dashboard/pedidos` responde `200`, tiene `main`, pero sigue mostrando mojibake visible y no expone `skip-link`.
+- `/status` responde `200` con una lectura limpia y directa.
+- `/whatsapp-capacitadores` y `/whatsapp-capacitadores/qr` siguen funcionando como superficies de entrada operativa.
+- `/facturacion/cotizacion/html` sigue siendo una ruta de costo alto en la primera visita.
+- `/SOLVENTACIONES/html` sigue respondiendo, pero la calidad de texto visible todavia necesita correccion.
+
+Lectura de QA:
+- `QA-TKT-018` si quedo atendido a nivel de jerarquia del dashboard.
+- `QA-TKT-022` sigue abierto y debe seguir en el backlog hasta limpiar encoding y accesibilidad.
+- `QA-TKT-023` se abre porque `SOLVENTACIONES/html` sigue con texto corrupto visible.
+- El siguiente trabajo de QA debe enfocarse en cerrar la deuda de legibilidad antes de volver a perseguir mejoras de fondo.
+
+Conclusión de la decima medicion:
+- El portal avanza bien en navegacion general, pero la experiencia se rompe donde la codificacion sigue mal y donde la primera carga sigue siendo costosa.
+- Los tickets prioritarios de esta ronda quedan concentrados en `dashboard/pedidos` y `SOLVENTACIONES/html`.
+- La siguiente ronda de QA debe concentrarse en nuevos hallazgos y en la ruta de mayor costo de primera carga.

@@ -353,6 +353,7 @@ Base de referencia:
 - Validacion QA:
   - En la revision local del `2026-07-27`, el dashboard admin paso a mostrar una tab inicial de calendario seguida por la gestion, pedidos y las utilidades secundarias.
   - La seccion de accesos internos ahora separa `Acciones principales` y `Utilidades secundarias` para reducir la competencia visual.
+  - En la revision viva del `2026-07-27`, el dashboard general sigue exponiendo esa separacion y responde con una jerarquia mas clara que la version anterior.
 
 ### QA-TKT-019 - Corregir textos corruptos en las tarjetas del dashboard
 
@@ -432,7 +433,7 @@ Base de referencia:
 
 - Prioridad: P2
 - Area: Frontend / UX / Accesibilidad
-- Estado: Cerrado en prod
+- Estado: Abierto para desarrollo
 - Problema:
   - La ruta `/dashboard/pedidos` respondia `200`, pero el copy visible seguia mostrando mojibake en la medicion de QA mas reciente.
   - La vista no exponia `skip-link` ni una salida semantica tan clara como otras superficies del portal.
@@ -445,8 +446,27 @@ Base de referencia:
   - La navegacion por teclado y lector de pantalla queda clara.
   - La vista ofrece un regreso claro al dashboard padre.
 - Validacion QA:
-  - En la revision del `2026-07-27`, el renderer de `dashboard/pedidos` incluye `skip-link`, `main#pedidos-main`, `AÃƒÂ±o` y `CuliacÃƒÂ¡n`.
-  - Se agrego un acceso directo para volver al dashboard padre desde la propia vista.
+  - En la revision del `2026-07-27`, `dashboard/pedidos` sigue mostrando mojibake visible y no expone `skip-link`.
+  - La experiencia todavia queda por debajo del estandar semantico que ya tienen otras superficies del portal.
+
+### QA-TKT-023 - Corregir encoding visible de `SOLVENTACIONES/html`
+
+- Prioridad: P2
+- Area: Frontend / UX / Accesibilidad
+- Estado: Abierto para desarrollo
+- Problema:
+  - `SOLVENTACIONES/html` sigue respondiendo, pero la revision de QA todavia detecta mojibake visible en la superficie.
+  - La vista ademas mantiene friccion visual y no ofrece una lectura tan limpia como otras utilidades del portal.
+- Alcance:
+  - Corregir la codificacion de los textos visibles.
+  - Revisar si el render final o la fuente de datos estan introduciendo el problema.
+  - Mantener la mejora de performance ya documentada sin romper la navegacion actual.
+- Criterio de cierre:
+  - La pantalla se lee correctamente, sin caracteres corruptos.
+  - El contenido conserva su respuesta rapida y su estructura actual.
+- Validacion QA:
+  - En la medicion del `2026-07-27`, `SOLVENTACIONES/html` sigue mostrando mojibake visible en la superficie.
+  - El problema es de legibilidad y calidad visual, no de disponibilidad.
 
 ## Definicion de terminado
 
