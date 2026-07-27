@@ -1,6 +1,7 @@
 ﻿import crypto from "crypto";
 import { google } from "googleapis";
 import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
+import { getActivePortalBasePath, getPortalCookieSuffix, portalPath } from "./portalPath.js";
 
 const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 20000);
 const APPSHEET_MAX_RETRIES = Number(process.env.APPSHEET_MAX_RETRIES || 3);
@@ -227,6 +228,15 @@ function splitCsv(value = "") {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function getScopedCookieName(baseName, basePath = undefined) {
+  const suffix = getPortalCookieSuffix(basePath);
+  return suffix ? `${baseName}${suffix}` : baseName;
+}
+
+function getScopedCookiePath(basePath = undefined) {
+  return getActivePortalBasePath(basePath) || "/";
 }
 
 function normalizeText(value) {
@@ -568,8 +578,8 @@ function createGoogleOAuthClient(redirectUriOverride = "") {
 function buildStateCookieHeader(token, { secure = false } = {}) {
   const maxAge = 600;
   const parts = [
-    `${GOOGLE_STATE_COOKIE_NAME}=${encodeURIComponent(token)}`,
-    "Path=/",
+    `${getScopedCookieName(GOOGLE_STATE_COOKIE_NAME)}=${encodeURIComponent(token)}`,
+    `Path=${getScopedCookiePath()}`,
     "HttpOnly",
     "SameSite=Lax",
     `Max-Age=${maxAge}`,
@@ -580,8 +590,8 @@ function buildStateCookieHeader(token, { secure = false } = {}) {
 
 function buildClearStateCookieHeader({ secure = false } = {}) {
   const parts = [
-    `${GOOGLE_STATE_COOKIE_NAME}=`,
-    "Path=/",
+    `${getScopedCookieName(GOOGLE_STATE_COOKIE_NAME)}=`,
+    `Path=${getScopedCookiePath()}`,
     "HttpOnly",
     "SameSite=Lax",
     "Max-Age=0",
@@ -1149,19 +1159,19 @@ function parseCookies(req) {
   return cookies;
 }
 
-export function getSessionCookieName() {
-  return COOKIE_NAME;
+export function getSessionCookieName({ portalBasePath = undefined } = {}) {
+  return getScopedCookieName(COOKIE_NAME, portalBasePath);
 }
 
-export function getOAuthStateCookieName() {
-  return GOOGLE_STATE_COOKIE_NAME;
+export function getOAuthStateCookieName({ portalBasePath = undefined } = {}) {
+  return getScopedCookieName(GOOGLE_STATE_COOKIE_NAME, portalBasePath);
 }
 
 export function buildCookieHeader(token, { secure = false } = {}) {
   const maxAge = Math.max(1, Math.floor(SESSION_TTL_HOURS * 60 * 60));
   const parts = [
-    `${COOKIE_NAME}=${encodeURIComponent(token)}`,
-    "Path=/",
+    `${getSessionCookieName()}=${encodeURIComponent(token)}`,
+    `Path=${getScopedCookiePath()}`,
     "HttpOnly",
     "SameSite=Lax",
     `Max-Age=${maxAge}`,
@@ -1172,8 +1182,8 @@ export function buildCookieHeader(token, { secure = false } = {}) {
 
 export function buildClearCookieHeader({ secure = false } = {}) {
   const parts = [
-    `${COOKIE_NAME}=`,
-    "Path=/",
+    `${getSessionCookieName()}=`,
+    `Path=${getScopedCookiePath()}`,
     "HttpOnly",
     "SameSite=Lax",
     "Max-Age=0",
@@ -1249,7 +1259,7 @@ export async function authenticateEmployeeByEmail(email) {
 
 export async function loadAuthenticatedEmployee(req) {
   const cookies = parseCookies(req);
-  const token = cookies[COOKIE_NAME];
+  const token = cookies[getSessionCookieName({ portalBasePath: req?.portalBasePath })];
   const payload = verifySessionToken(token);
   if (!payload) return null;
 
@@ -2125,8 +2135,12 @@ export async function deleteCalendarNote(noteData, runAsUserEmail = "") {
   return { rowId };
 }
 
-export function getRouteCardsForRole(role) {
-  return role === "admin" ? GENERAL_ROUTE_CARDS : CAPACITADOR_ROUTE_CARDS;
+export function getRouteCardsForRole(role, { portalBasePath = undefined } = {}) {
+  const cards = role === "admin" ? GENERAL_ROUTE_CARDS : CAPACITADOR_ROUTE_CARDS;
+  return cards.map((card) => ({
+    ...card,
+    href: portalPath(card.href, portalBasePath),
+  }));
 }
 
 export function getEmployeeSummary(employee) {

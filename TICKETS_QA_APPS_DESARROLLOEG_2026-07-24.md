@@ -11,6 +11,8 @@ Base de referencia:
 - `facturas-native-sync` queda en standby por credenciales y no entra al ciclo activo.
 - El resto de tickets se documenta como cerrado o cerrado con observacion segun la evidencia en prod.
 - Cada cierre debe quedar trazado en el reporte de QA y en el estado operativo del codigo.
+- Los ambientes se separan por ruta: `https://apps.desarrolloeg.com` es prod y `https://apps.desarrolloeg.com/QA` es pruebas.
+- El flujo operativo queda: primero se despliega a `/QA`, luego QA aprueba, y despues se despliega a prod.
 
 ### QA-TKT-001 - Estabilizar `pedidos-native-sync`
 

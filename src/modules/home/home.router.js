@@ -1,5 +1,6 @@
 ﻿import crypto from "crypto";
 import express from "express";
+import { getActivePortalBasePath, portalPath } from "./portalPath.js";
 import {
   buildClearOAuthStateCookieHeader,
   buildClearCookieHeader,
@@ -58,10 +59,11 @@ function getGoogleOAuthRedirectUri(req) {
   const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
   const host = forwardedHost || String(req.headers.host || "").trim();
   const protocol = forwardedProto === "https" ? "https" : "http";
+  const portalBasePath = getActivePortalBasePath(req?.portalBasePath);
   if (!host) {
     return "";
   }
-  return `${protocol}://${host}/auth/google/callback`;
+  return `${protocol}://${host}${portalBasePath}/auth/google/callback`;
 }
 
 function escapeHtml(value = "") {
@@ -90,7 +92,7 @@ function renderCard(card, { minimal = false } = {}) {
   `;
 }
 
-function renderEmployeeCard(employee, basePath = "/dashboard/capacitador") {
+function renderEmployeeCard(employee, basePath = portalPath("/dashboard/capacitador")) {
   const summary = getEmployeeSummary(employee);
   const badge = summary.permiso || summary.puesto;
   return `
@@ -114,7 +116,7 @@ function renderRouteGrid(cards, options = {}) {
   return cards.map((card) => renderCard(card, options)).join("\n");
 }
 
-function renderEmployeeGrid(employees, basePath = "/dashboard/capacitador") {
+function renderEmployeeGrid(employees, basePath = portalPath("/dashboard/capacitador")) {
   if (!employees.length) {
     return `<div class="empty-state">No hay capacitadores registrados.</div>`;
   }
@@ -160,9 +162,9 @@ function renderCalendarNoteForm({
   note = null,
   employees = [],
   selectedEmployeeId = "",
-  returnTo = "/dashboard",
+  returnTo = portalPath("/dashboard"),
   canEditNotes = false,
-  action = "/dashboard/calendario/notas",
+  action = portalPath("/dashboard/calendario/notas"),
   submitLabel = "Guardar nota",
 } = {}) {
   if (!canEditNotes) return "";
@@ -187,7 +189,7 @@ function renderCalendarNoteForm({
   return `
     <form class="calendar-note-form js-async-calendar-note" method="post" action="${escapeAttr(action)}">
       ${rowIdValue ? `<input type="hidden" name="rowId" value="${escapeAttr(rowIdValue)}" />` : ""}
-      <input type="hidden" name="returnTo" value="${escapeAttr(returnTo || "/dashboard")}" />
+      <input type="hidden" name="returnTo" value="${escapeAttr(returnTo || portalPath("/dashboard"))}" />
       <div class="calendar-note-grid">
         <label class="calendar-note-field">
           <span>Fecha</span>
@@ -349,7 +351,7 @@ function serializeJsonForHtml(value) {
 }
 
 function buildDashboardReturnHref(path, query = {}, calendarView = "week") {
-  const safePath = String(path || "/dashboard").trim() || "/dashboard";
+  const safePath = portalPath(String(path || "/dashboard").trim() || "/dashboard");
   const safeQuery = { ...query };
   if (calendarView) {
     safeQuery.calendar = normalizeCalendarView(calendarView);
@@ -632,7 +634,8 @@ function buildCapacitacionDetailUrl(rowId, { employeeId = "", returnPath = "" } 
   if (selectedEmployeeId) params.set("employee", selectedEmployeeId);
   if (safeReturnPath) params.set("returnTo", safeReturnPath);
   const qs = params.toString();
-  return qs ? `/dashboard/capacitacion/${encodeURIComponent(rowId)}?${qs}` : `/dashboard/capacitacion/${encodeURIComponent(rowId)}`;
+  const baseUrl = portalPath(`/dashboard/capacitacion/${encodeURIComponent(rowId)}`);
+  return qs ? `${baseUrl}?${qs}` : baseUrl;
 }
 
 function getCapacitacionConstanciasUrlWithPrefill(rowId) {
@@ -661,7 +664,7 @@ function renderCapacitacionInlineDetailMarkup(capacitacion, {
   canEditNotes = false,
   employees = [],
   selectedEmployeeId = "",
-  returnTo = "/dashboard",
+  returnTo = portalPath("/dashboard"),
 } = {}) {
   const eventType = String(capacitacion?.extendedProps?.eventType || capacitacion?.eventType || "capacitacion").toLowerCase();
   if (empty || !capacitacion) {
@@ -675,7 +678,7 @@ function renderCapacitacionInlineDetailMarkup(capacitacion, {
           selectedEmployeeId,
           returnTo,
           canEditNotes,
-          action: "/dashboard/calendario/notas",
+          action: portalPath("/dashboard/calendario/notas"),
           submitLabel: "Crear nota",
         }) : ""}
       </div>
@@ -750,7 +753,7 @@ function renderCapacitacionInlineDetailMarkup(capacitacion, {
             selectedEmployeeId,
             returnTo,
             canEditNotes,
-            action: "/dashboard/calendario/notas",
+            action: portalPath("/dashboard/calendario/notas"),
             submitLabel: "Guardar nota",
           }) : `<span>${escapeHtml(noteBody || "Sin nota")}</span>`}
         </div>
@@ -1129,10 +1132,10 @@ function renderCapacitacionesAccordion(capacitaciones, options = {}) {
   return `<div class="accordion-list">${items.join("")}</div>`;
 }
 
-function renderCapacitacionDetailsPanel(capacitacion, { returnPath = "/dashboard", canEditStatus = false, canEditDiplomas = false } = {}) {
+function renderCapacitacionDetailsPanel(capacitacion, { returnPath = portalPath("/dashboard"), canEditStatus = false, canEditDiplomas = false } = {}) {
   if (!capacitacion) return "";
 
-  const backHref = escapeAttr(returnPath || "/dashboard");
+  const backHref = escapeAttr(returnPath || portalPath("/dashboard"));
   const statusClass = capacitacion.statusSuffix === "FINALIZADA" ? "is-finalizada" : "is-programada";
   const capacitadoresLabel = capacitacion.capacitadores?.length
     ? capacitacion.capacitadores.map((item) => escapeHtml(item.nombre || item.key || "")).join(" · ")
@@ -3919,6 +3922,7 @@ function getHomeStyles() {
 }
 
 function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAction, sideContent, bodyContent, footer, headExtra = "", bodyScripts = "", mainClass = "" }) {
+  const portalBasePath = getActivePortalBasePath();
   return `<!DOCTYPE html>
   <html lang="es">
   <head>
@@ -3960,6 +3964,17 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
     </main>
     <script>
       (function () {
+        const portalBasePath = ${JSON.stringify(portalBasePath)};
+        window.__PORTAL_BASE_PATH__ = portalBasePath;
+        window.__PORTAL_URL__ = function (path) {
+          const cleanPath = String(path || "/").trim() || "/";
+          const normalizedPath = cleanPath.startsWith("/") ? cleanPath : "/" + cleanPath;
+          if (!portalBasePath) return normalizedPath;
+          if (normalizedPath === portalBasePath || normalizedPath.startsWith(portalBasePath + "/")) {
+            return normalizedPath;
+          }
+          return portalBasePath + normalizedPath;
+        };
         const loader = document.getElementById("page-loader");
         if (!loader) return;
         let hidden = false;
@@ -3976,12 +3991,46 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
         window.addEventListener("load", hide, { once: true });
       })();
     </script>
+    <script>
+      (function () {
+        const portalBasePath = window.__PORTAL_BASE_PATH__ || "";
+        if (!portalBasePath) return;
+        const prefixPath = (value) => {
+          const cleanPath = String(value || "").trim();
+          if (!cleanPath || cleanPath.startsWith("http://") || cleanPath.startsWith("https://") || cleanPath.startsWith("mailto:") || cleanPath.startsWith("tel:") || cleanPath.startsWith("#")) {
+            return cleanPath;
+          }
+          if (cleanPath.startsWith(portalBasePath)) {
+            return cleanPath;
+          }
+          return portalBasePath + (cleanPath.startsWith("/") ? cleanPath : "/" + cleanPath);
+        };
+        const rewrite = () => {
+          document.querySelectorAll('a[href^="/"], form[action^="/"]').forEach((node) => {
+            const attr = node.tagName === "FORM" ? "action" : "href";
+            const current = node.getAttribute(attr) || "";
+            const next = prefixPath(current);
+            if (next && next !== current) {
+              node.setAttribute(attr, next);
+            }
+          });
+        };
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", rewrite, { once: true });
+        } else {
+          rewrite();
+        }
+      })();
+    </script>
     ${bodyScripts || ""}
   </body>
   </html>`;
 }
 
 function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled() } = {}) {
+  const portalBasePath = getActivePortalBasePath();
+  const isQaPortal = portalBasePath === "/QA";
+  const shouldShowQaAccess = showQaAccess && isQaPortal;
   const errorHtml = errorMessage ? `<div class="message error" id="message">${escapeHtml(errorMessage)}</div>` : `<div class="message" id="message"></div>`;
   const logoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
   return `<!DOCTYPE html>
@@ -4000,19 +4049,21 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
       <main id="login-main" class="auth-card" role="main" aria-label="Acceso al portal">
         <section class="auth-visual">
           <div class="auth-brand">
-            <span class="auth-pill">Portal de acceso</span>
+            <span class="auth-pill">${isQaPortal ? "Portal de pruebas" : "Portal de acceso"}</span>
             <img class="auth-logo" src="${logoPath}" alt="Desarrollo EG" />
-            <h1>Portal de Desarrollo EG</h1>
+            <h1>${isQaPortal ? "Portal QA de Desarrollo EG" : "Portal de Desarrollo EG"}</h1>
           </div>
         </section>
         <section class="auth-form">
           <h2>Iniciar sesion</h2>
-          <p class="hint" style="margin-top:0;">El portal es la entrada. Usa tu cuenta corporativa de Google y, si ya tienes una sesion activa, pasaras directo al dashboard.</p>
+          <p class="hint" style="margin-top:0;">${isQaPortal
+    ? "Este es el acceso de pruebas. Usa la misma cuenta corporativa de Google que en prod y entraras al entorno QA."
+    : "El portal es la entrada. Usa tu cuenta corporativa de Google y, si ya tienes una sesion activa, pasaras directo al dashboard."}</p>
           <div class="field">
             <label>Acceso corporativo con Google</label>
-            <a class="submit-btn" href="/auth/google/start" style="text-decoration:none;text-align:center;display:inline-flex;justify-content:center;align-items:center;">Entrar con Google</a>
+            <a class="submit-btn" href="${portalPath("/auth/google/start")}" style="text-decoration:none;text-align:center;display:inline-flex;justify-content:center;align-items:center;">Entrar con Google</a>
           </div>
-          ${showQaAccess ? `
+          ${shouldShowQaAccess ? `
           <form class="field" method="post" action="/auth/qa/start">
             <label for="qa-access-token">Acceso QA controlado</label>
             <input id="qa-access-token" name="token" type="password" autocomplete="one-time-code" placeholder="Token de QA" />
@@ -5223,6 +5274,7 @@ async function renderDashboardPage({
               estatalMin: String(content.dataset.estatalMin || "32000").trim(),
               municipalMin: String(content.dataset.municipalMin || "9794.98").trim(),
             };
+            const portalUrl = (path) => (window.__PORTAL_URL__ ? window.__PORTAL_URL__(path) : path);
             const rows = Array.from(content.querySelectorAll("[data-pedidos-row]"));
             const branchRows = Array.from(content.querySelectorAll("[data-pedidos-branch-row]"));
             const scopeButtons = Array.from(content.querySelectorAll("[data-pedidos-scope]"));
@@ -5286,7 +5338,7 @@ async function renderDashboardPage({
               updateButtonState(typeButtons, "data-pedidos-type", state.type);
             };
             const reload = () => {
-              const url = new URL("/dashboard/pedidos/panel", window.location.origin);
+              const url = new URL(portalUrl("/dashboard/pedidos/panel"), window.location.origin);
               url.searchParams.set("year", state.year || String(new Date().getFullYear()));
               if (state.scope && state.scope !== "pedidos") url.searchParams.set("scope", state.scope);
               if (state.facturadorId) url.searchParams.set("facturadorId", state.facturadorId);
@@ -5378,7 +5430,7 @@ async function renderDashboardPage({
               return;
             }
             const year = new Date().getFullYear();
-            const url = "/dashboard/pedidos/panel?year=" + encodeURIComponent(String(year));
+            const url = portalUrl("/dashboard/pedidos/panel") + "?year=" + encodeURIComponent(String(year));
             fetch(url, { headers: { "X-Requested-With": "fetch" }, credentials: "same-origin" })
               .then((response) => {
                 if (!response.ok) throw new Error("HTTP " + response.status);
@@ -5680,7 +5732,7 @@ async function renderDashboardPage({
               const payload = new URLSearchParams();
               payload.set("rowId", noteId);
               payload.set("returnTo", returnTo);
-              const response = await fetch("/dashboard/calendario/notas/eliminar", {
+              const response = await fetch(portalUrl("/dashboard/calendario/notas/eliminar"), {
                 method: "POST",
                 body: payload,
                 headers: {

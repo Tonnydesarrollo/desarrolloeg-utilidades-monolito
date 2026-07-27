@@ -44,6 +44,17 @@ Con `runOnStart=1` y un intervalo bajo, el monolito queda revisando casi en tiem
 
 La portada de `apps.desarrolloeg.com` funciona como portal de acceso por correo.
 
+### Ambientes
+
+- `https://apps.desarrolloeg.com` funciona como `prod`.
+- `https://apps.desarrolloeg.com/QA` funciona como `QA` o pruebas.
+- El login de QA refleja el login de prod, pero vive en su propia ruta y no comparte sesion con productivo.
+- El login productivo no debe mostrar accesos de prueba.
+- El flujo operativo queda asi:
+  1. Se despliegan los cambios solicitados por QA en `QA`.
+  2. QA aprueba los tickets como resueltos.
+  3. Se despliegan los cambios a productivo.
+
 - Los usuarios se validan contra la tabla `EMPLEADOS` de AppSheet.
 - `PUESTO` decide el rol:
   - `ADMIN`: `GERENTE GENERAL`, `DIRECTOR GENERAL`, `MEJORA CONTINUA`
@@ -83,6 +94,7 @@ Variables nuevas recomendadas:
 8. Agrega este redirect URI exacto:
 
    - `https://apps.desarrolloeg.com/auth/google/callback`
+   - `https://apps.desarrolloeg.com/QA/auth/google/callback`
 
 9. Copia el `Client ID` y el `Client Secret` en estas variables:
 
@@ -97,7 +109,7 @@ Variables nuevas recomendadas:
 
    - `PORTAL_CONSTANCIAS_BASE_URL`
 
-12. Si necesitas habilitar acceso temporal de QA al dashboard admin, activa:
+12. Si necesitas habilitar acceso temporal de QA al dashboard admin dentro de `/QA`, activa:
 
    - `PORTAL_QA_ACCESS_ENABLED=1`
    - `PORTAL_QA_ACCESS_TOKEN`
@@ -107,10 +119,10 @@ Variables nuevas recomendadas:
 
 ### Acceso QA controlado
 
-Cuando `PORTAL_QA_ACCESS_ENABLED=1`, la pantalla de login muestra un formulario adicional para entrar al portal con un token de QA.
+Cuando `PORTAL_QA_ACCESS_ENABLED=1`, la pantalla de login de `/QA` puede mostrar un formulario adicional para entrar al portal con un token de QA.
 
 - El token se valida antes de crear la sesion.
-- La sesion resultante queda firmada igual que el flujo normal.
+- La sesion resultante queda firmada igual que el flujo normal, pero usa cookie y ruta aisladas para `/QA`.
 - Si se define `PORTAL_QA_ACCESS_EMAIL`, el portal usa ese empleado real como contexto de AppSheet.
 - Si no se define correo, el acceso sigue existiendo, pero es recomendable usar un correo de admin ya registrado para no perder datos del dashboard.
 - El acceso QA debe desactivarse cuando termine la validacion.

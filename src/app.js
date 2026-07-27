@@ -17,6 +17,7 @@ import { sucursalesDocsRouter } from "./modules/sucursales-docs/sucursalesDocs.r
 import { polizaLeyRouter } from "./modules/poliza-ley/polizaLey.router.js";
 import { bolsaSyncRouter } from "./modules/bolsa-sync/bolsaSync.router.js";
 import { pedidosLeyApiRouter } from "./modules/pedidos-ley/pedidosLey.router.js";
+import { portalPath, runWithPortalContext, stripPortalBasePath } from "./modules/home/portalPath.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
 import { getClusterCoordinatorStatus } from "./services/clusterCoordinator.js";
 import { getReleaseInfo } from "./services/releaseInfo.js";
@@ -78,6 +79,32 @@ function applyHostCompatibility(req, _res, next) {
   next();
 }
 
+function applyPortalEnvironmentCompatibility(req, res, next) {
+  const portalBasePath = req.path === "/QA" || req.path.startsWith("/QA/") ? "/QA" : "";
+  req.portalBasePath = portalBasePath;
+
+  if (portalBasePath) {
+    req.url = preserveQuery(req, stripPortalBasePath(req.url || req.originalUrl || "/", portalBasePath));
+  }
+
+  const originalRedirect = res.redirect.bind(res);
+  res.redirect = (...args) => {
+    if (!portalBasePath) {
+      return originalRedirect(...args);
+    }
+
+    const nextArgs = [...args];
+    if (nextArgs.length === 1 && typeof nextArgs[0] === "string") {
+      nextArgs[0] = portalPath(nextArgs[0], portalBasePath);
+    } else if (nextArgs.length >= 2 && typeof nextArgs[1] === "string") {
+      nextArgs[1] = portalPath(nextArgs[1], portalBasePath);
+    }
+    return originalRedirect(...nextArgs);
+  };
+
+  runWithPortalContext({ portalBasePath }, next);
+}
+
 export function createApp() {
   const app = express();
 
@@ -96,6 +123,7 @@ export function createApp() {
   }
 
   app.use(applyHostCompatibility);
+  app.use(applyPortalEnvironmentCompatibility);
   app.use("/assets", express.static(path.join(__dirname, "modules", "constancias-v2", "public", "assets")));
   app.use("/CONSTANCIAS", constanciasV2Router);
   app.use("/constancias", constanciasV2Router);
