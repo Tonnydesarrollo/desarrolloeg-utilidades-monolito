@@ -61,28 +61,14 @@ export const jobRegistry = {
       'CASALEY_FACTURAS_KEY',
     ],
   },
-  'facturas-appsheet-sync': {
-    id: 'facturas-appsheet-sync',
-    description: 'Ejecuta la sincronizacion ClubFactura -> AppSheet dentro del monolito',
-    type: 'native',
-    requiredEnv: [
-      'FACTURAS_CLUBFACTURA_USER',
-      'FACTURAS_CLUBFACTURA_PASSWORD',
-      'FACTURAS_CLUBFACTURA_BASE',
-      'FACTURAS_APPSHEET_API_KEY',
-      'FACTURAS_APPSHEET_APP_ID',
-    ],
-  },
   'facturas-native-sync': {
     id: 'facturas-native-sync',
-    description: 'Ejecuta la sincronizacion ClubFactura -> AppSheet dentro del monolito',
+    description: 'Actualiza la BD local de facturas y extrae XML desde ClubFactura',
     type: 'native',
     requiredEnv: [
       'FACTURAS_CLUBFACTURA_USER',
       'FACTURAS_CLUBFACTURA_PASSWORD',
       'FACTURAS_CLUBFACTURA_BASE',
-      'FACTURAS_APPSHEET_API_KEY',
-      'FACTURAS_APPSHEET_APP_ID',
     ],
   },
   'pedidos-native-sync': {

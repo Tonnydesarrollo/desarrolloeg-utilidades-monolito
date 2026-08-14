@@ -1,7 +1,12 @@
 import os from "os";
 import { startBackgroundServices } from "./backgroundServices.js";
 
-const DEFAULT_PUBLIC_HEALTH_URL = "https://apps.desarrolloeg.com/health";
+const DEFAULT_PUBLIC_HEALTH_URL =
+  String(process.env.APP_ENVIRONMENT || process.env.NODE_ENV || "")
+    .trim()
+    .toLowerCase() === "qa"
+    ? "https://qa.apps.desarrolloeg.com/health"
+    : "https://apps.desarrolloeg.com/health";
 
 const clusterState = {
   started: false,

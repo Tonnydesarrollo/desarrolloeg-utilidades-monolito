@@ -5,6 +5,11 @@ import axios from "axios";
 import { CookieJar } from "tough-cookie";
 import { wrapper } from "axios-cookiejar-support";
 import * as cheerio from "cheerio";
+import {
+  getCasaLeyPendingSyncRows,
+  markCasaLeyRowsSyncState,
+  persistCasaLeyLocalRows,
+} from "../../services/localAppsheetDb.js";
 import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from "../../services/localReplica.js";
 import { loadJobState, saveJobState } from "../../services/jobState.js";
 
@@ -621,7 +626,103 @@ function stripCasaLeyReadOnlyFields(row) {
   delete output["Related PEDIDOS_LEYs"];
   delete output.FACTURADOR;
   delete output["CHEQUES POR MES"];
+  delete output.sync_appsheet_estado;
+  delete output.sync_appsheet_fecha;
+  delete output.sync_appsheet_operacion;
+  delete output.sync_origen_ultimo;
   return output;
+}
+
+function getCasaLeyLocalOperation(row) {
+  const operation = cleanText(row?.sync_appsheet_operacion ?? "").toUpperCase();
+  if (operation === "ADD" || operation === "EDIT") return operation;
+  return null;
+}
+
+function localChequeToAppSheetRow(row = {}) {
+  return normalizeCasaLeyUploadRow({
+    "Referencia de pago": row.referencia_pago,
+    "Documento pago": row.documento_pago,
+    "Fecha pago": row.fecha_pago,
+    "Forma pago": row.forma_pago,
+    "Fecha cobro": row.fecha_cobro,
+    Moneda: row.moneda,
+    "Tipo de cambio": row.tipo_de_cambio,
+    Importe: row.importe,
+    "# Operacion": row.operacion,
+    Emisor: row.emisor,
+    "Cuenta banco": row.cuenta_banco,
+    Receptor: row.receptor,
+    Proveedor: row.proveedor,
+    "Cuenta receptora": row.cuenta_receptora,
+    "UUID de pago": row.uuid_de_pago,
+    "Fecha de carga": row.fecha_de_carga,
+    "Doctos relacionados": row.doctos_relacionados,
+    COBRADO: row.cobrado,
+  });
+}
+
+function localRelacionadoToAppSheetRow(row = {}) {
+  return normalizeCasaLeyUploadRow({
+    Referencia: row.referencia,
+    referencia_pago: row.referencia_pago,
+    ClaseDocto: row.clase_docto,
+    Uuid: row.uuid,
+    ImpPagado: row.imp_pagado,
+    Tipodocto: row.tipo_docto,
+    Factura: row.factura,
+    Asignacion: row.asignacion,
+    Tienda: row.tienda,
+  });
+}
+
+function localFacturaLeyToAppSheetRow(row = {}) {
+  return normalizeCasaLeyUploadRow({
+    Emisor: row.emisor,
+    Receptor: row.receptor,
+    Serie: row.serie,
+    Folio: row.folio,
+    "Fecha factura": row.fecha_factura,
+    "Fecha registro": row.fecha_registro,
+    Importe: row.importe,
+    Iva: row.iva,
+    Total: row.total,
+    Estatus: row.estatus,
+    "Proveedor Sec": row.proveedor_sec,
+    "Num ent": row.num_ent,
+    Tienda: row.tienda,
+    "No Remision": row.no_remision,
+    "Razón social": row.razon_social,
+    "Folio Uuid": row.folio_uuid,
+  });
+}
+
+function getCasaLeyScopeUploadConfig(config, scope) {
+  if (scope === "pagos") {
+    return {
+      tableName: config.tablaPagos,
+      keyColumn: config.pagosKey,
+      keyField: "referencia_pago",
+      toAppSheetRow: localChequeToAppSheetRow,
+    };
+  }
+  if (scope === "relacionados") {
+    return {
+      tableName: config.tablaRelacionados,
+      keyColumn: config.relacionadosKey,
+      keyField: "referencia",
+      toAppSheetRow: localRelacionadoToAppSheetRow,
+    };
+  }
+  if (scope === "facturas") {
+    return {
+      tableName: config.tablaFacturas,
+      keyColumn: config.facturasKey,
+      keyField: "folio_uuid",
+      toAppSheetRow: localFacturaLeyToAppSheetRow,
+    };
+  }
+  return null;
 }
 
 async function sleep(ms) {
@@ -1053,6 +1154,144 @@ async function appsheetActionWithRetry(config, tableName, action, rows) {
     await sleep(Math.min(60000, backoff + jitter));
     attempt += 1;
   }
+}
+
+async function writeCasaLeyPendingRow(config, scopeConfig, localRow) {
+  const keyValue = cleanText(localRow?.[scopeConfig.keyField] ?? "");
+  if (!keyValue) return { ok: false, mode: "missing_key", error: "Fila local sin llave" };
+
+  const row = stripCasaLeyReadOnlyFields(scopeConfig.toAppSheetRow(localRow));
+  row[scopeConfig.keyColumn] = row[scopeConfig.keyColumn] || keyValue;
+
+  const preferred = getCasaLeyLocalOperation(localRow) || "EDIT";
+  const fallback = preferred === "ADD" ? "Edit" : "Add";
+  const primaryAction = preferred === "ADD" ? "Add" : "Edit";
+
+  const primary = await appsheetActionWithRetry(config, scopeConfig.tableName, primaryAction, [row]);
+  if (primary.status >= 200 && primary.status < 300) {
+    return { ok: true, mode: primaryAction.toLowerCase(), key: keyValue };
+  }
+
+  const primaryError = typeof primary.data === "string" ? primary.data : JSON.stringify(primary.data);
+  const shouldFallback = responseLooksLikeNotFound(primaryError) || /already|duplicate|existe|exist/i.test(primaryError);
+  if (!shouldFallback) {
+    return { ok: false, mode: `${primaryAction.toLowerCase()}_failed`, key: keyValue, error: primaryError };
+  }
+
+  const secondary = await appsheetActionWithRetry(config, scopeConfig.tableName, fallback, [row]);
+  if (secondary.status >= 200 && secondary.status < 300) {
+    return { ok: true, mode: fallback.toLowerCase(), key: keyValue };
+  }
+
+  const secondaryError = typeof secondary.data === "string" ? secondary.data : JSON.stringify(secondary.data);
+  return { ok: false, mode: `${fallback.toLowerCase()}_failed`, key: keyValue, error: secondaryError };
+}
+
+async function uploadCasaLeyPendingScope(config, scope) {
+  const scopeConfig = getCasaLeyScopeUploadConfig(config, scope);
+  if (!scopeConfig?.tableName || !scopeConfig?.keyColumn) {
+    return { total: 0, ok: 0, edited: 0, added: 0, failed: 0, skippedUnchanged: 0, markedSynced: 0 };
+  }
+
+  const pendingRows = getCasaLeyPendingSyncRows(scope);
+  if (!pendingRows.length) {
+    return { total: 0, ok: 0, edited: 0, added: 0, failed: 0, skippedUnchanged: 0, markedSynced: 0 };
+  }
+
+  console.log(`[casaley] ${scope}: pendientes locales AppSheet=${pendingRows.length}`);
+
+  let ok = 0;
+  let edited = 0;
+  let added = 0;
+  let failed = 0;
+  let markedSynced = 0;
+  const chunkSize = Math.max(1, readNumber(["CASALEY_APPSHEET_CHUNK_SIZE"], 50));
+  const queued = pendingRows.map((localRow) => {
+    const key = cleanText(localRow?.[scopeConfig.keyField] ?? "");
+    const operation = getCasaLeyLocalOperation(localRow) || "EDIT";
+    const appSheetRow = stripCasaLeyReadOnlyFields(scopeConfig.toAppSheetRow(localRow));
+    appSheetRow[scopeConfig.keyColumn] = appSheetRow[scopeConfig.keyColumn] || key;
+    return { key, operation, localRow, appSheetRow };
+  }).filter((item) => item.key);
+
+  for (const operation of ["EDIT", "ADD"]) {
+    const action = operation === "ADD" ? "Add" : "Edit";
+    const operationRows = queued.filter((item) => item.operation === operation);
+    for (let start = 0; start < operationRows.length; start += chunkSize) {
+      const chunk = operationRows.slice(start, start + chunkSize);
+      console.log(`[casaley] ${scope}: lote ${action} ${Math.floor(start / chunkSize) + 1}/${Math.ceil(operationRows.length / chunkSize)} filas=${chunk.length}`);
+      const response = await appsheetActionWithRetry(config, scopeConfig.tableName, action, chunk.map((item) => item.appSheetRow));
+      if (response.status >= 200 && response.status < 300) {
+        ok += chunk.length;
+        if (action === "Add") added += chunk.length;
+        if (action === "Edit") edited += chunk.length;
+        markedSynced += markCasaLeyRowsSyncState(scope, chunk.map((item) => item.key), {
+          syncState: "SINCRONIZADO",
+          syncAt: new Date().toISOString(),
+          origin: "APPSHEET",
+        });
+        continue;
+      }
+
+      const errorText = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
+      console.log(`[casaley] ${scope}: lote ${action} fallo, aislando filas: ${errorText}`);
+      for (const item of chunk) {
+        const result = await writeCasaLeyPendingRow(config, scopeConfig, item.localRow);
+        if (result.ok) {
+          ok += 1;
+          if (result.mode === "add") added += 1;
+          if (result.mode === "edit") edited += 1;
+          markedSynced += markCasaLeyRowsSyncState(scope, [item.key], {
+            syncState: "SINCRONIZADO",
+            syncAt: new Date().toISOString(),
+            origin: "APPSHEET",
+          });
+          continue;
+        }
+
+        failed += 1;
+        fs.appendFileSync(
+          path.join(config.outputDir, `appsheet_errors_${scope}.log`),
+          `\n[${new Date().toISOString()}] table=${scopeConfig.tableName} key=${item.key} mode=${result.mode}\n${result.error}\n`,
+          "utf8"
+        );
+      }
+    }
+  }
+
+  return { total: pendingRows.length, ok, edited, added, failed, skippedUnchanged: 0, markedSynced };
+}
+
+export async function syncCasaLeyPendingAppSheet(options = {}) {
+  const config = buildConfig(options);
+  requireEnv(config);
+
+  const summary = {
+    ok: true,
+    uploadTarget: config.uploadTarget,
+    dryRun: config.dryRun,
+    uploads: {},
+  };
+
+  if (config.uploadTarget === "none" || config.dryRun) {
+    return summary;
+  }
+
+  if (config.shouldUpload.pagos) {
+    summary.uploads.pagos = await uploadCasaLeyPendingScope(config, "pagos");
+    if (config.isSequential) await sleep(config.delayBetweenUploadsMs);
+  }
+
+  if (config.shouldUpload.relacionados) {
+    summary.uploads.relacionados = await uploadCasaLeyPendingScope(config, "relacionados");
+    if (config.isSequential) await sleep(config.delayBetweenUploadsMs);
+  }
+
+  if (config.shouldUpload.facturas) {
+    summary.uploads.facturas = await uploadCasaLeyPendingScope(config, "facturas");
+  }
+
+  return summary;
 }
 
 function responseLooksLikeNotFound(errorText) {
@@ -1536,116 +1775,36 @@ async function runCasaleyJob(options = {}) {
     return summary;
   }
 
+  const localPersist = persistCasaLeyLocalRows({
+    pagosRows: pagosPrepared,
+    relacionadosRows: relacionadosPrepared,
+    facturasRows: facturasPrepared,
+  });
+  summary.local = localPersist;
+
   if (config.shouldUpload.pagos) {
-    if (pagosDiff.changedRows.length === 0) {
-      summary.uploads.pagos = { total: 0, ok: 0, edited: 0, added: 0, failed: 0, skippedUnchanged: pagosDiff.unchangedRows.length };
+    summary.uploads.pagos = await uploadCasaLeyPendingScope(config, "pagos");
+    summary.uploads.pagos.skippedUnchanged = pagosDiff.unchangedRows.length;
+    if (summary.uploads.pagos.failed === 0) {
       saveReplicaRows(pagosReplicaPath, pagosSelected, config.pagosKey, { mergeWithExisting: true });
-    } else {
-      summary.uploads.pagos = config.uploadByMonth
-        ? await upsertManyByMonth(
-            config,
-            config.tablaPagos,
-            pagosDiff.changedRows,
-            config.pagosKey,
-            "pagos",
-            pagosKnownLookup,
-            (row) => getCasaLeyMonthKeyFromRow(row, ["Fecha pago", "Fecha cobro", "Fecha de carga"])
-          )
-        : await upsertMany(
-            config,
-            config.tablaPagos,
-            pagosDiff.changedRows,
-            config.pagosKey,
-            "pagos",
-            pagosKnownLookup
-          );
-      if (summary.uploads.pagos.failed === 0) {
-        saveReplicaRows(pagosReplicaPath, pagosSelected, config.pagosKey, { mergeWithExisting: true });
-      }
     }
     if (config.isSequential) await sleep(config.delayBetweenUploadsMs);
   }
 
   if (config.shouldUpload.relacionados) {
-    if (relacionadosDiff.changedRows.length === 0) {
-      summary.uploads.relacionados = {
-        total: 0,
-        ok: 0,
-        edited: 0,
-        added: 0,
-        failed: 0,
-        skippedUnchanged: relacionadosDiff.unchangedRows.length,
-      };
+    summary.uploads.relacionados = await uploadCasaLeyPendingScope(config, "relacionados");
+    summary.uploads.relacionados.skippedUnchanged = relacionadosDiff.unchangedRows.length;
+    if (summary.uploads.relacionados.failed === 0) {
       saveReplicaRows(relacionadosReplicaPath, relacionadosSelected, config.relacionadosKey, { mergeWithExisting: true });
-    } else {
-      const pagosMonthByKey = new Map(
-        pagosPrepared.map((row) => {
-          const keyValue = row?.[config.pagosKey];
-          return [String(keyValue ?? ""), getCasaLeyMonthKeyFromRow(row, ["Fecha pago", "Fecha cobro", "Fecha de carga"])];
-        })
-      );
-      summary.uploads.relacionados = config.uploadByMonth
-        ? await upsertManyByMonth(
-            config,
-            config.tablaRelacionados,
-            relacionadosDiff.changedRows,
-            config.relacionadosKey,
-            "relacionados",
-            relacionadosKnownLookup,
-            (row) => {
-              const pagoKey = cleanText(row?.referencia_pago ?? row?.["referencia_pago"] ?? row?.["Referencia de pago"] ?? "");
-              if (pagoKey && pagosMonthByKey.has(pagoKey)) return pagosMonthByKey.get(pagoKey);
-              return getCasaLeyMonthKeyFromRow(row, ["Fecha pago", "Fecha cobro", "Fecha de carga"]);
-            }
-          )
-        : await upsertMany(
-            config,
-            config.tablaRelacionados,
-            relacionadosDiff.changedRows,
-            config.relacionadosKey,
-            "relacionados",
-            relacionadosKnownLookup
-          );
-      if (summary.uploads.relacionados.failed === 0) {
-        saveReplicaRows(relacionadosReplicaPath, relacionadosSelected, config.relacionadosKey, { mergeWithExisting: true });
-      }
     }
     if (config.isSequential) await sleep(config.delayBetweenUploadsMs);
   }
 
   if (config.shouldUpload.facturas) {
-    if (facturasDiff.changedRows.length === 0) {
-      summary.uploads.facturas = {
-        total: 0,
-        ok: 0,
-        edited: 0,
-        added: 0,
-        failed: 0,
-        skippedUnchanged: facturasDiff.unchangedRows.length,
-      };
+    summary.uploads.facturas = await uploadCasaLeyPendingScope(config, "facturas");
+    summary.uploads.facturas.skippedUnchanged = facturasDiff.unchangedRows.length;
+    if (summary.uploads.facturas.failed === 0) {
       saveReplicaRows(facturasReplicaPath, facturasSelected, config.facturasKey, { mergeWithExisting: true });
-    } else {
-      summary.uploads.facturas = config.uploadByMonth
-        ? await upsertManyByMonth(
-            config,
-            config.tablaFacturas,
-            facturasDiff.changedRows,
-            config.facturasKey,
-            "facturas",
-            facturasKnownLookup,
-            (row) => getCasaLeyMonthKeyFromRow(row, ["Fecha registro", "Fecha factura"])
-          )
-        : await upsertMany(
-            config,
-            config.tablaFacturas,
-            facturasDiff.changedRows,
-            config.facturasKey,
-            "facturas",
-            facturasKnownLookup
-          );
-      if (summary.uploads.facturas.failed === 0) {
-        saveReplicaRows(facturasReplicaPath, facturasSelected, config.facturasKey, { mergeWithExisting: true });
-      }
     }
   }
 

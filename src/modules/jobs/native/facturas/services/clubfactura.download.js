@@ -3,6 +3,7 @@ import { iniciarSesionWeb } from './clubfactura.session.js';
 import { loginClubFactura } from './clubfactura.auth.js';
 
 const AUTH_TTL_MS = 25 * 60 * 1000;
+const DOWNLOAD_TIMEOUT_MS = Math.max(20000, Number(process.env.FACTURAS_DOWNLOAD_TIMEOUT_MS || '120000'));
 let lastAuthAt = 0;
 
 async function ensureAuth(force = false) {
@@ -44,13 +45,17 @@ async function followTempFileIfNeeded(response) {
   if (!token) return response;
 
   return client.get(`/api/File/DownloadTempFileFromSession?uuid=${encodeURIComponent(token)}`, {
-    responseType: 'arraybuffer'
+    responseType: 'arraybuffer',
+    timeout: DOWNLOAD_TIMEOUT_MS
   });
 }
 
 export async function descargarXml(id) {
   return requestWithRetry(async () => {
-    const response = await client.get(`/api/CFDI/DownloadXml?id=${id}`, { responseType: 'arraybuffer' });
+    const response = await client.get(`/api/CFDI/DownloadXml?id=${id}`, {
+      responseType: 'arraybuffer',
+      timeout: DOWNLOAD_TIMEOUT_MS
+    });
     return followTempFileIfNeeded(response);
   });
 }
@@ -60,7 +65,10 @@ export async function descargarPdf(id) {
     const response = await client.post(
       '/api/CFDI/DownloadPDF',
       { id },
-      { responseType: 'arraybuffer' }
+      {
+        responseType: 'arraybuffer',
+        timeout: DOWNLOAD_TIMEOUT_MS
+      }
     );
     return followTempFileIfNeeded(response);
   });

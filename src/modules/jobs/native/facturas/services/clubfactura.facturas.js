@@ -21,20 +21,26 @@ function getCurrentMonthFilter(timeZone = process.env.FACTURAS_CLUBFACTURA_TIMEZ
   return { year, month };
 }
 
-export async function obtenerFacturasEmitidas({ empresa, pageNumber = 1, pageSize = 100 }) {
-  const { year, month } = getCurrentMonthFilter();
-  const response = await client.post('/api/CFDI/GetCfdisList', {
+export async function obtenerFacturasEmitidas({ empresa, pageNumber = 1, pageSize = 100, year = null, month = null, estatus = null } = {}) {
+  const current = getCurrentMonthFilter();
+  const selectedYear = Number(year) > 0 ? Number(year) : current.year;
+  const selectedMonth = Number(month) > 0 ? Number(month) : current.month;
+  const payload = {
     empresa,
     filtrarPorFecha: true,
-    anio: year,
-    mes: month,
-    estatus: 1,
+    anio: selectedYear,
+    mes: selectedMonth,
     tipoCFDI: null,
     filter: '',
     pageNumber,
     pageSize,
     sorting: 'fecha DESC'
-  });
+  };
+  if (estatus !== null && estatus !== undefined && String(estatus).trim() !== '') {
+    payload.estatus = estatus;
+  }
+
+  const response = await client.post('/api/CFDI/GetCfdisList', payload);
 
   const data = response.data;
   const baseUrl = client.defaults.baseURL?.replace(/\/+$/, '');

@@ -79,6 +79,17 @@ function ensureJobsRegistered() {
   });
 
   registerIntervalJob({
+    jobId: "casaley-export-all",
+    label: "CasaLey Export All",
+    enabled: parseBoolean(process.env.CASALEY_EXPORT_ALL_ENABLED, false),
+    intervalSeconds: parsePositiveSeconds(
+      process.env.CASALEY_EXPORT_ALL_INTERVAL_SECONDS,
+      parsePositiveMinutes(process.env.CASALEY_EXPORT_ALL_INTERVAL_MINUTES, 15) * 60
+    ),
+    runOnStart: parseBoolean(process.env.CASALEY_EXPORT_ALL_RUN_ON_START, false),
+  });
+
+  registerIntervalJob({
     jobId: "pagos-ley",
     label: "CasaLey Pagos",
     enabled: resolveTargetBoolean("CASALEY_PAGOS_LEY_ENABLED", "CASALEY_SYNC_ENABLED", false),

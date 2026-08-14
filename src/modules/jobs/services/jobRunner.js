@@ -10,8 +10,7 @@ const nativeHandlers = {
   'pagos-ley': () => syncCasaleyNative({ uploadTarget: 'pagos' }),
   'cheques-ley': () => syncCasaleyNative({ uploadTarget: 'relacionados' }),
   'facturas-ley': () => syncCasaleyNative({ uploadTarget: 'facturas' }),
-  'facturas-appsheet-sync': syncFacturasNative,
-  'facturas-native-sync': syncFacturasNative,
+  'facturas-native-sync': () => syncFacturasNative(),
   'pedidos-native-sync': syncPedidosNative,
 };
 
@@ -26,7 +25,7 @@ export function listJobs() {
   }));
 }
 
-export function runJob(jobId) {
+export function runJob(jobId, options = {}) {
   const job = jobRegistry[jobId];
   if (!job) throw new Error(`Job no encontrado: ${jobId}`);
 
@@ -39,7 +38,7 @@ export function runJob(jobId) {
   if (job.type === 'native') {
     const handler = nativeHandlers[jobId];
     if (!handler) throw new Error(`Handler nativo no encontrado: ${jobId}`);
-    return Promise.resolve(handler()).then((result) => ({
+    return Promise.resolve(handler(options)).then((result) => ({
       jobId,
       code: 0,
       stdout: '',

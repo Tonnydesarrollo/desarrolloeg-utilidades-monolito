@@ -4,7 +4,14 @@ import pdfParse from "pdf-parse";
 import { getAuthClient } from "./auth.js";
 import { createDriveClient } from "./drive.js";
 import * as pedidosExtractors from "./pedidos_extractors.js";
-import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from "../../services/localReplica.js";
+import {
+  getLiberacionesLocalRows,
+  getPedidosLeyLocalRows,
+  syncLiberacionesLocalRows,
+  syncPedidosLeyLocalRows,
+  upsertLiberacionLocalRow,
+  upsertPedidoLeyLocalRow,
+} from "../../services/localAppsheetDb.js";
 
 const CONFIG = {
   credentialsPath: process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS || process.env.GOOGLE_CLIENT_CREDENTIALS || "credentials.json",
@@ -43,30 +50,17 @@ function isBadProveedor(v) {
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function ensureOutputDir() { fs.mkdirSync(CONFIG.outputDir, { recursive: true }); }
 function writeJson(name, data) { ensureOutputDir(); fs.writeFileSync(path.join(CONFIG.outputDir, name), JSON.stringify(data, null, 2), "utf8"); }
-function resolveReplicaPath(name) { return path.join(CONFIG.outputDir, `${name}_replica.json`); }
-function isTrackedRowUnchanged(row, keyField, replicaRows) {
-  return diffRowsAgainstReplica([row], keyField, replicaRows).changedRows.length === 0;
+function extractYearFromDateText(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const match = /(\d{4})/.exec(text);
+  if (!match) return null;
+  const year = Number(match[1]);
+  return Number.isFinite(year) ? year : null;
 }
-function buildPedidoReplicaRow(row, pedido, overrides = {}) {
-  return {
-    [CONFIG.appsheetKeyPedidos]: pedido,
-    PDF: row.PDF || row.Pdf || row.pdf || "",
-    PROVEEDOR: row.PROVEEDOR ?? "",
-    ESTABLECIMIENTO: row.ESTABLECIMIENTO ?? "",
-    FECHA: row.FECHA ?? "",
-    IMPORTE: row.IMPORTE ?? "",
-    DESCRIPCION: row.DESCRIPCION ?? "",
-    ...overrides,
-  };
-}
-function buildLiberacionReplicaRow(row, liberacion, overrides = {}) {
-  return {
-    [CONFIG.appsheetKeyLiberaciones]: liberacion,
-    PDF: row.PDF || row.Pdf || row.pdf || "",
-    "NUM. DE PEDIDO": row["NUM. DE PEDIDO"] ?? "",
-    FECHA: row.FECHA ?? "",
-    ...overrides,
-  };
+
+function nowIso() {
+  return new Date().toISOString();
 }
 
 async function fetchWithRetry(url, options = {}, meta = {}) {
@@ -167,31 +161,70 @@ async function getPdfText(row, drive) {
 }
 
 async function processPedidos(drive) {
-  const rows = await fetchFromAppSheet(CONFIG.appsheetTablePedidos);
-  const replicaPath = resolveReplicaPath("pedidos");
-  const replica = loadReplica(replicaPath);
-  const nextReplicaRows = [];
+  const remoteRows = await fetchFromAppSheet(CONFIG.appsheetTablePedidos);
+  syncPedidosLeyLocalRows(remoteRows);
+  const rows = getPedidosLeyLocalRows();
   const limit = CONFIG.maxRows > 0 ? Math.min(CONFIG.maxRows, rows.length) : rows.length;
-  let updated = 0, skipped = 0, skippedUnchanged = 0; const skippedRows = [];
+  let updated = 0, skipped = 0; const skippedRows = [];
   for (let i = 0; i < limit; i++) {
     const row = rows[i];
-    const pedido = row.PEDIDO || row[CONFIG.appsheetKeyPedidos];
+    const pedido = row.pedido || row.PEDIDO || row[CONFIG.appsheetKeyPedidos];
     if (isEmpty(pedido)) { skippedRows.push({ row: i + 1, pedido: "", reason: "sin_pedido" }); skipped++; continue; }
-    const trackedRow = buildPedidoReplicaRow(row, pedido);
-    const needs = { PROVEEDOR: isEmpty(row.PROVEEDOR) || isBadProveedor(row.PROVEEDOR), ESTABLECIMIENTO: isEmpty(row.ESTABLECIMIENTO), FECHA: isEmpty(row.FECHA), IMPORTE: isEmpty(row.IMPORTE), DESCRIPCION: isEmpty(row.DESCRIPCION) };
-    if (!CONFIG.forceRefresh && !Object.values(needs).some(Boolean)) {
-      nextReplicaRows.push(trackedRow);
-      skippedRows.push({ row: i + 1, pedido, reason: "sin_campos_faltantes" });
+    const rowYear = extractYearFromDateText(row.fecha ?? row.FECHA);
+    if (rowYear !== null && rowYear < 2026) {
+      const syncedAt = nowIso();
+      await upsertPedidoLeyLocalRow({
+        ...row,
+        pedido,
+        pdf_extraido: 1,
+        pdf_extraido_fecha: syncedAt,
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "SINCRONIZADO",
+        sync_appsheet_fecha: syncedAt,
+        sync_origen_ultimo: "APPSHEET",
+      });
+      skippedRows.push({ row: i + 1, pedido, reason: "anio_anterior_a_2026" });
+      skipped++;
       continue;
     }
-    if (!CONFIG.forceRefresh && isTrackedRowUnchanged(trackedRow, CONFIG.appsheetKeyPedidos, replica.rows)) {
-      nextReplicaRows.push(trackedRow);
-      skippedRows.push({ row: i + 1, pedido, reason: "sin_cambios_desde_snapshot" });
-      skippedUnchanged++;
+    const needs = {
+      PROVEEDOR: isEmpty(row.proveedor ?? row.PROVEEDOR) || isBadProveedor(row.proveedor ?? row.PROVEEDOR),
+      ESTABLECIMIENTO: isEmpty(row.establecimiento ?? row.ESTABLECIMIENTO),
+      FECHA: isEmpty(row.fecha ?? row.FECHA),
+      IMPORTE: isEmpty(row.importe ?? row.IMPORTE),
+      DESCRIPCION: isEmpty(row.descripcion ?? row.DESCRIPCION),
+    };
+    const pdfNotExtracted = Number(row.pdf_extraido || 0) !== 1;
+    const syncNotDone = String(row.sync_appsheet_estado || "PENDIENTE").toUpperCase() !== "SINCRONIZADO";
+    const shouldInspectPdf = CONFIG.forceRefresh || pdfNotExtracted || syncNotDone || Object.values(needs).some(Boolean);
+
+    if (!shouldInspectPdf) {
+      skippedRows.push({ row: i + 1, pedido, reason: "sin_campos_faltantes" });
+      await upsertPedidoLeyLocalRow({
+        ...row,
+        pedido,
+        sync_appsheet_estado: syncNotDone ? String(row.sync_appsheet_estado || "PENDIENTE") : "SINCRONIZADO",
+        sync_origen_ultimo: row.sync_origen_ultimo || "APPSHEET",
+      });
       continue;
     }
     let text;
-    try { text = await getPdfText(row, drive); } catch (err) { skippedRows.push({ row: i + 1, pedido, reason: `pdf_error: ${err?.message || err}` }); skipped++; continue; }
+    try {
+      text = await getPdfText(row, drive);
+    } catch (err) {
+      await upsertPedidoLeyLocalRow({
+        ...row,
+        pedido,
+        pdf_extraido: 0,
+        pdf_extraido_error: String(err?.message || err),
+        sync_appsheet_estado: "ERROR",
+        sync_appsheet_fecha: nowIso(),
+        sync_origen_ultimo: "JOB_LOCAL",
+      });
+      skippedRows.push({ row: i + 1, pedido, reason: `pdf_error: ${err?.message || err}` });
+      skipped++;
+      continue;
+    }
     const updates = {};
     if (needs.PROVEEDOR) { const prov = pedidosExtractors.extractProveedor(text); if (!isEmpty(prov)) updates.PROVEEDOR = prov; }
     if (needs.ESTABLECIMIENTO) { const est = pedidosExtractors.extractEstablecimiento(text); if (!isEmpty(est)) updates.ESTABLECIMIENTO = est; }
@@ -199,64 +232,202 @@ async function processPedidos(drive) {
     if (needs.IMPORTE) { const importe = pedidosExtractors.extractImporte(text); if (!isEmpty(importe)) updates.IMPORTE = importe; }
     if (needs.DESCRIPCION) { const desc = pedidosExtractors.extractDescripcion(text); if (!isEmpty(desc)) updates.DESCRIPCION = desc; }
     if (!Object.values(updates).some(v => !isEmpty(v))) {
-      nextReplicaRows.push(trackedRow);
+      const syncedAt = nowIso();
+      await upsertPedidoLeyLocalRow({
+        ...row,
+        pedido,
+        pdf_extraido: 1,
+        pdf_extraido_fecha: syncedAt,
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "SINCRONIZADO",
+        sync_appsheet_fecha: syncedAt,
+        sync_origen_ultimo: "JOB_LOCAL",
+      });
       skippedRows.push({ row: i + 1, pedido, reason: "sin_actualizaciones" });
       skipped++;
       continue;
     }
     updates[CONFIG.appsheetKeyPedidos] = pedido;
-    await updateAppSheet(CONFIG.appsheetTablePedidos, updates);
-    nextReplicaRows.push(buildPedidoReplicaRow(row, pedido, updates));
+    try {
+      await updateAppSheet(CONFIG.appsheetTablePedidos, updates);
+      const syncedAt = nowIso();
+      await upsertPedidoLeyLocalRow({
+        ...row,
+        pedido,
+        ...{
+          proveedor: updates.PROVEEDOR ?? row.proveedor ?? row.PROVEEDOR ?? null,
+          establecimiento: updates.ESTABLECIMIENTO ?? row.establecimiento ?? row.ESTABLECIMIENTO ?? null,
+          fecha: updates.FECHA ?? row.fecha ?? row.FECHA ?? null,
+          importe: updates.IMPORTE ?? row.importe ?? row.IMPORTE ?? null,
+          descripcion: updates.DESCRIPCION ?? row.descripcion ?? row.DESCRIPCION ?? null,
+        },
+        pdf_extraido: 1,
+        pdf_extraido_fecha: syncedAt,
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "SINCRONIZADO",
+        sync_appsheet_fecha: syncedAt,
+        sync_origen_ultimo: "JOB_LOCAL",
+      });
+    } catch (err) {
+      await upsertPedidoLeyLocalRow({
+        ...row,
+        pedido,
+        ...{
+          proveedor: updates.PROVEEDOR ?? row.proveedor ?? row.PROVEEDOR ?? null,
+          establecimiento: updates.ESTABLECIMIENTO ?? row.establecimiento ?? row.ESTABLECIMIENTO ?? null,
+          fecha: updates.FECHA ?? row.fecha ?? row.FECHA ?? null,
+          importe: updates.IMPORTE ?? row.importe ?? row.IMPORTE ?? null,
+          descripcion: updates.DESCRIPCION ?? row.descripcion ?? row.DESCRIPCION ?? null,
+        },
+        pdf_extraido: 1,
+        pdf_extraido_fecha: nowIso(),
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "ERROR",
+        sync_appsheet_fecha: nowIso(),
+        sync_origen_ultimo: "JOB_LOCAL",
+      });
+      skippedRows.push({ row: i + 1, pedido, reason: `appsheet_error: ${err?.message || err}` });
+      skipped++;
+      continue;
+    }
+    await upsertPedidoLeyLocalRow({
+      ...row,
+      pedido,
+      ...{
+        proveedor: updates.PROVEEDOR ?? row.proveedor ?? row.PROVEEDOR ?? null,
+        establecimiento: updates.ESTABLECIMIENTO ?? row.establecimiento ?? row.ESTABLECIMIENTO ?? null,
+        fecha: updates.FECHA ?? row.fecha ?? row.FECHA ?? null,
+        importe: updates.IMPORTE ?? row.importe ?? row.IMPORTE ?? null,
+        descripcion: updates.DESCRIPCION ?? row.descripcion ?? row.DESCRIPCION ?? null,
+      },
+      pdf_extraido: 1,
+      pdf_extraido_fecha: nowIso(),
+      pdf_extraido_error: null,
+      sync_appsheet_estado: "SINCRONIZADO",
+      sync_appsheet_fecha: nowIso(),
+      sync_origen_ultimo: "JOB_LOCAL",
+    });
     updated++;
     if (CONFIG.appsheetDelayMs > 0) await sleep(CONFIG.appsheetDelayMs);
   }
-  saveReplicaRows(replicaPath, nextReplicaRows, CONFIG.appsheetKeyPedidos);
-  return { updated, skipped, skippedUnchanged, skippedRows };
+  return { updated, skipped, skippedUnchanged: 0, skippedRows };
 }
 
 async function processLiberaciones(drive) {
-  const rows = await fetchFromAppSheet(CONFIG.appsheetTableLiberaciones);
-  const replicaPath = resolveReplicaPath("liberaciones");
-  const replica = loadReplica(replicaPath);
-  const nextReplicaRows = [];
+  const remoteRows = await fetchFromAppSheet(CONFIG.appsheetTableLiberaciones);
+  syncLiberacionesLocalRows(remoteRows);
+  const rows = getLiberacionesLocalRows();
   const limit = CONFIG.maxRows > 0 ? Math.min(CONFIG.maxRows, rows.length) : rows.length;
-  let updated = 0, skipped = 0, skippedUnchanged = 0; const skippedRows = [];
+  let updated = 0, skipped = 0; const skippedRows = [];
   for (let i = 0; i < limit; i++) {
     const row = rows[i];
-    const liberacion = row.LIBERACION || row[CONFIG.appsheetKeyLiberaciones];
+    const liberacion = row.liberacion || row.LIBERACION || row[CONFIG.appsheetKeyLiberaciones];
     if (isEmpty(liberacion)) { skippedRows.push({ row: i + 1, liberacion: "", reason: "sin_liberacion" }); skipped++; continue; }
-    const trackedRow = buildLiberacionReplicaRow(row, liberacion);
-    const needs = { "NUM. DE PEDIDO": isEmpty(row["NUM. DE PEDIDO"]), FECHA: isEmpty(row.FECHA) };
-    if (!CONFIG.forceRefresh && !Object.values(needs).some(Boolean)) {
-      nextReplicaRows.push(trackedRow);
-      skippedRows.push({ row: i + 1, liberacion, reason: "sin_campos_faltantes" });
+    const rowYear = extractYearFromDateText(row.fecha ?? row.FECHA);
+    if (rowYear !== null && rowYear < 2026) {
+      const syncedAt = nowIso();
+      await upsertLiberacionLocalRow({
+        ...row,
+        liberacion,
+        pdf_extraido: 1,
+        pdf_extraido_fecha: syncedAt,
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "SINCRONIZADO",
+        sync_appsheet_fecha: syncedAt,
+        sync_origen_ultimo: "APPSHEET",
+      });
+      skippedRows.push({ row: i + 1, liberacion, reason: "anio_anterior_a_2026" });
+      skipped++;
       continue;
     }
-    if (!CONFIG.forceRefresh && isTrackedRowUnchanged(trackedRow, CONFIG.appsheetKeyLiberaciones, replica.rows)) {
-      nextReplicaRows.push(trackedRow);
-      skippedRows.push({ row: i + 1, liberacion, reason: "sin_cambios_desde_snapshot" });
-      skippedUnchanged++;
+    const needs = { "NUM. DE PEDIDO": isEmpty(row["NUM. DE PEDIDO"] ?? row.num_pedido), FECHA: isEmpty(row.fecha ?? row.FECHA) };
+    const pdfNotExtracted = Number(row.pdf_extraido || 0) !== 1;
+    const syncNotDone = String(row.sync_appsheet_estado || "PENDIENTE").toUpperCase() !== "SINCRONIZADO";
+    const shouldInspectPdf = CONFIG.forceRefresh || pdfNotExtracted || syncNotDone || Object.values(needs).some(Boolean);
+
+    if (!shouldInspectPdf) {
+      skippedRows.push({ row: i + 1, liberacion, reason: "sin_campos_faltantes" });
+      await upsertLiberacionLocalRow({
+        ...row,
+        liberacion,
+        sync_appsheet_estado: syncNotDone ? String(row.sync_appsheet_estado || "PENDIENTE") : "SINCRONIZADO",
+        sync_origen_ultimo: row.sync_origen_ultimo || "APPSHEET",
+      });
       continue;
     }
     let text;
-    try { text = await getPdfText(row, drive); } catch (err) { skippedRows.push({ row: i + 1, liberacion, reason: `pdf_error: ${err?.message || err}` }); skipped++; continue; }
+    try {
+      text = await getPdfText(row, drive);
+    } catch (err) {
+      await upsertLiberacionLocalRow({
+        ...row,
+        liberacion,
+        pdf_extraido: 0,
+        pdf_extraido_error: String(err?.message || err),
+        sync_appsheet_estado: "ERROR",
+        sync_appsheet_fecha: nowIso(),
+        sync_origen_ultimo: "JOB_LOCAL",
+      });
+      skippedRows.push({ row: i + 1, liberacion, reason: `pdf_error: ${err?.message || err}` });
+      skipped++;
+      continue;
+    }
     const updates = {};
     if (needs["NUM. DE PEDIDO"]) updates["NUM. DE PEDIDO"] = pedidosExtractors.extractPedidoNumber(text);
     if (needs.FECHA) updates.FECHA = pedidosExtractors.extractFecha(text);
     if (!Object.values(updates).some(v => !isEmpty(v))) {
-      nextReplicaRows.push(trackedRow);
+      const syncedAt = nowIso();
+      await upsertLiberacionLocalRow({
+        ...row,
+        liberacion,
+        pdf_extraido: 1,
+        pdf_extraido_fecha: syncedAt,
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "SINCRONIZADO",
+        sync_appsheet_fecha: syncedAt,
+        sync_origen_ultimo: "JOB_LOCAL",
+      });
       skippedRows.push({ row: i + 1, liberacion, reason: "sin_actualizaciones" });
       skipped++;
       continue;
     }
     updates[CONFIG.appsheetKeyLiberaciones] = liberacion;
-    await updateAppSheet(CONFIG.appsheetTableLiberaciones, updates);
-    nextReplicaRows.push(buildLiberacionReplicaRow(row, liberacion, updates));
+    try {
+      await updateAppSheet(CONFIG.appsheetTableLiberaciones, updates);
+      const syncedAt = nowIso();
+      await upsertLiberacionLocalRow({
+        ...row,
+        liberacion,
+        num_pedido: updates["NUM. DE PEDIDO"] ?? row.num_pedido ?? row["NUM. DE PEDIDO"] ?? null,
+        fecha: updates.FECHA ?? row.fecha ?? row.FECHA ?? null,
+        pdf_extraido: 1,
+        pdf_extraido_fecha: syncedAt,
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "SINCRONIZADO",
+        sync_appsheet_fecha: syncedAt,
+        sync_origen_ultimo: "JOB_LOCAL",
+      });
+    } catch (err) {
+      await upsertLiberacionLocalRow({
+        ...row,
+        liberacion,
+        num_pedido: updates["NUM. DE PEDIDO"] ?? row.num_pedido ?? row["NUM. DE PEDIDO"] ?? null,
+        fecha: updates.FECHA ?? row.fecha ?? row.FECHA ?? null,
+        pdf_extraido: 1,
+        pdf_extraido_fecha: nowIso(),
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "ERROR",
+        sync_appsheet_fecha: nowIso(),
+        sync_origen_ultimo: "JOB_LOCAL",
+      });
+      skippedRows.push({ row: i + 1, liberacion, reason: `appsheet_error: ${err?.message || err}` });
+      skipped++;
+      continue;
+    }
     updated++;
     if (CONFIG.appsheetDelayMs > 0) await sleep(CONFIG.appsheetDelayMs);
   }
-  saveReplicaRows(replicaPath, nextReplicaRows, CONFIG.appsheetKeyLiberaciones);
-  return { updated, skipped, skippedUnchanged, skippedRows };
+  return { updated, skipped, skippedUnchanged: 0, skippedRows };
 }
 
 export async function syncPedidosNative() {
