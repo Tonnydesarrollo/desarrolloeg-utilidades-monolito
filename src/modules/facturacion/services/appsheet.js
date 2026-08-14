@@ -124,14 +124,33 @@ async function leerTablaAppSheetCacheada(nombreTabla, ttlMs = APPSHEET_CACHE_TTL
   }
 }
 
+async function leerTablaAppSheetFresca(nombreTabla) {
+  const promise = leerTablaAppSheet(nombreTabla);
+  try {
+    return await promise;
+  } catch (err) {
+    throw err;
+  }
+}
+
 export async function obtenerCotizacion(cotizacionId) {
+  const wantedId = String(cotizacionId || "").trim();
   const rows = await leerTablaAppSheetCacheada("COTIZACIONES_VARIOS_CT");
-  return rows.find(r => String(r["Row ID"] || r.ID) === String(cotizacionId)) || null;
+  const cachedMatch = rows.find(r => String(r["Row ID"] || r.ID) === wantedId) || null;
+  if (cachedMatch) return cachedMatch;
+
+  const freshRows = await leerTablaAppSheetFresca("COTIZACIONES_VARIOS_CT");
+  return freshRows.find(r => String(r["Row ID"] || r.ID) === wantedId) || null;
 }
 
 export async function buscarConceptosPorCotizacion(cotizacionId) {
+  const wantedId = String(cotizacionId || "").trim();
   const rows = await leerTablaAppSheetCacheada("CONCEPTOS_VARIOS_CT");
-  return rows.filter(r => String(r.COTIZACION) === String(cotizacionId));
+  const cachedMatches = rows.filter(r => String(r.COTIZACION) === wantedId);
+  if (cachedMatches.length > 0) return cachedMatches;
+
+  const freshRows = await leerTablaAppSheetFresca("CONCEPTOS_VARIOS_CT");
+  return freshRows.filter(r => String(r.COTIZACION) === wantedId);
 }
 
 export async function mapaEmpresas() {
