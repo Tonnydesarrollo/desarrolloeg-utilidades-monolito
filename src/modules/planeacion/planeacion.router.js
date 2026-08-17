@@ -50,8 +50,28 @@ async function getBranchesCached({ force = false } = {}) {
           const parsed = JSON.parse(raw);
           const diskData = Array.isArray(parsed?.data) ? parsed.data : null;
           const diskAt = Number(parsed?.at || 0);
-          if (diskData && diskAt && now - diskAt < branchesCacheTtlMs) {
+          if (diskData && diskAt) {
             branchesCache = { at: diskAt, data: diskData, pending: null };
+            if (now - diskAt < branchesCacheTtlMs) {
+              return diskData;
+            }
+            if (!branchesCache.pending) {
+              branchesCache.pending = fetchBranchesFromAppSheet()
+                .then((rows) => {
+                  branchesCache = { at: Date.now(), data: rows, pending: null };
+                  try {
+                    fs.mkdirSync(planeacionRuntimeDir, { recursive: true });
+                    fs.writeFileSync(branchesCacheFile, JSON.stringify({ at: branchesCache.at, data: rows }), 'utf8');
+                  } catch {
+                    // ignore cache write errors
+                  }
+                  return rows;
+                })
+                .catch((error) => {
+                  branchesCache.pending = null;
+                  throw error;
+                });
+            }
             return diskData;
           }
         }
@@ -175,6 +195,10 @@ function getBranchAddress(row) {
 function shouldCachePlaneacionAsset(filePath) {
   const fileName = path.basename(filePath);
   return /^index-[A-Za-z0-9_-]+\.(js|css)$/i.test(fileName);
+}
+
+function sendPlaneacionHtml(res) {
+  res.sendFile(path.join(publicDir, 'index.html'));
 }
 
 planeacionApiRouter.get('/branches', async (_req, res) => {
@@ -431,6 +455,8 @@ planeacionApiRouter.post('/branches/create', async (req, res) => {
   }
 });
 
+planeacionRouter.get('/', (_req, res) => sendPlaneacionHtml(res));
+
 planeacionRouter.use(
   express.static(publicDir, {
     setHeaders(res, filePath) {
@@ -447,5 +473,4 @@ planeacionRouter.use(
   })
 );
 
-planeacionRouter.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
-planeacionRouter.get('*splat', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+planeacionRouter.get('*splat', (_req, res) => sendPlaneacionHtml(res));

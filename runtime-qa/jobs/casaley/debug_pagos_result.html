@@ -1,0 +1,513 @@
+
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head id="Head1"><title>
+	Consulta de nota de cargo/devolucion Cargadas
+</title>
+
+
+
+     <!-- ICONO -->
+    <link rel="icon" type="image/icon" href="../Images/logo_ley.ico" />
+    <!-- Bootstrap Core CSS -->
+    <link href="/CFacturaWeb/css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+    <link href="/CFacturaWeb/css/bootstrap/bootstrap-datepicker3.min.css" rel="stylesheet" />
+        <link href="/CFacturaWeb/CSS/bootstrap/bootstrap-theme.css" rel="stylesheet" />      
+        
+    <!-- CSS -->
+
+    <!-- CSS para iconos font-awesome -->
+    <link href="/CFacturaWeb/CSS/FontAwesome/font-awesome.min.css" rel="stylesheet" type="text/css" />
+  
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+        <script src="/CFacturaWeb/js/BootStrap/html5shiv.js"></script>
+        <script src="/CFacturaWeb/js/BootStrap/respond.min.js"></script>
+        <link href="/CFacturaWeb/css/HTML5.css" rel="stylesheet" />
+    <![endif]-->
+
+     <!-- jQuery -->
+    <!--[if lt IE 9]>
+        <script src="/CFacturaWeb/js/JQuery/jquery-1.11.1.min.js"></script>        
+    <![endif]-->
+    <!--[if (gte IE 9) | (!IE)]><!-->
+        <script src="/CFacturaWeb/js/JQuery/jquery-2.2.1.min.js"></script>        
+    <!--<![endif]-->
+
+      
+     <!-- CSS para iconos font-awesome -->
+    <link href="/CFacturaWeb/CSS/FontAwesome/font-awesome.min.css" rel="stylesheet" type="text/css" />
+    
+    <script src="/CFacturaWeb/js/JQuery/jquery.tablesorter.js"></script>
+
+
+    <!-- Bootstrap Core JavaScript -->
+    <script src="/CFacturaWeb/js/BootStrap/bootstrap.min.js"></script>
+    <script src="/CFacturaWeb/js/BootStrap/bootstrap-datepicker.min.js"></script>
+
+    
+    <!-- CSS Personalizadas -->
+    
+   
+    <link href="/CFacturaWeb/css/Menu.css" rel="stylesheet" type="text/css" />
+      <script src="/CFacturaWeb/js/Master.js"></script>
+      <script src="/CFacturaWeb/js/waitingDialog.js"></script>
+        <link href="/CFacturaWeb/css/Menu2.css" rel="stylesheet" type="text/css" />
+    
+    
+    <script src="https://ajax.microsoft.com/ajax/4.0/2/WebForms.js" type="text/javascript"></script>
+    <script src="https://ajax.microsoft.com/ajax/4.0/2/WebUIValidation.js" type="text/javascript"></script>
+    <script type="text/javascript" src='/CFacturaWeb/JS/JQuery/TableSorter/jquery.tablesorter.pager.js'></script>
+
+
+    <script>
+        var grdrid_ClientID = "ContentPlaceHolder1_grvConsultaFac";
+        var hdnReferencia_ClientID = "ContentPlaceHolder1_hdnReferencia";
+        var fechaIni_ClientID = "ContentPlaceHolder1_fechaIni";
+        var fechaFin_ClientID = "ContentPlaceHolder1_fechaFin";
+        var txtTotalRelacionados_ClientID = "ContentPlaceHolder1_TotalRelacionados";
+        var txtTotalDescontado_ClientID = "ContentPlaceHolder1_TotalDescontado";
+        var cboTipoPago = "ContentPlaceHolder1_cboTipoPago";
+        
+    </script>
+
+     <style>
+
+    
+         #MdlDoctosRelacionados .modal-dialog {
+    width: 90%;
+    height: auto;
+    max-height: 100%;
+}
+            .auto-style2 {
+            color: #336699;
+        }
+
+        /*th, td {
+            white-space: nowrap;
+        }*/
+
+
+
+       
+
+        .table td, .table th {
+            font-size: 80% !important;
+        }
+
+        .table.dataTable th:first-child {
+            border-top-left-radius: 5px;
+        }
+
+        .dataTable th:last-child {
+            border-top-right-radius: 5px;
+        }
+
+        .dataTable thead th, dataTable thead td {
+            border-bottom: none;
+        }
+
+        .dataTables_wrapper.no-footer .dataTables_scrollBody {
+            border-bottom: none;
+        }
+
+        .dataTables_wrapper {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+
+      
+
+
+    </style>
+</head>
+
+<body>
+    <form method="post" action="./ConsultaCP.aspx" id="form1">
+<div class="aspNetHidden">
+<input type="hidden" name="ContentPlaceHolder1_scrMgr_ConsultaFacturas_HiddenField" id="ContentPlaceHolder1_scrMgr_ConsultaFacturas_HiddenField" value="" />
+<input type="hidden" name="__EVENTTARGET" id="__EVENTTARGET" value="" />
+<input type="hidden" name="__EVENTARGUMENT" id="__EVENTARGUMENT" value="" />
+<input type="hidden" name="__LASTFOCUS" id="__LASTFOCUS" value="" />
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="/wEPDwUKMTk4NTE3OTAxOQ8WBB4PRGF0b3NDb25zdWx0YUNQZB4NRGF0b3NDb25zdWx0YRQpc0NGYWN0dXJhV0VCLlJlZmVyZW5jaWFzX1dFQi5FbmNhYmV6YWRvQ29tcFBhZ28sIENGYWN0dXJhV0VCLCBWZXJzaW9uPTEuMC4wLjc5LCBDdWx0dXJlPW5ldXRyYWwsIFB1YmxpY0tleVRva2VuPW51bGwAFgJmD2QWAgIDD2QWBAIBD2QWAgIDDw8WAh4EVGV4dAUMR0dBMjMwMjE4R0wzZGQCAg9kFggCCw8QZGQWAQIBZAINDxBkZBYBZmQCEw88KwARAwAPFgYeC18hRGF0YUJvdW5kZx4LXyFJdGVtQ291bnRmHgtBbGxvd1BhZ2luZ2dkARAWAQIDFgE8KwAFAQAWAh4HVmlzaWJsZWcWAWYMFCsAAGQCHQ9kFgJmD2QWBgIBDw8WAh8CBQhDYXNhIExleWRkAgMPDxYCHwIFG05vIHNlIGVuY29udHJvIGluZm9ybWFjacOzbmRkAgUPDxYCHwZoZGQYAQUoY3RsMDAkQ29udGVudFBsYWNlSG9sZGVyMSRncnZDb25zdWx0YUZhYw88KwAMAQhmZGYVBLTpg12aIuowBiuRYG4XJR55wXWNeYkyvY6mYTus" />
+</div>
+
+<script type="text/javascript">
+//<![CDATA[
+var theForm = document.forms['form1'];
+if (!theForm) {
+    theForm = document.form1;
+}
+function __doPostBack(eventTarget, eventArgument) {
+    if (!theForm.onsubmit || (theForm.onsubmit() != false)) {
+        theForm.__EVENTTARGET.value = eventTarget;
+        theForm.__EVENTARGUMENT.value = eventArgument;
+        theForm.submit();
+    }
+}
+//]]>
+</script>
+
+
+<script src="/CFacturaWeb/WebResource.axd?d=mI3uwhtxqBXe1iU8ZKGav09u71Kb99PJzUYqt8LbUQdUifaz7km4zQAYmTZd-liQscMLyddMo7qf262E0oDx4EjwkHU8f9uQg2mfTbBCLGE1&amp;t=638459986960000000" type="text/javascript"></script>
+
+
+<script src="/CFacturaWeb/ScriptResource.axd?d=DauOUE1DQ1rsTlFIu5e7bdq67nG63Wz8qBOlCiVwLXSl32dOUeVwwww4cn4P5iVqPp9PJZBidbOZjvkMz0thmKk25bwnJLcRD5LVUJQlaWMSCu_V6Hl5O3wQZWQKbLynEmFov9XcyvRp4Tz0gD1AzQ2&amp;t=3f0ccc7f" type="text/javascript"></script>
+<script type="text/javascript">
+//<![CDATA[
+if (typeof(Sys) === 'undefined') throw new Error('ASP.NET Ajax client-side framework failed to load.');
+//]]>
+</script>
+
+<script src="/CFacturaWeb/ScriptResource.axd?d=dvOeu3GTxgqd_9wbwkjEHPN6A40kNVNAV6WoUI4JSQlFDiLDr25RBunNBtVf1mQi01dWVbsuH0xJXKOK6PQmfwMxCRfA6t_wcN0XyYKdexsDitkifZF0Nym4eANL772SzgqarSVoeZVeoFTVWWABmA2&amp;t=3f0ccc7f" type="text/javascript"></script>
+<script src="/CFacturaWeb/ScriptResource.axd?d=t17CLBWRoJxSfuAO5U861fsglrgvPD-xxfo4eQpMqMnCRVZMUJceVup8U0T2-B5ZTuXrJI5UIODe4PWUGhvT3vODh4ihK7rvtnYdZvDQkOF0mhLzrvVCVEKKE8Sc5ye0kblpiznvzB_a2KvKmpYiu-x37KmhPOdaYA8E0vz_F0jsz5FCcmaYVCO8V-xzSlztG0RIWn2UzFVgRAdvOig_MKFghqMgreRHEDWD5WpMWuD40VKNwsTTuRoRrIOvIi9AODLrpJGjBLg7m2vntbUyyGCPvBJE08Qmd1-m1EcdFWPqwy9DX5j_0zahMzBqKgPoWYxZvfSye1rQwF3430FxiY_YmNBP3YcwnPI_EiRTjHxpD58RKI7HC7RmXbiKhDIh_iZboASm5y0KgQLGcPgN5lXgIHe2OxoExvdghfYRWM3dPLr_mo2HD_TBimGU0tpO0" type="text/javascript"></script>
+<div class="aspNetHidden">
+
+	<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="0A020413" />
+</div>
+        <div class="container">
+            <div class="navbar-wrapper">
+                <div class="container-fluid">
+                   <nav class="navbar navbar-fixed-top" style="font-size: small;">
+                        <div class="container">
+                            <div class="navbar-header">
+                                <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+                                    <span class="sr-only">Toggle navigation</span>
+                                    <span class="icon-bar"></span>
+                                    <span class="icon-bar"></span>
+                                    <span class="icon-bar"></span>
+                                </button>
+                                    <a class="navbar-brand"  href="/CFacturaWeb/Inicio.aspx ">
+                                    <img id="imgLogoSistema" title="Recepción de facturas" src="../Images/logo_ley.png" style="height:40px;width:45px;" />
+                                </a>
+                            </div>
+                            <div id="navbar" class="navbar-collapse collapse">
+                                <div id="pnlConsultas">
+	
+                                    <ul class="nav navbar-nav pull-right">
+                                               <li  class="test dropdown">
+                                            <a href="#" class="dropdown-toggle active" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Visitas</a>
+                                            <ul>
+                                                <li><a href="/CFacturaWeb/Visitas/RptRepresentantes.aspx ">Representantes</a></li>
+                                                <li><a href="/CFacturaWeb/Visitas/Consultas.aspx ">Consulta visitas</a></li>
+                                                <li><a href="/CFacturaWeb/Visitas/NuevaVisita.aspx ">Programar visita</a></li>
+                                            </ul>
+                                       </li>
+                                        <li  class="test dropdown">
+                                            <a href="#" class="dropdown-toggle active" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Facturas</a>
+                                            <ul>
+                                                <li><a href="/CFacturaWeb/Facturas/ConsultaFacturas.aspx ">Consulta</a></li>
+                                                <li><a href="/CFacturaWeb/Facturas/CargaFactura.aspx ">Carga</a></li>
+                                                <li><a href="/CFacturaWeb/Facturas/BajaFacturas.aspx ">Bajas</a></li>
+                                                <li><a href="/CFacturaWeb/Facturas/ProgramacionPagos.aspx ">Programacion de pagos</a></li>
+                                                <li><a href="/CFacturaWeb/Facturas/ConsultaEntradas.aspx ">Consulta de entradas</a></li>
+                                                
+                                            </ul>
+                                       </li>
+
+                                        <li  class="test dropdown">
+                                            <a href="#" class="dropdown-toggle active" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Notas de crédito</a>
+                                            <ul>
+                                                <li>
+                                                    <a href="#">NC por devoluciones</a>
+                                                    <ul>
+                                                        <li><a href="/CFacturaWeb/NC/ConsultaNotaCD.aspx?tipo=ND ">Consulta</a></li>
+                                                        <li><a href="/CFacturaWeb/NC/CargaNotaCD.aspx?tipo=ND ">Carga</a></li>
+                                                    </ul>
+                                                </li>
+                                            
+                                                <li>
+                                                    <a href="#">NC por avisos de cargo</a>
+                                                    <ul>
+                                                        <li><a href="/CFacturaWeb/NC/ConsultaNotaCD.aspx?tipo=NA ">Consulta</a></li>
+                                                        <li><a href="/CFacturaWeb/NC/CargaNotaCD.aspx?tipo=NA ">Carga</a></li>
+                                                    </ul>
+                                                </li>
+                                              
+                                                <li>
+                                                    <a href="#">NC por diferencias</a>
+                                                    <ul>
+                                                        <li><a href="/CFacturaWeb/NC/ConsultaNotaCD.aspx?tipo=AD ">Consulta</a></li>
+                                                        <li><a href="/CFacturaWeb/NC/CargaNotaCD.aspx?tipo=AD ">Carga</a></li>
+                                                    </ul>
+                                                </li>
+                                                <li><a href="/CFacturaWeb/Facturas/CargaFactura.aspx?tipo=NS ">NC Servicios</a></li>
+                                                <li><a href="/CFacturaWeb/Facturas/CargaFactura.aspx?tipo=NF ">NC Activos Fijos</a></li>
+                                            </ul>
+                                        </li>
+
+                                        <li  class="test dropdown">
+                                            <a href="#" class="dropdown-toggle active" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Integración de Deducciones</a>
+                                            <ul>
+                                                 <li><a href="/CFacturaWeb/ConsultaIntegracionDeducciones.aspx ">Consulta</a></li>
+                                            </ul>
+                                       </li>
+
+                                        
+                                        <li  class="test dropdown">
+                                            <a href="#" class="dropdown-toggle active" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">CFDI de pago</a>
+                                            <ul>
+                                                <li>
+                                                    <a href="#">Pagos</a>
+                                                    <ul >
+                                                        <li><a href="/CFacturaWeb/Pagos/ConsultaCP.aspx ">Consulta</a></li>
+                                                        <li><a href="/CFacturaWeb/Pagos/CargaNotaCP.aspx?tipo=CP ">Cargar</a></li>
+                                                        <li><a href="/CFacturaWeb/Pagos/BajaCP.aspx ">Baja</a></li>
+                                                        <li><a href="/CFacturaWeb/Pagos/PreguntasFrecuentes.aspx ">Preguntas frecuentes</a></li>
+                                                    </ul>
+                                                </li>
+                                                <li>
+                                                    <a href="#">Pagos por compensación</a>
+                                                    <ul>
+                                                        <li><a href="/CFacturaWeb/Pagos/ConsultaCPComp.aspx ">Consulta</a></li>
+                                                        <li><a href="/CFacturaWeb/Pagos/CargaNotaCP.aspx?tipo=CPC ">Cargar</a></li>
+                                                    </ul>
+                                                </li>
+                                            </ul>
+                                        </li>
+                                        
+                                        
+                                        
+                                         
+                                        <li class="test dropdown">
+                                            <a href="#" class="dropdown-toggle active" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Cartas Aclaratorias</a>
+                                            <ul>
+                                                <li>
+                                                    <a href="#">Cartas</a>
+                                                    <ul>
+                                                        <li><a href="/CFacturaWeb/CartasAclaratorias/ConsultasCartasAclaratorias.aspx ">Consulta</a></li>
+                                                    </ul>
+                                                </li>
+                                            </ul>
+                                        </li>
+                                        <li  class="test dropdown">
+                                            <a href="#" class="dropdown-toggle active" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+                                                <span id="lblusuimg"><i class="fa fa-user" aria-hidden="true"></i></span>
+                                                <span id="ctlLbl_User">GGA230218GL3</span>
+                                                <span class="caret"></span>
+                                            </a>
+                                            <ul>
+                                                <li><a href="/CFacturaWeb/DatosProveedor.aspx ">Datos proveedor</a></li>
+
+                                                <li><a href="/CFacturaWeb/Etiquetado.aspx ">Etiquetado</a></li>
+                                                <li class="active">
+                                                    <a id="btnlogoff" title="Salir" href="javascript:__doPostBack(&#39;ctl00$btnlogoff&#39;,&#39;&#39;)">Cerrar Sesión
+                                                        <i class="fa fa-sign-out" aria-hidden="true"></i>
+                                                    </a> 
+                                                </li>
+                                            </ul>
+                                        </li>
+                                        
+                                        
+                                    </ul>
+                                
+</div>
+
+                         
+                            </div>
+                        </div>
+                    </nav>
+                </div>
+            </div>
+        </div>
+        <div class="container">
+            
+    <script type="text/javascript">
+//<![CDATA[
+Sys.WebForms.PageRequestManager._initialize('ctl00$ContentPlaceHolder1$scrMgr_ConsultaFacturas', 'form1', ['fctl00$ContentPlaceHolder1$upModal','ContentPlaceHolder1_upModal'], [], [], 360000, 'ctl00');
+//]]>
+</script>
+
+    <br />
+    <br />
+    <br />
+
+    <div class="row" style="margin-top: 10px; margin-bottom: 15px;">
+        <div class="col-md-12 rwbreadcrumb">
+            <ol class="breadcrumb">
+                <li class="active">Consulta de comprobantes de pago</li>
+            </ol>
+        </div>
+    </div>
+    <br />
+    <br />
+
+    <div class="row">
+        <div class="col-sm-3 col-md-1">
+            <span class="auto-style2">Referencia:</span>
+        </div>
+        
+        <div class="col-sm-3 col-md-2">
+            <input name="ctl00$ContentPlaceHolder1$TxBxReferencia" type="text" maxlength="19" id="ContentPlaceHolder1_TxBxReferencia" class="form-control" onkeydown="return inputText_KeyDown(event, &#39;TxBxOperacion&#39;, false);" />
+        </div>
+
+        <div class="col-sm-3 col-md-1">
+            <span class="auto-style2"># de operación:</span>
+        </div>
+        
+        <div class="col-sm-3 col-md-2">
+            <input name="ctl00$ContentPlaceHolder1$TxBxOperacion" type="text" maxlength="13" id="ContentPlaceHolder1_TxBxOperacion" class="form-control" onkeydown="return inputText_KeyDown(event, &#39;fechaIni&#39;, false);" />
+        </div>
+
+        <div class="col-sm-3 col-md-1">
+            <span class="auto-style2">Fecha  inicial:</span>
+        </div>
+
+        <div class="col-sm-3 col-md-2">
+            <input name="ctl00$ContentPlaceHolder1$fechaIni" type="text" value="11/08/2026" maxlength="10" id="ContentPlaceHolder1_fechaIni" class="form-control" onkeydown="return inputText_KeyDown(event, &#39;fechaFin&#39;, false);" />
+        </div>
+
+        <div class="col-sm-3 col-md-1">
+            <span class="auto-style2">Fecha final:</span>
+        </div>
+        
+        <div class="col-sm-3 col-md-2">
+            <input name="ctl00$ContentPlaceHolder1$fechaFin" type="text" value="11/08/2026" maxlength="10" id="ContentPlaceHolder1_fechaFin" class="form-control" onkeydown="return inputText_KeyDown(event, &#39;cboTipoPago&#39;, false);" />
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-sm-3 col-md-1">
+            <span class="auto-style2">Tipo pago:</span>
+        </div>
+        
+        <div class="col-sm-3 col-md-4">
+            <select name="ctl00$ContentPlaceHolder1$cboTipoPago" onchange="javascript:setTimeout(&#39;__doPostBack(\&#39;ctl00$ContentPlaceHolder1$cboTipoPago\&#39;,\&#39;\&#39;)&#39;, 0)" id="ContentPlaceHolder1_cboTipoPago" class="form-control">
+	<option value="0">No cobrado</option>
+	<option selected="selected" value="1">Cobrado</option>
+
+</select>
+        </div>
+                <div class="col-sm-3 col-md-1">
+            <span class="auto-style2">Tipo pago:</span>
+        </div>
+        
+        <div class="col-sm-3 col-md-4">
+            <select name="ctl00$ContentPlaceHolder1$cboEstatus" onchange="javascript:setTimeout(&#39;__doPostBack(\&#39;ctl00$ContentPlaceHolder1$cboEstatus\&#39;,\&#39;\&#39;)&#39;, 0)" id="ContentPlaceHolder1_cboEstatus" class="form-control">
+	<option selected="selected" value="T">Todos</option>
+	<option value="C">Cargados</option>
+	<option value="P">Pendientes</option>
+
+</select>
+        </div>
+    </div>
+    
+    <div class="row">
+        <input type="submit" name="ctl00$ContentPlaceHolder1$btnCancelar" value="Regresar" id="ContentPlaceHolder1_btnCancelar" class="btn btn-danger" style="float: right" />
+        <input type="submit" name="ctl00$ContentPlaceHolder1$btnBuscar" value="Buscar" id="ContentPlaceHolder1_btnBuscar" class="btn btn-primary" style="float: right" />
+    </div>
+
+    <br />
+    <br />
+    <div class="row">
+        <div>
+
+</div>
+        <br />
+    </div>
+
+    <!-- Modal-Detalle -->
+    <div id="MdlDoctosRelacionados" style="width: 100%;" class="modal fade" role="dialog">
+        <div class="modal-dialog">
+            <!-- Modal-Content -->
+            <div class="modal-content" style="width: 100%;">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title"><i class="fa fa-search"></i>&nbsp;Documentos relacionados:</h4>
+                </div>
+                <div id="Reporte" class="panel-collapse" style="width: auto;">
+                    <div class="panel-body" style="width: auto;">
+                        <div id='divInicial' class="col-md-14 table-responsive">
+                        </div>
+                        <div id='col-Rep' class="col-md-14 table-responsive">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="modal-Total" class="modal-body">
+                    <label class="elemento">Total importe pagado: </label>
+                    <textarea name="ctl00$ContentPlaceHolder1$TotalRelacionados" rows="2" cols="20" readonly="readonly" id="ContentPlaceHolder1_TotalRelacionados" title="Importe total" DataFormatString="{0:C2}" class="form-control" style="resize: none">
+</textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-info" data-dismiss="modal" aria-hidden="true">Cerrar</button>
+
+                    <a id="ContentPlaceHolder1_btnDescargaXML2" title="Buscar..." class="btn btn-primary pull-right" href="javascript:__doPostBack(&#39;ctl00$ContentPlaceHolder1$btnDescargaXML2&#39;,&#39;&#39;)">
+                    <i class="fa fa-fw fa-table" aria-hidden="true"></i> Descarga XML
+                    </a>
+                    <a id="ContentPlaceHolder1_btnDescargaExcelDet" title="Excel..." class="btn btn-primary pull-right" href="javascript:__doPostBack(&#39;ctl00$ContentPlaceHolder1$btnDescargaExcelDet&#39;,&#39;&#39;)">
+                    <i class="fa fa-fw fa-file" aria-hidden="true"></i> Descarga EXCEL
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal-Detalle del detalle -->
+    <div id="MdlDetDescontado" class="modal fade" role="dialog">
+        <div class="modal-dialog">
+            <!-- Modal-Content -->
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title"><i class="fa fa-search"></i>&nbsp;Deducciones:</h4>
+                </div>
+                <div id="modal-MdlDetDescontado" class="modal-body" style="overflow: scroll; height: 400px">
+                </div>
+                <div id="modal-TotalDescontado" class="modal-body">
+                    <label class="elemento">Total deducciones: </label>
+                    <textarea name="ctl00$ContentPlaceHolder1$TotalDescontado" rows="2" cols="20" readonly="readonly" id="ContentPlaceHolder1_TotalDescontado" title="Importe total" DataFormatString="{0:C2}" class="form-control" style="resize: none">
+</textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-info" data-dismiss="modal" aria-hidden="true">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="Modal-Aux" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div id="ContentPlaceHolder1_upModal">
+	
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                            <h4 class="modal-title">
+                                <span id="ContentPlaceHolder1_lblModalTitle">Casa Ley</span></h4>
+                        </div>
+                        <div class="modal-body">
+                            <span id="ContentPlaceHolder1_lblModalBody">No se encontro información</span>
+                        </div>
+                        <div class="modal-footer">
+                            
+                            <input type="submit" name="ctl00$ContentPlaceHolder1$BtnCerrar" value="Cerrar" id="ContentPlaceHolder1_BtnCerrar" class="btn btn-info" data-dismiss="modal" aria-hidden="true" />
+                        </div>
+                    </div>
+                
+</div>
+        </div>
+    </div>
+
+
+
+    <input type="hidden" name="ctl00$ContentPlaceHolder1$hdnReferencia" id="ContentPlaceHolder1_hdnReferencia" />
+    <input type="hidden" name="ctl00$ContentPlaceHolder1$hdnTipo" id="ContentPlaceHolder1_hdnTipo" />
+    <input type="hidden" name="ctl00$ContentPlaceHolder1$hdnSociedad" id="ContentPlaceHolder1_hdnSociedad" />
+    <input type="hidden" name="ctl00$ContentPlaceHolder1$hdnAnio" id="ContentPlaceHolder1_hdnAnio" />
+
+
+        </div>
+        <input type="hidden" name="ctl00$HdnUsuario" id="HdnUsuario" />
+    
+
+<script type="text/javascript">
+//<![CDATA[
+(function() {var fn = function() {$get("ContentPlaceHolder1_scrMgr_ConsultaFacturas_HiddenField").value = '';Sys.Application.remove_init(fn);};Sys.Application.add_init(fn);})();$('#Modal-load').modal('hide'); $('#Modal-Aux').modal({backdrop: 'static'});//]]>
+</script>
+</form>
+</body>
+</html>

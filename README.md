@@ -44,12 +44,24 @@ Con `runOnStart=1` y un intervalo bajo, el monolito queda revisando casi en tiem
 
 La portada de `apps.desarrolloeg.com` funciona como portal de acceso por correo.
 
+### Guia operativa
+
+Si necesitas ubicar rapido que pantalla usar en cada caso, revisa:
+
+- [`docs/guia-operativa-portal.md`](docs/guia-operativa-portal.md)
+
+### Guia visual
+
+Si necesitas una referencia de estilos y jerarquia para nuevas vistas, revisa:
+
+- [`docs/guia-visual-portal.md`](docs/guia-visual-portal.md)
+
 ### Ambientes
 
 - `https://apps.desarrolloeg.com` funciona como `prod`.
-- `https://apps.desarrolloeg.com/QA` funciona como `QA` o pruebas.
-- `https://apps.desarrolloeg.com/qa` tambien resuelve al mismo entorno de `QA`.
-- El login de QA refleja el login de prod, pero vive en su propia ruta y no comparte sesion con productivo.
+- `https://qa.apps.desarrolloeg.com` funciona como `QA` o pruebas.
+- `https://apps.desarrolloeg.com/QA` y `https://apps.desarrolloeg.com/qa` quedan como rutas de compatibilidad temporal.
+- El login de QA vive en su propio host y no comparte sesion con productivo.
 - El login productivo no debe mostrar accesos de prueba.
 - El flujo operativo queda asi:
   1. Se despliegan los cambios solicitados por QA en `QA`.
@@ -65,6 +77,7 @@ La portada de `apps.desarrolloeg.com` funciona como portal de acceso por correo.
 
 Variables nuevas recomendadas:
 
+- `APP_ENVIRONMENT`
 - `PORTAL_AUTH_SECRET`
 - `PORTAL_SESSION_TTL_HOURS`
 - `PORTAL_EMPLOYEES_CACHE_TTL_MS`
@@ -95,6 +108,7 @@ Variables nuevas recomendadas:
 8. Agrega este redirect URI exacto:
 
    - `https://apps.desarrolloeg.com/auth/google/callback`
+   - `https://qa.apps.desarrolloeg.com/auth/google/callback`
    - `https://apps.desarrolloeg.com/QA/auth/google/callback`
 
 9. Copia el `Client ID` y el `Client Secret` en estas variables:
@@ -231,12 +245,25 @@ docker compose up -d --build
 
 Ese compose levanta `monolito` y `cloudflared`.
 
-El stack tambien levanta `appsheet-sync` desde el proyecto hermano
-`../appsheet_local_sync`. Este servicio mantiene la replica SQLite, usa AppSheet
-como fallback de lectura y se recupera automaticamente cuando falla el
-almacenamiento local.
+Si quieres levantar la version de QA en paralelo, crea primero un archivo `.env.qa.docker` a partir de la plantilla `.env.qa.example` y luego ejecuta:
+
+```bash
+docker compose --profile qa up -d --build
+```
+
+Ese perfil agrega `monolito-qa` en `7001` y publica `qa.apps.desarrolloeg.com` sin tocar el contenedor productivo.
+
+Si prefieres arrancarlo desde PowerShell, usa:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-docker-monolith-qa.ps1
+```
+
+El backend de bolsa de trabajo vive ahora en el proyecto aparte
+`../Backend Bolsa de trabajo`. El monolito ya no monta ni depende de ese sync.
 
 El tunnel corre dentro de Docker y apunta al servicio `monolito` por red interna.
+Cuando el perfil `qa` esta activo, tambien enruta `qa.apps.desarrolloeg.com` al servicio `monolito-qa`.
 Si quieres forzar el arranque completo de CasaLey en una sola corrida, usa el job `casaley-sync-appsheet` desde `/jobs` o dale `CASALEY_SYNC_ALL_ENABLED=1`.
 
 ### 4. Instalador y autoactualizacion
@@ -266,9 +293,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-docker-mon
 Si quieres alta disponibilidad, puedes desplegar el mismo stack en mas de una maquina:
 
 1. Copia el mismo repo y el mismo `.env.docker`.
-2. Copia `runtime/`, `secrets/`, `publicimg/` y `cloudflared/` a cada servidor.
+2. Copia `runtime/`, `runtime-qa/`, `secrets/`, `publicimg/` y `cloudflared/` a cada servidor.
 3. Asegura que todos los nodos usen el mismo tunnel de Cloudflare.
 4. Arranca el mismo `docker compose up -d --build` en cada maquina.
+5. Si quieres exponer QA, arranca tambien `docker compose --profile qa up -d --build`.
 
 Con eso, `cloudflared` puede abrir mas de una conexion al mismo tunnel y el acceso externo deja de depender de un solo host.
 

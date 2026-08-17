@@ -16,8 +16,8 @@ const monolithServices = [
     name: "Contabilidad",
     description: "API interna del modulo contable dentro del monolito.",
     path: "/contabilidad/health",
-    probeUrl: "https://apps.desarrolloeg.com/contabilidad/health",
-    href: "https://apps.desarrolloeg.com/contabilidad/health",
+    probePath: "/contabilidad/health",
+    hrefPath: "/contabilidad/health",
   },
   {
     id: "facturacion",
@@ -40,16 +40,16 @@ const monolithServices = [
     name: "Planeacion Ley",
     description: "Interfaz web de planeacion mensual dentro de apps.",
     path: "/Planeacion-ley/",
-    probeUrl: "https://apps.desarrolloeg.com/Planeacion-ley/",
-    href: "https://apps.desarrolloeg.com/Planeacion-ley/",
+    probePath: "/Planeacion-ley/",
+    hrefPath: "/Planeacion-ley/",
   },
   {
     id: "planeacion-api",
     name: "Planeacion API",
     description: "API consumida por la vista de planeacion.",
     path: "/api/branches",
-    probeUrl: "https://apps.desarrolloeg.com/api/branches",
-    href: "https://apps.desarrolloeg.com/api/branches",
+    probePath: "/api/branches",
+    hrefPath: "/api/branches",
   },
   {
     id: "clubfactura",
@@ -64,24 +64,24 @@ const monolithServices = [
     name: "Jobs",
     description: "API para ejecutar y observar jobs migrados al monolito.",
     path: "/jobs",
-    probeUrl: "https://apps.desarrolloeg.com/jobs",
-    href: "https://apps.desarrolloeg.com/jobs",
+    probePath: "/jobs",
+    hrefPath: "/jobs",
   },
   {
     id: "separar-pipc",
     name: "Separar PIPC",
     description: "Herramienta para dividir un PIPC usando el indice del documento y sus pies de pagina.",
     path: "/SEPARAR-PIPC/health",
-    probeUrl: "https://apps.desarrolloeg.com/SEPARAR-PIPC/health",
-    href: "https://apps.desarrolloeg.com/SEPARAR-PIPC/",
+    probePath: "/SEPARAR-PIPC/health",
+    hrefPath: "/SEPARAR-PIPC/",
   },
   {
     id: "solventaciones",
     name: "Solventaciones",
     description: "Reporte de visitas y solventaciones por tienda, razon social y municipio.",
     path: "/SOLVENTACIONES/health",
-    probeUrl: "https://apps.desarrolloeg.com/SOLVENTACIONES/health",
-    href: "https://apps.desarrolloeg.com/SOLVENTACIONES/html",
+    probePath: "/SOLVENTACIONES/health",
+    hrefPath: "/SOLVENTACIONES/html",
   },
 ];
 
@@ -232,7 +232,7 @@ function getSchedulerState(jobs, started) {
   };
 }
 
-function getWhatsAppState(service = {}) {
+export function getWhatsAppState(service = {}) {
   if (!service.enabled) return { tone: "neutral", label: "Desactivado" };
 
   switch (service.status) {
@@ -240,6 +240,7 @@ function getWhatsAppState(service = {}) {
       return { tone: "neutral", label: "Standby" };
     case "idle":
       return { tone: "neutral", label: "En espera" };
+    case "authenticated":
     case "ready":
       return { tone: "ok", label: "Conectado" };
     case "awaiting_qr":
@@ -284,7 +285,8 @@ async function tailFile(filePath, lines = LOG_LINES) {
 async function getMonolithStatuses(baseUrl) {
   const checks = await Promise.all(
     monolithServices.map(async (service) => {
-      const probeUrl = service.probeUrl || buildAbsoluteUrl(baseUrl, service.path);
+      const probeUrl = service.probeUrl || buildAbsoluteUrl(baseUrl, service.probePath || service.path);
+      const href = service.href || buildAbsoluteUrl(baseUrl, service.hrefPath || service.path);
       const startedAt = Date.now();
 
       try {
@@ -305,6 +307,7 @@ async function getMonolithStatuses(baseUrl) {
         return {
           ...service,
           probeUrl,
+          href,
           ok: response.ok,
           status: response.status,
           latencyMs: Date.now() - startedAt,
@@ -314,6 +317,7 @@ async function getMonolithStatuses(baseUrl) {
         return {
           ...service,
           probeUrl,
+          href,
           ok: false,
           status: 0,
           latencyMs: Date.now() - startedAt,
@@ -714,7 +718,7 @@ function renderWhatsAppCard(whatsapp) {
       </div>
       <p class="panel-copy">Estado de la sesion de WhatsApp Web dentro del monolito.</p>
       <dl class="meta-list">
-        <div><dt>Conexion</dt><dd>${escapeHtml(whatsapp.connected ? "Conectado" : "Sin conexion")}</dd></div>
+        <div><dt>Conexi?n</dt><dd>${escapeHtml(whatsapp.connected ? "Conectado" : "Sin conexion")}</dd></div>
         <div><dt>Inicio</dt><dd>${escapeHtml(formatDateTime(whatsapp.startedAt))}</dd></div>
         <div><dt>Ready</dt><dd>${escapeHtml(formatDateTime(whatsapp.readyAt))}</dd></div>
         <div><dt>Ultimo QR</dt><dd>${escapeHtml(formatDateTime(whatsapp.qrGeneratedAt))}</dd></div>
@@ -862,6 +866,7 @@ export function renderDashboardHtml(data) {
   <title>Estado de Servicios | DESARROLLOEG</title>
   <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
   <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+  <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
   <style>
     :root {
       --bg: #f4efe8;
@@ -1201,16 +1206,16 @@ export function renderDashboardHtml(data) {
     }
   </style>
 </head>
-<body>
+  <body class="portal-shell portal-dashboard">
   <a class="skip-link" href="#status-main">Saltar al contenido principal</a>
   <main id="status-main" role="main" aria-label="Estado de servicios">
     <section class="hero">
       <div class="hero-grid">
         <div>
           <h1>Estado de Servicios</h1>
-          <p>Vista resumida del monolito: primero salud publica, luego servicios de fondo y por ultimo el diagnostico tecnico que solo se despliega cuando hace falta.</p>
+          <p>Vista resumida del monolito: primero salud pública, luego servicios de fondo y por último el diagnóstico técnico que solo se despliega cuando hace falta.</p>
           <div class="hero-actions">
-            <a class="button primary" href="/status/status.json" target="_blank" rel="noreferrer">Ver JSON tecnico</a>
+            <a class="button primary" href="/status/status.json" target="_blank" rel="noreferrer">Ver JSON técnico</a>
             <a class="button ghost" href="/" rel="noreferrer">Inicio</a>
             <a class="button ghost" href="/health" target="_blank" rel="noreferrer">Health</a>
             <button class="button ghost" type="button" data-refresh-now>Actualizar ahora</button>
@@ -1227,7 +1232,7 @@ export function renderDashboardHtml(data) {
           </div>
           <div class="hero-note">
             <strong>Auto refresh</strong>
-            <p>La pagina se recarga en <span data-refresh-count>60</span>s.</p>
+            <p>La página se recarga en <span data-refresh-count>60</span>s.</p>
           </div>
         </div>
       </div>
@@ -1242,8 +1247,8 @@ export function renderDashboardHtml(data) {
     <section>
       <div class="section-head">
         <div>
-          <h2>Servicios Publicos</h2>
-          <p class="section-copy">Endpoints visibles para usuarios, integraciones y chequeos rapidos.</p>
+          <h2>Entrada principal</h2>
+          <p class="section-copy">Servicios visibles primero para consultas rapidas, integraciones y chequeos basicos.</p>
         </div>
       </div>
       <div class="panel-grid">
@@ -1254,8 +1259,8 @@ export function renderDashboardHtml(data) {
     <section>
       <div class="section-head">
         <div>
-          <h2>Servicios De Fondo</h2>
-          <p class="section-copy">Coordinacion del nodo, scheduler, jobs y WhatsApp en una sola lectura.</p>
+          <h2>Soporte tecnico</h2>
+          <p class="section-copy">Coordinacion del nodo, scheduler, jobs y WhatsApp en una lectura secundaria y clara.</p>
         </div>
       </div>
       <div class="panel-grid">
@@ -1268,7 +1273,7 @@ export function renderDashboardHtml(data) {
     <section>
       <div class="section-head">
         <div>
-          <h2>Jobs Programados</h2>
+          <h2>Operacion de jobs</h2>
           <p class="section-copy">Cada tarjeta resume frecuencia, siguiente corrida y resultado reciente.</p>
         </div>
       </div>
@@ -1280,7 +1285,7 @@ export function renderDashboardHtml(data) {
     <section>
       <div class="section-head">
         <div>
-          <h2>PM2 Y Diagnostico</h2>
+          <h2>PM2 y diagnostico</h2>
           <p class="section-copy">El proceso principal sigue visible; el legado y los retirados quedan agrupados para revisar solo cuando sea necesario.</p>
         </div>
       </div>

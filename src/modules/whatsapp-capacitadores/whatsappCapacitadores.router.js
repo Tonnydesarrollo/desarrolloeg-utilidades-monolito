@@ -20,8 +20,8 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
   const qrAvailable = Boolean(status?.qrAvailable);
   const title = "WhatsApp Capacitadores";
   const subtitle = qrAvailable
-    ? "El bot esta listo para abrir el QR y revisar su estado operativo."
-    : "El bot esta disponible, pero aun no hay QR generado.";
+    ? "El bot está listo para abrir el QR y revisar su estado operativo."
+    : "El bot está disponible, pero aún no hay QR generado.";
 
   return `<!doctype html>
 <html lang="es">
@@ -31,32 +31,20 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
     <title>${escapeHtml(title)}</title>
     <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
     <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
     <style>
-      :root {
-        --bg: #0f172a;
-        --bg-soft: #111827;
-        --panel: rgba(17, 24, 39, 0.88);
-        --panel-border: rgba(148, 163, 184, 0.22);
-        --text: #f8fafc;
-        --muted: #cbd5e1;
-        --accent: #f59e0b;
-        --accent-2: #22c55e;
-      }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(circle at top left, rgba(245, 158, 11, 0.22), transparent 35%),
-          radial-gradient(circle at top right, rgba(34, 197, 94, 0.18), transparent 30%),
-          linear-gradient(180deg, var(--bg) 0%, #020617 100%);
+        font-family: var(--portal-font-body);
+        color: var(--portal-ink);
+        background: transparent;
       }
       main {
-        max-width: 1100px;
+        max-width: 1120px;
         margin: 0 auto;
-        padding: 32px 20px 48px;
+        padding: 24px 16px 56px;
       }
       .hero {
         display: grid;
@@ -65,32 +53,38 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
         align-items: stretch;
       }
       .panel {
-        background: var(--panel);
-        border: 1px solid var(--panel-border);
+        background: var(--portal-surface);
+        border: 1px solid var(--portal-line);
         border-radius: 24px;
         padding: 24px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+        box-shadow: var(--portal-shadow);
         backdrop-filter: blur(14px);
       }
       .eyebrow {
         text-transform: uppercase;
         letter-spacing: 0.18em;
         font-size: 12px;
-        color: var(--accent);
+        color: var(--portal-accent-3);
         font-weight: 800;
         margin: 0 0 14px;
+        font-family: var(--portal-font-ui);
       }
       h1 {
         margin: 0;
+        font-family: var(--portal-font-display);
+        text-transform: uppercase;
+        letter-spacing: -0.03em;
         font-size: clamp(32px, 6vw, 58px);
         line-height: 0.98;
+        color: var(--portal-ink);
       }
       .lead {
         margin: 16px 0 0;
-        color: var(--muted);
+        color: var(--portal-muted);
         font-size: 16px;
         line-height: 1.7;
         max-width: 60ch;
+        font-family: var(--portal-font-ui);
       }
       .meta {
         display: grid;
@@ -101,20 +95,22 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
       .metric {
         border-radius: 18px;
         padding: 16px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(15, 23, 42, 0.03);
+        border: 1px solid rgba(33, 49, 63, 0.08);
       }
       .metric span {
         display: block;
-        color: var(--muted);
+        color: var(--portal-muted);
         font-size: 12px;
         text-transform: uppercase;
         letter-spacing: 0.12em;
         margin-bottom: 8px;
+        font-family: var(--portal-font-ui);
       }
       .metric strong {
         font-size: 18px;
         line-height: 1.3;
+        font-family: var(--portal-font-ui);
       }
       .actions {
         display: flex;
@@ -131,20 +127,21 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
         border-radius: 999px;
         text-decoration: none;
         font-weight: 800;
+        font-family: var(--portal-font-ui);
         transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
       }
       .button:hover {
         transform: translateY(-1px);
       }
       .button.primary {
-        background: linear-gradient(135deg, var(--accent) 0%, #fb923c 100%);
-        color: #111827;
-        box-shadow: 0 14px 30px rgba(245, 158, 11, 0.22);
+        background: linear-gradient(135deg, var(--portal-accent-3) 0%, var(--portal-accent) 100%);
+        color: #fff;
+        box-shadow: 0 14px 30px rgba(15, 76, 92, 0.16);
       }
       .button.secondary {
-        background: rgba(255, 255, 255, 0.04);
-        color: var(--text);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(15, 23, 42, 0.04);
+        color: var(--portal-ink);
+        border: 1px solid var(--portal-line);
       }
       .stack {
         display: grid;
@@ -156,23 +153,24 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
         gap: 8px;
         border-radius: 999px;
         padding: 10px 14px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 23, 42, 0.04);
+        border: 1px solid var(--portal-line);
         font-size: 13px;
         width: fit-content;
+        font-family: var(--portal-font-ui);
       }
       .dot {
         width: 10px;
         height: 10px;
         border-radius: 50%;
-        background: ${status?.connected ? "var(--accent-2)" : "var(--accent)"};
-        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.05);
+        background: ${status?.connected ? "#16a34a" : "#c0392b"};
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.55);
       }
       pre {
         margin: 0;
         white-space: pre-wrap;
         word-break: break-word;
-        background: rgba(2, 6, 23, 0.74);
+        background: rgba(15, 23, 42, 0.95);
         color: #e2e8f0;
         padding: 16px;
         border-radius: 16px;
@@ -194,15 +192,17 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
         padding: 14px 16px;
         border-radius: 16px;
         text-decoration: none;
-        color: var(--text);
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: var(--portal-ink);
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid var(--portal-line);
+        box-shadow: 0 10px 24px rgba(21, 32, 43, 0.05);
+        font-family: var(--portal-font-ui);
       }
       .link-card strong {
         display: block;
       }
       .link-card span {
-        color: var(--muted);
+        color: var(--portal-muted);
         font-size: 13px;
       }
       @media (max-width: 900px) {
@@ -212,8 +212,9 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
       }
     </style>
   </head>
-  <body>
-    <main>
+  <body class="portal-shell portal-whatsapp">
+    <a class="skip-link" href="#whatsapp-main">Saltar al contenido principal</a>
+    <main id="whatsapp-main" role="main" aria-label="WhatsApp Capacitadores">
       <section class="hero">
         <article class="panel">
           <p class="eyebrow">Modulo operativo</p>
@@ -229,7 +230,7 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
               <strong>${escapeHtml(status?.status || "desconocido")}</strong>
             </div>
             <div class="metric">
-              <span>Conexion</span>
+              <span>Conexión</span>
               <strong>${status?.connected ? "Conectado" : "No conectado"}</strong>
             </div>
             <div class="metric">
@@ -237,7 +238,7 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
               <strong>${status?.qrAvailable ? "Si" : "No"}</strong>
             </div>
             <div class="metric">
-              <span>Ultima señal</span>
+              <span>Última señal</span>
               <strong>${escapeHtml(status?.lastError || "Sin errores")}</strong>
             </div>
           </div>
@@ -245,13 +246,13 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
         <aside class="panel stack">
           <div class="status-pill">
             <span class="dot"></span>
-            <span>${status?.connected ? "Sesion activa" : "Sesion no activa"}</span>
+            <span>${status?.connected ? "Sesión activa" : "Sesión no activa"}</span>
           </div>
           <div class="links">
             <a class="link-card" href="/whatsapp-capacitadores/qr">
               <div>
                 <strong>QR de acceso</strong>
-                <span>Abre el QR o la vista de impresion.</span>
+                <span>Abre el QR o la vista de impresión.</span>
               </div>
               <span>→</span>
             </a>
@@ -313,7 +314,7 @@ whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
     : `
       <div class="qr-empty">
         <div class="qr-empty-badge">Esperando QR</div>
-        <p>Cuando el bot emita un nuevo codigo de reconexion, aparecerá aqui sin pasos extra.</p>
+        <p>Cuando el bot emita un nuevo código de reconexión, aparecerá aquí sin pasos extra.</p>
         <p class="muted">Mientras tanto, puedes volver a cargar la pantalla o revisar el health del bot.</p>
       </div>`;
 
@@ -323,43 +324,44 @@ whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title}</title>
+      <title>${title}</title>
     <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
     <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
     <style>
       body {
-        font-family: system-ui, sans-serif;
         margin: 0;
-        padding: 24px;
-        background: #f4f4f1;
-        color: #171717;
+        font-family: var(--portal-font-body);
+        color: var(--portal-ink);
+        background: transparent;
       }
       main {
         max-width: 920px;
         margin: 0 auto;
+        padding: 24px 16px 56px;
       }
       .card {
-        background: #fff;
-        border: 1px solid #ddd;
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+        background: var(--portal-surface);
+        border: 1px solid var(--portal-line);
+        border-radius: 24px;
+        padding: 22px;
+        box-shadow: var(--portal-shadow);
       }
       img {
         width: 100%;
         height: auto;
-        border-radius: 12px;
-        border: 1px solid #ddd;
+        border-radius: 16px;
+        border: 1px solid var(--portal-line);
         background: #fff;
       }
       .qr-empty {
         display: grid;
         place-items: center;
         min-height: 360px;
-        border-radius: 12px;
-        border: 1px dashed #bbb;
+        border-radius: 18px;
+        border: 1px dashed rgba(33, 49, 63, 0.18);
         background:
-          radial-gradient(circle at top, rgba(17, 24, 39, 0.04), transparent 42%),
+          radial-gradient(circle at top, rgba(15, 76, 92, 0.04), transparent 42%),
           #fff;
         text-align: center;
         padding: 24px;
@@ -369,7 +371,7 @@ whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
         align-items: center;
         padding: 8px 12px;
         border-radius: 999px;
-        background: #111827;
+        background: linear-gradient(135deg, var(--portal-accent-3), var(--portal-accent));
         color: #fff;
         font-size: 12px;
         font-weight: 700;
@@ -380,14 +382,14 @@ whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
       pre {
         white-space: pre-wrap;
         word-break: break-word;
-        background: #111;
+        background: #111827;
         color: #f5f5f5;
         padding: 14px;
         border-radius: 12px;
         overflow: auto;
       }
       .muted {
-        color: #555;
+        color: var(--portal-muted);
       }
       .actions {
         display: flex;
@@ -402,29 +404,30 @@ whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
         min-height: 42px;
         padding: 0 16px;
         border-radius: 999px;
-        background: #111827;
+        background: linear-gradient(135deg, var(--portal-accent-3), var(--portal-accent));
         color: #fff;
         font-weight: 700;
         text-decoration: none;
       }
     </style>
   </head>
-  <body>
-    <main>
+  <body class="portal-shell portal-whatsapp">
+    <a class="skip-link" href="#whatsapp-qr-main">Saltar al contenido principal</a>
+    <main id="whatsapp-qr-main" role="main" aria-label="WhatsApp Capacitadores QR">
       <div class="card">
         <h1>${title}</h1>
-        <p class="muted">${qrAvailable ? "Escanea este QR sin recargar la pagina. Si expira, usa Actualizar QR." : refreshNotice}</p>
+        <p class="muted">${qrAvailable ? "Escanea este QR sin recargar la página. Si expira, usa Actualizar QR." : refreshNotice}</p>
         <div class="actions">
           <a class="button" href="/whatsapp-capacitadores/qr">Actualizar QR</a>
           <a class="button" href="/whatsapp-capacitadores">Volver al inicio</a>
           <a class="button" href="/whatsapp-capacitadores/health">Ver health</a>
           <form method="post" action="/whatsapp-capacitadores/qr/restart" style="display:inline;">
-            <button class="button" type="submit">Forzar nuevo QR</button>
+            <button class="button" type="submit">Reiniciar sesión</button>
           </form>
           ${qrAvailable ? `<a class="button" href="/whatsapp-capacitadores/qr.png?t=${Date.now()}" target="_blank" rel="noreferrer">Abrir PNG</a>` : ""}
         </div>
         <p><strong>Estado:</strong> ${status.status}</p>
-        <p><strong>Conectado:</strong> ${status.connected ? "si" : "no"}</p>
+        <p><strong>Conectado:</strong> ${status.connected ? "sí" : "no"}</p>
         <p><strong>QR generado:</strong> ${status.qrGeneratedAt || "no"}</p>
         ${qrImageHtml}
         <h2>Health</h2>

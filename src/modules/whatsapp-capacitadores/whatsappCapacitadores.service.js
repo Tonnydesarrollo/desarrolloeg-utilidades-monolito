@@ -2045,10 +2045,22 @@ function createWhatsAppClient(config) {
 
   client.on("authenticated", () => {
     serviceState.status = "authenticated";
-    serviceState.connected = false;
+    serviceState.connected = true;
     serviceState.qrPayload = null;
     serviceState.lastError = null;
     runtime.logger.info("whatsapp authenticated");
+  });
+
+  client.on("change_state", (state) => {
+    if (String(state || "").toUpperCase() === "CONNECTED") {
+      serviceState.connected = true;
+      if (serviceState.status === "authenticated") {
+        serviceState.status = "ready";
+        serviceState.readyAt = new Date().toISOString();
+      }
+    }
+
+    runtime.logger.info({ state }, "whatsapp state changed");
   });
 
   client.on("ready", () => {
@@ -2059,10 +2071,6 @@ function createWhatsAppClient(config) {
     serviceState.qrPayload = null;
     serviceState.lastError = null;
     runtime.logger.info("whatsapp connected");
-  });
-
-  client.on("change_state", (state) => {
-    runtime.logger.info({ state }, "whatsapp state changed");
   });
 
   client.on("auth_failure", (message) => {

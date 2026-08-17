@@ -2,6 +2,8 @@ tunnel: Desarrolloeg
 credentials-file: /etc/cloudflared/desarrolloeg.json
 
 ingress:
+  - hostname: qa.apps.desarrolloeg.com
+    service: http://monolito-qa:7001
   - hostname: api-cotizaciones.desarrolloeg.com
     service: http://monolito:7000
   - hostname: apps.desarrolloeg.com
@@ -10,4 +12,6 @@ ingress:
     service: http://monolito:7000
   - hostname: clubfactura.desarrolloeg.com
     service: http://monolito:7000
+  - hostname: sync.desarrolloeg.com
+    service: http://desarrolloeg-sync:8787
   - service: http_status:404

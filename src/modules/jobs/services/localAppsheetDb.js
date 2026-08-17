@@ -283,6 +283,233 @@ function initSchema() {
         sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
       );
     `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS empresas (
+        id TEXT PRIMARY KEY,
+        row_id TEXT,
+        razon_social TEXT,
+        nombre_comercial TEXT,
+        logo TEXT,
+        logo_url TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS municipios (
+        id TEXT PRIMARY KEY,
+        nombre TEXT,
+        escudo TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS estados (
+        id TEXT PRIMARY KEY,
+        nombre TEXT,
+        escudo TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sucursales (
+        id TEXT PRIMARY KEY,
+        row_id TEXT,
+        tienda TEXT,
+        label TEXT,
+        label2 TEXT,
+        nombre TEXT,
+        domicilio TEXT,
+        address TEXT,
+        street TEXT,
+        municipio_id TEXT,
+        municipio_nombre TEXT,
+        estado_id TEXT,
+        estado_nombre TEXT,
+        empresa_id TEXT,
+        empresa_nombre TEXT,
+        lat REAL,
+        lng REAL,
+        assigned_month INTEGER,
+        vencimiento_estatal TEXT,
+        planeacion_status TEXT,
+        planeacion_tone TEXT,
+        drive TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS empleados (
+        row_id TEXT PRIMARY KEY,
+        id TEXT,
+        nombre TEXT,
+        iniciales TEXT,
+        color TEXT,
+        puesto TEXT,
+        correo TEXT,
+        capacita TEXT,
+        permiso TEXT,
+        firma TEXT,
+        cumpleanos TEXT,
+        telefono TEXT,
+        telefono_2 TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS capacitaciones (
+        row_id TEXT PRIMARY KEY,
+        id TEXT,
+        fecha_capacitacion TEXT,
+        hora_inicio TEXT,
+        hora_fin TEXT,
+        cede TEXT,
+        sucursales TEXT,
+        capacitadores TEXT,
+        status TEXT,
+        diplomas TEXT,
+        notas TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS capacitacion_sucursales (
+        id TEXT PRIMARY KEY,
+        capacitacion_id TEXT,
+        sucursal_id TEXT,
+        orden INTEGER NOT NULL DEFAULT 0,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS capacitacion_capacitadores (
+        id TEXT PRIMARY KEY,
+        capacitacion_id TEXT,
+        empleado_id TEXT,
+        orden INTEGER NOT NULL DEFAULT 0,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS calendario (
+        id TEXT PRIMARY KEY,
+        fecha TEXT,
+        icono TEXT,
+        titulo TEXT,
+        notas TEXT,
+        color TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS calendario_empleados (
+        id TEXT PRIMARY KEY,
+        calendario_id TEXT,
+        empleado_id TEXT,
+        orden INTEGER NOT NULL DEFAULT 0,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS catalogo (
+        id TEXT PRIMARY KEY,
+        codigo TEXT,
+        nombre TEXT,
+        precio_sugerido REAL,
+        tipo TEXT,
+        iva REAL,
+        descripcion TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS proveedores (
+        id TEXT PRIMARY KEY,
+        nombre TEXT,
+        banco TEXT,
+        cuenta_bancaria TEXT,
+        clabe TEXT,
+        pie_de_firma TEXT,
+        puesto TEXT,
+        firma TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS cotizaciones (
+        id TEXT PRIMARY KEY,
+        empresa_id TEXT,
+        fecha TEXT,
+        proveedor_id TEXT,
+        titulo TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS cotizacion_centros_trabajo (
+        id TEXT PRIMARY KEY,
+        cotizacion_id TEXT,
+        sucursal_id TEXT,
+        orden INTEGER NOT NULL DEFAULT 0,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS conceptos_cotizacion (
+        id TEXT PRIMARY KEY,
+        cotizacion_id TEXT,
+        centro_trabajo_id TEXT,
+        concepto_id TEXT,
+        cantidad REAL,
+        precio REAL,
+        iva REAL,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
   } catch (error) {
     markDbUnavailable(error, "No se pudo inicializar la SQLite local");
     return;
@@ -332,6 +559,188 @@ function initSchema() {
   ensureColumns("cheques_ley", casaLeySyncColumns);
   ensureColumns("pagados_ley", casaLeySyncColumns);
   ensureColumns("facturas_en_ley", casaLeySyncColumns);
+  ensureColumns("empresas", [
+    ["row_id", "TEXT"],
+    ["razon_social", "TEXT"],
+    ["nombre_comercial", "TEXT"],
+    ["logo", "TEXT"],
+    ["logo_url", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("municipios", [
+    ["nombre", "TEXT"],
+    ["escudo", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("estados", [
+    ["nombre", "TEXT"],
+    ["escudo", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("sucursales", [
+    ["row_id", "TEXT"],
+    ["tienda", "TEXT"],
+    ["label", "TEXT"],
+    ["label2", "TEXT"],
+    ["nombre", "TEXT"],
+    ["domicilio", "TEXT"],
+    ["address", "TEXT"],
+    ["street", "TEXT"],
+    ["municipio_id", "TEXT"],
+    ["municipio_nombre", "TEXT"],
+    ["estado_id", "TEXT"],
+    ["estado_nombre", "TEXT"],
+    ["empresa_id", "TEXT"],
+    ["empresa_nombre", "TEXT"],
+    ["lat", "REAL"],
+    ["lng", "REAL"],
+    ["assigned_month", "INTEGER"],
+    ["vencimiento_estatal", "TEXT"],
+    ["planeacion_status", "TEXT"],
+    ["planeacion_tone", "TEXT"],
+    ["drive", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("empleados", [
+    ["id", "TEXT"],
+    ["nombre", "TEXT"],
+    ["iniciales", "TEXT"],
+    ["color", "TEXT"],
+    ["puesto", "TEXT"],
+    ["correo", "TEXT"],
+    ["capacita", "TEXT"],
+    ["permiso", "TEXT"],
+    ["firma", "TEXT"],
+    ["cumpleanos", "TEXT"],
+    ["telefono", "TEXT"],
+    ["telefono_2", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("capacitaciones", [
+    ["id", "TEXT"],
+    ["fecha_capacitacion", "TEXT"],
+    ["hora_inicio", "TEXT"],
+    ["hora_fin", "TEXT"],
+    ["cede", "TEXT"],
+    ["sucursales", "TEXT"],
+    ["capacitadores", "TEXT"],
+    ["status", "TEXT"],
+    ["diplomas", "TEXT"],
+    ["notas", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("capacitacion_sucursales", [
+    ["capacitacion_id", "TEXT"],
+    ["sucursal_id", "TEXT"],
+    ["orden", "INTEGER NOT NULL DEFAULT 0"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("capacitacion_capacitadores", [
+    ["capacitacion_id", "TEXT"],
+    ["empleado_id", "TEXT"],
+    ["orden", "INTEGER NOT NULL DEFAULT 0"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("calendario", [
+    ["fecha", "TEXT"],
+    ["icono", "TEXT"],
+    ["titulo", "TEXT"],
+    ["notas", "TEXT"],
+    ["color", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("calendario_empleados", [
+    ["calendario_id", "TEXT"],
+    ["empleado_id", "TEXT"],
+    ["orden", "INTEGER NOT NULL DEFAULT 0"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("catalogo", [
+    ["codigo", "TEXT"],
+    ["nombre", "TEXT"],
+    ["precio_sugerido", "REAL"],
+    ["tipo", "TEXT"],
+    ["iva", "REAL"],
+    ["descripcion", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("proveedores", [
+    ["nombre", "TEXT"],
+    ["banco", "TEXT"],
+    ["cuenta_bancaria", "TEXT"],
+    ["clabe", "TEXT"],
+    ["pie_de_firma", "TEXT"],
+    ["puesto", "TEXT"],
+    ["firma", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("cotizaciones", [
+    ["empresa_id", "TEXT"],
+    ["fecha", "TEXT"],
+    ["proveedor_id", "TEXT"],
+    ["titulo", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("cotizacion_centros_trabajo", [
+    ["cotizacion_id", "TEXT"],
+    ["sucursal_id", "TEXT"],
+    ["orden", "INTEGER NOT NULL DEFAULT 0"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  ensureColumns("conceptos_cotizacion", [
+    ["cotizacion_id", "TEXT"],
+    ["centro_trabajo_id", "TEXT"],
+    ["concepto_id", "TEXT"],
+    ["cantidad", "REAL"],
+    ["precio", "REAL"],
+    ["iva", "REAL"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
 
   migrateCfdiIds(db);
 
@@ -618,6 +1027,274 @@ function mapLiberacionRow(row) {
   };
 }
 
+function mapEmpresaRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "row_id", "ROW ID"]),
+    row_id: pickFirst(row, ["Row ID", "ROW ID", "row_id"]),
+    razon_social: pickFirst(row, ["razon_social", "RAZON SOCIAL", "Razón Social", "Razon Social"]),
+    nombre_comercial: pickFirst(row, ["nombre_comercial", "NOMBRE COMERCIAL", "Nombre Comercial"]),
+    logo: pickFirst(row, ["logo", "LOGO"]),
+    logo_url: pickFirst(row, ["logo_url", "LOGOURL", "LOGO URL", "Logo URL"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapMunicipioRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "row_id", "ROW ID"]),
+    nombre: pickFirst(row, ["nombre", "NOMBRE", "Nombre"]),
+    escudo: pickFirst(row, ["escudo", "ESCUDO"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapEstadoRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "row_id", "ROW ID"]),
+    nombre: pickFirst(row, ["nombre", "NOMBRE", "Nombre"]),
+    escudo: pickFirst(row, ["escudo", "ESCUDO"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapSucursalRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "row_id", "ROW ID"]),
+    row_id: pickFirst(row, ["Row ID", "ROW ID", "row_id"]),
+    tienda: pickFirst(row, ["tienda", "TIENDA", "Tienda"]),
+    label: pickFirst(row, ["label", "LABEL", "Label"]),
+    label2: pickFirst(row, ["label2", "LABEL2", "Label2"]),
+    nombre: pickFirst(row, ["nombre", "NOMBRE", "Nombre"]),
+    domicilio: pickFirst(row, ["domicilio", "DOMICILIO"]),
+    address: pickFirst(row, ["address", "ADDRESS", "Direccion", "DIRECCION", "DIRECCION GOOGLE"]),
+    street: pickFirst(row, ["street", "STREET"]),
+    municipio_id: pickFirst(row, ["municipio_id", "MUNICIPIO", "Municipio", "municipio"]),
+    municipio_nombre: pickFirst(row, ["municipio_nombre", "MUNICIPIO NOMBRE"]),
+    estado_id: pickFirst(row, ["estado_id", "ESTADO", "Estado", "estado"]),
+    estado_nombre: pickFirst(row, ["estado_nombre", "ESTADO NOMBRE"]),
+    empresa_id: pickFirst(row, ["empresa_id", "EMPRESA", "Empresa", "ID EMPRESA"]),
+    empresa_nombre: pickFirst(row, ["empresa_nombre", "EMPRESA NOMBRE"]),
+    lat: normalizeValue(row?.lat ?? row?.LAT),
+    lng: normalizeValue(row?.lng ?? row?.LNG),
+    assigned_month: normalizeValue(row?.assigned_month ?? row?.ASSIGNED_MONTH),
+    vencimiento_estatal: pickFirst(row, ["vencimiento_estatal", "VENCIMIENTOESTATAL", "VencimientoEstatal"]),
+    planeacion_status: pickFirst(row, ["planeacion_status", "ESTATUS CAPACITACION", "STATUS", "status"]),
+    planeacion_tone: pickFirst(row, ["planeacion_tone", "PLANEACION_TONE"]),
+    drive: pickFirst(row, ["drive", "DRIVE"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapEmpleadoRow(row) {
+  return {
+    row_id: pickFirst(row, ["Row ID", "ROW ID", "row_id"]),
+    id: pickFirst(row, ["id", "ID"]),
+    nombre: pickFirst(row, ["nombre", "NOMBRE", "Nombre"]),
+    iniciales: pickFirst(row, ["iniciales", "INICIALES"]),
+    color: pickFirst(row, ["color", "COLOR"]),
+    puesto: pickFirst(row, ["puesto", "PUESTO"]),
+    correo: pickFirst(row, ["correo", "CORREO"]),
+    capacita: pickFirst(row, ["capacita", "CAPACITA"]),
+    permiso: pickFirst(row, ["permiso", "PERMISO"]),
+    firma: pickFirst(row, ["firma", "FIRMA"]),
+    cumpleanos: pickFirst(row, ["cumpleanos", "CUMPLEAÑOS", "CUMPLEANOS"]),
+    telefono: pickFirst(row, ["telefono", "TELEFONO"]),
+    telefono_2: pickFirst(row, ["telefono_2", "TELEFONO 2", "TELEFONO_2"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCapacitacionRow(row) {
+  return {
+    row_id: pickFirst(row, ["Row ID", "ROW ID", "row_id"]),
+    id: pickFirst(row, ["id", "ID"]),
+    fecha_capacitacion: pickFirst(row, ["fecha_capacitacion", "FECHA CAPACITACION"]),
+    hora_inicio: pickFirst(row, ["hora_inicio", "HORA INICIO"]),
+    hora_fin: pickFirst(row, ["hora_fin", "HORA FIN"]),
+    cede: pickFirst(row, ["cede", "CEDE"]),
+    sucursales: pickFirst(row, ["sucursales", "SUCURSALES"]),
+    capacitadores: pickFirst(row, ["capacitadores", "CAPACITADORES"]),
+    status: pickFirst(row, ["status", "STATUS", "Estatus", "ESTATUS"]),
+    diplomas: pickFirst(row, ["diplomas", "DIPLOMAS"]),
+    notas: pickFirst(row, ["notas", "NOTAS"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCalendarioRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "Row Id", "row_id"]),
+    fecha: pickFirst(row, ["fecha", "FECHA"]),
+    icono: pickFirst(row, ["icono", "ICONO"]),
+    titulo: pickFirst(row, ["titulo", "TITULO"]),
+    notas: pickFirst(row, ["notas", "NOTAS"]),
+    color: pickFirst(row, ["color", "COLOR"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCalendarioEmpleadoRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    calendario_id: pickFirst(row, ["calendario_id", "CALENDARIO", "CALENDARIO_ID"]),
+    empleado_id: pickFirst(row, ["empleado_id", "EMPLEADO", "EMPLEADO_ID"]),
+    orden: normalizeValue(row?.orden ?? row?.ORDEN),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCatalogoRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    codigo: pickFirst(row, ["codigo", "CODIGO", "CLAVE"]),
+    nombre: pickFirst(row, ["nombre", "NOMBRE"]),
+    precio_sugerido: normalizeValue(row?.precio_sugerido ?? row?.PRECIO_SUGERIDO),
+    tipo: pickFirst(row, ["tipo", "TIPO"]),
+    iva: normalizeValue(row?.iva ?? row?.IVA),
+    descripcion: pickFirst(row, ["descripcion", "DESCRIPCION"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapProveedorRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    nombre: pickFirst(row, ["nombre", "NOMBRE"]),
+    banco: pickFirst(row, ["banco", "BANCO"]),
+    cuenta_bancaria: pickFirst(row, ["cuenta_bancaria", "CUENTA BANCARIA"]),
+    clabe: pickFirst(row, ["clabe", "CLABE"]),
+    pie_de_firma: pickFirst(row, ["pie_de_firma", "PIE DE FIRMA"]),
+    puesto: pickFirst(row, ["puesto", "PUESTO"]),
+    firma: pickFirst(row, ["firma", "FIRMA"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCotizacionRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    empresa_id: pickFirst(row, ["empresa_id", "EMPRESA", "RAZON SOCIAL"]),
+    fecha: pickFirst(row, ["fecha", "FECHA"]),
+    proveedor_id: pickFirst(row, ["proveedor_id", "PROVEEDOR"]),
+    titulo: pickFirst(row, ["titulo", "TITULO"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCotizacionCentroTrabajoRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    cotizacion_id: pickFirst(row, ["cotizacion_id", "COTIZACION"]),
+    sucursal_id: pickFirst(row, ["sucursal_id", "SUCURSAL", "CENTRO_DE_TRABAJO", "CENTRO DE TRABAJO"]),
+    orden: normalizeValue(row?.orden ?? row?.ORDEN),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapConceptoCotizacionRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    cotizacion_id: pickFirst(row, ["cotizacion_id", "COTIZACION"]),
+    centro_trabajo_id: pickFirst(row, ["centro_trabajo_id", "CENTRO_DE_TRABAJO", "CENTRO TRABAJO"]),
+    concepto_id: pickFirst(row, ["concepto_id", "CONCEPTO"]),
+    cantidad: normalizeValue(row?.cantidad ?? row?.CANTIDAD),
+    precio: normalizeValue(row?.precio ?? row?.PRECIO),
+    iva: normalizeValue(row?.iva ?? row?.IVA),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCalendarioEmpleadoBridgeRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    calendario_id: pickFirst(row, ["calendario_id", "CALENDARIO"]),
+    empleado_id: pickFirst(row, ["empleado_id", "EMPLEADO"]),
+    orden: normalizeValue(row?.orden ?? row?.ORDEN),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCapacitacionSucursalBridgeRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    capacitacion_id: pickFirst(row, ["capacitacion_id", "CAPACITACION"]),
+    sucursal_id: pickFirst(row, ["sucursal_id", "SUCURSAL"]),
+    orden: normalizeValue(row?.orden ?? row?.ORDEN),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCapacitacionCapacitadorBridgeRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    capacitacion_id: pickFirst(row, ["capacitacion_id", "CAPACITACION"]),
+    empleado_id: pickFirst(row, ["empleado_id", "EMPLEADO"]),
+    orden: normalizeValue(row?.orden ?? row?.ORDEN),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapCotizacionCentroTrabajoBridgeRow(row) {
+  return {
+    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
+    cotizacion_id: pickFirst(row, ["cotizacion_id", "COTIZACION"]),
+    sucursal_id: pickFirst(row, ["sucursal_id", "SUCURSAL"]),
+    orden: normalizeValue(row?.orden ?? row?.ORDEN),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
 function upsertMany(tableName, rows, keyField, mapper) {
   if (!Array.isArray(rows) || rows.length === 0) return;
   const db = getDb();
@@ -628,7 +1305,9 @@ function upsertMany(tableName, rows, keyField, mapper) {
   const mappedRows = rows.map((row) => mapper(row)).filter((row) => row?.[keyField] !== null && row?.[keyField] !== undefined && String(row?.[keyField]).trim() !== "");
   if (!mappedRows.length) return;
 
-  const columns = Array.from(new Set(mappedRows.flatMap((row) => Object.keys(row))));
+  const columns = Array.from(new Set(mappedRows.flatMap((row) => Object.keys(row))))
+    .filter((column) => mappedRows.some((row) => row[column] !== undefined && row[column] !== null));
+  if (!columns.length) return;
   const insertColumns = columns.map(quoteIdentifier).join(", ");
   const placeholders = columns.map(() => "?").join(", ");
   const updates = columns.filter((column) => column !== keyField).map((column) => `${quoteIdentifier(column)}=excluded.${quoteIdentifier(column)}`).join(", ");
@@ -641,6 +1320,43 @@ function upsertMany(tableName, rows, keyField, mapper) {
       const values = columns.map((column) => normalizeValue(row[column]));
       stmt.run(...values);
     }
+    db.exec("COMMIT;");
+  } catch (error) {
+    db.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+function replaceMany(tableName, rows, keyField, mapper) {
+  const db = getDb();
+  if (!db) return;
+  initSchema();
+  if (!isRetryWindowOpen()) return;
+
+  const mappedRows = Array.isArray(rows)
+    ? rows
+        .map((row) => mapper(row))
+        .filter((row) => row?.[keyField] !== null && row?.[keyField] !== undefined && String(row?.[keyField]).trim() !== "")
+    : [];
+
+  db.exec("BEGIN IMMEDIATE;");
+  try {
+    db.prepare(`DELETE FROM ${quoteIdentifier(tableName)}`).run();
+
+    if (mappedRows.length > 0) {
+      const columns = Array.from(new Set(mappedRows.flatMap((row) => Object.keys(row))))
+        .filter((column) => mappedRows.some((row) => row[column] !== undefined && row[column] !== null));
+      if (columns.length > 0) {
+        const insertColumns = columns.map(quoteIdentifier).join(", ");
+        const placeholders = columns.map(() => "?").join(", ");
+        const stmt = db.prepare(`INSERT INTO ${quoteIdentifier(tableName)} (${insertColumns}) VALUES (${placeholders})`);
+        for (const row of mappedRows) {
+          const values = columns.map((column) => normalizeValue(row[column]));
+          stmt.run(...values);
+        }
+      }
+    }
+
     db.exec("COMMIT;");
   } catch (error) {
     db.exec("ROLLBACK;");
@@ -1200,4 +1916,174 @@ export function getPedidoExtractionState(pedido) {
 
 export function getLiberacionExtractionState(liberacion) {
   return getExtractionFlags("liberaciones", "liberacion", liberacion);
+}
+
+export function upsertEmpresasLocalRows(rows = []) {
+  upsertMany("empresas", rows, "id", mapEmpresaRow);
+}
+
+export function upsertMunicipiosLocalRows(rows = []) {
+  upsertMany("municipios", rows, "id", mapMunicipioRow);
+}
+
+export function upsertEstadosLocalRows(rows = []) {
+  upsertMany("estados", rows, "id", mapEstadoRow);
+}
+
+export function upsertSucursalesLocalRows(rows = []) {
+  upsertMany("sucursales", rows, "id", mapSucursalRow);
+}
+
+export function upsertEmpleadosLocalRows(rows = []) {
+  upsertMany("empleados", rows, "row_id", mapEmpleadoRow);
+}
+
+export function upsertCapacitacionesLocalRows(rows = []) {
+  upsertMany("capacitaciones", rows, "row_id", mapCapacitacionRow);
+}
+
+export function upsertCalendarioLocalRows(rows = []) {
+  upsertMany("calendario", rows, "id", mapCalendarioRow);
+}
+
+export function upsertCalendarioEmpleadosLocalRows(rows = []) {
+  upsertMany("calendario_empleados", rows, "id", mapCalendarioEmpleadoRow);
+}
+
+export function upsertCatalogoLocalRows(rows = []) {
+  upsertMany("catalogo", rows, "id", mapCatalogoRow);
+}
+
+export function upsertProveedoresLocalRows(rows = []) {
+  upsertMany("proveedores", rows, "id", mapProveedorRow);
+}
+
+export function upsertCotizacionesLocalRows(rows = []) {
+  upsertMany("cotizaciones", rows, "id", mapCotizacionRow);
+}
+
+export function upsertCotizacionCentrosTrabajoLocalRows(rows = []) {
+  upsertMany("cotizacion_centros_trabajo", rows, "id", mapCotizacionCentroTrabajoBridgeRow);
+}
+
+export function upsertConceptosCotizacionLocalRows(rows = []) {
+  upsertMany("conceptos_cotizacion", rows, "id", mapConceptoCotizacionRow);
+}
+
+export function upsertCapacitacionSucursalesLocalRows(rows = []) {
+  upsertMany("capacitacion_sucursales", rows, "id", mapCapacitacionSucursalBridgeRow);
+}
+
+export function upsertCapacitacionCapacitadoresLocalRows(rows = []) {
+  upsertMany("capacitacion_capacitadores", rows, "id", mapCapacitacionCapacitadorBridgeRow);
+}
+
+export function upsertCapacitacionSucursalesBridgeRows(rows = []) {
+  upsertMany("capacitacion_sucursales", rows, "id", mapCapacitacionSucursalBridgeRow);
+}
+
+export function replaceCalendarioEmpleadosLocalRows(rows = []) {
+  replaceMany("calendario_empleados", rows, "id", mapCalendarioEmpleadoBridgeRow);
+}
+
+export function replaceCapacitacionSucursalesLocalRows(rows = []) {
+  replaceMany("capacitacion_sucursales", rows, "id", mapCapacitacionSucursalBridgeRow);
+}
+
+export function replaceCapacitacionCapacitadoresLocalRows(rows = []) {
+  replaceMany("capacitacion_capacitadores", rows, "id", mapCapacitacionCapacitadorBridgeRow);
+}
+
+export function replaceCotizacionCentrosTrabajoLocalRows(rows = []) {
+  replaceMany("cotizacion_centros_trabajo", rows, "id", mapCotizacionCentroTrabajoBridgeRow);
+}
+
+export function getCapacitacionSucursalesLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM capacitacion_sucursales ORDER BY id`).all() || [];
+}
+
+export function getCapacitacionCapacitadoresLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM capacitacion_capacitadores ORDER BY id`).all() || [];
+}
+
+export function getEmpresasLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM empresas ORDER BY id`).all() || [];
+}
+
+export function getMunicipiosLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM municipios ORDER BY id`).all() || [];
+}
+
+export function getEstadosLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM estados ORDER BY id`).all() || [];
+}
+
+export function getSucursalesLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM sucursales ORDER BY id`).all() || [];
+}
+
+export function getEmpleadosLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM empleados ORDER BY row_id`).all() || [];
+}
+
+export function getCapacitacionesLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM capacitaciones ORDER BY row_id`).all() || [];
+}
+
+export function getCalendarioLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM calendario ORDER BY id`).all() || [];
+}
+
+export function getCalendarioEmpleadosLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM calendario_empleados ORDER BY id`).all() || [];
+}
+
+export function getCatalogoLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM catalogo ORDER BY id`).all() || [];
+}
+
+export function getProveedoresLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM proveedores ORDER BY id`).all() || [];
+}
+
+export function getCotizacionesLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM cotizaciones ORDER BY id`).all() || [];
+}
+
+export function getCotizacionCentrosTrabajoLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM cotizacion_centros_trabajo ORDER BY id`).all() || [];
+}
+
+export function getConceptosCotizacionLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM conceptos_cotizacion ORDER BY id`).all() || [];
 }

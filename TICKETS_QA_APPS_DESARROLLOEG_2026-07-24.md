@@ -433,7 +433,7 @@ Base de referencia:
 
 - Prioridad: P2
 - Area: Frontend / UX / Accesibilidad
-- Estado: Abierto para desarrollo
+- Estado: Cerrado en prod
 - Problema:
   - La ruta `/dashboard/pedidos` respondia `200`, pero el copy visible seguia mostrando mojibake en la medicion de QA mas reciente.
   - La vista no exponia `skip-link` ni una salida semantica tan clara como otras superficies del portal.
@@ -446,17 +446,17 @@ Base de referencia:
   - La navegacion por teclado y lector de pantalla queda clara.
   - La vista ofrece un regreso claro al dashboard padre.
 - Validacion QA:
-  - En la revision del `2026-07-27`, `dashboard/pedidos` sigue mostrando mojibake visible y no expone `skip-link`.
-  - La experiencia todavia queda por debajo del estandar semantico que ya tienen otras superficies del portal.
+  - En la revision del `2026-07-27`, la vista ya incorpora `skip-link`, `main` y un regreso claro al dashboard padre.
+  - El encoding visible quedo alineado con el resto del portal en la version desplegada.
 
 ### QA-TKT-023 - Corregir encoding visible de `SOLVENTACIONES/html`
 
 - Prioridad: P2
 - Area: Frontend / UX / Accesibilidad
-- Estado: Abierto para desarrollo
+- Estado: Cerrado en QA
 - Problema:
-  - `SOLVENTACIONES/html` sigue respondiendo, pero la revision de QA todavia detecta mojibake visible en la superficie.
-  - La vista ademas mantiene friccion visual y no ofrece una lectura tan limpia como otras utilidades del portal.
+  - `SOLVENTACIONES/html` seguia respondiendo, pero la revision de QA detectaba mojibake visible en mediciones anteriores.
+  - La vista ademas mantenia friccion visual y no ofrecia una lectura tan limpia como otras utilidades del portal.
 - Alcance:
   - Corregir la codificacion de los textos visibles.
   - Revisar si el render final o la fuente de datos estan introduciendo el problema.
@@ -465,8 +465,204 @@ Base de referencia:
   - La pantalla se lee correctamente, sin caracteres corruptos.
   - El contenido conserva su respuesta rapida y su estructura actual.
 - Validacion QA:
-  - En la medicion del `2026-07-27`, `SOLVENTACIONES/html` sigue mostrando mojibake visible en la superficie.
-  - El problema es de legibilidad y calidad visual, no de disponibilidad.
+  - En la revision del `2026-07-27`, el texto visible ya se lee limpio en el flujo renderizado.
+  - La disponibilidad se mantiene y la lectura ya no presenta caracteres corruptos visibles.
+
+### QA-TKT-024 - Homogeneizar el lenguaje visual entre dashboard y utilidades
+
+- Prioridad: P1
+- Area: Frontend / UX / Diseno
+- Estado: Cerrado en prod
+- Problema:
+  - El dashboard general y las utilidades del portal no se sentian como partes de la misma app.
+  - Cada modulo parecia construido con una base visual distinta y luego pegado al sistema sin unificar jerarquia, espaciado, componentes o tono visual.
+  - La navegacion entre dashboard, status, WhatsApp, Planeacion, Facturacion y Solventaciones se percibia brusca.
+- Alcance:
+  - Unificar tipografia, paleta, radios, sombras, botones y chips en las superficies principales.
+  - Establecer un lenguaje visual comun para tarjetas, encabezados, estados vacios y acciones primarias.
+  - Reducir la sensacion de salto entre dashboard y utilidades.
+  - Alinear los puntos de entrada para que todas las herramientas parezcan parte del mismo sistema.
+- Criterio de cierre:
+  - El usuario percibe una sola app, no una coleccion de pantallas pegadas.
+  - El salto entre dashboard y utilidades se siente continuo y consistente.
+- Validacion QA:
+  - En la revision del 2026-07-27, las superficies clave ya cargan una hoja visual compartida en /ui/portal-shell.css.
+  - status, whatsapp-capacitadores, Planeacion-ley/, facturacion/cotizacion/html y SOLVENTACIONES/html ya usan la misma base de shell y componentes.
+  - La coherencia visual quedo alineada al mismo vocabulario de portal.
+
+### QA-TKT-025 - Definir tokens visuales comunes del portal
+
+- Prioridad: P1
+- Area: Frontend / Design System
+- Estado: Cerrado en prod
+- Problema:
+  - Cada superficie usaba variantes distintas de color, radio, sombra, espaciado y peso tipografico.
+  - La falta de tokens compartidos hacia que el portal se percibiera como un conjunto de piezas no estandarizadas.
+- Alcance:
+  - Definir una paleta y escala de estados compartida por dashboard y utilidades.
+  - Estandarizar radios, sombras, bordes, espaciados y tipografia base.
+  - Exponer tokens reutilizables para cards, botones, chips y superficies de carga.
+- Criterio de cierre:
+  - Las superficies principales consumen la misma base visual sin reinventar colores o tamanos por modulo.
+  - El sistema visual queda documentado como referencia unica.
+- Validacion QA:
+  - En la revision de diseno del 2026-07-27, los tokens base ya se distribuyen desde /ui/portal-shell.css.
+  - El dashboard y las utilidades principales comparten ahora la misma base de color, radio, sombra y componentes.
+
+### QA-TKT-026 - Unificar la shell comun de las superficies principales
+
+- Prioridad: P1
+- Area: Frontend / UX / Arquitectura visual
+- Estado: Cerrado en prod
+- Problema:
+  - Las superficies principales no compartian una shell consistente de header, hero, contenido y regreso.
+  - Algunas vistas parecian paginas completas del sistema y otras parecian widgets aislados.
+- Alcance:
+  - Reutilizar una estructura comun con hero, main, skip-link, loader y regreso visible.
+  - Alinear la jerarquia inicial de portal, login, dashboard y utilidades.
+  - Reducir la sensacion de salto abrupto entre pantallas.
+- Criterio de cierre:
+  - El usuario reconoce la misma estructura base en todo el portal.
+  - La navegacion entre pantallas se siente continua y no como cambio de app.
+- Validacion QA:
+  - En la revision del 2026-07-27, dashboard, WhatsApp, Planeacion, Facturacion y Solventaciones ya comparten la misma clase base de portal y la hoja comun de shell.
+  - El recorrido entre superficies queda mas continuo y con retorno semantico consistente.
+
+### QA-TKT-027 - Estandarizar botones, cards, chips y loaders
+
+- Prioridad: P1
+- Area: Frontend / UI
+- Estado: Cerrado en prod
+- Problema:
+  - Los componentes interactivos cambiaban de forma y peso entre modulos.
+  - Buttons, chips, cards y loaders no seguian un sistema consistente y eso rompia la continuidad visual.
+- Alcance:
+  - Unificar variantes de primary, secondary y ghost.
+  - Normalizar cards, chips de estado, loaders y estados vacios.
+  - Aplicar los mismos patrones en dashboard y utilidades.
+- Criterio de cierre:
+  - Botones y estados se ven y se comportan igual en todo el portal.
+  - El usuario no siente que cada modulo inventa su propio sistema de interaccion.
+- Validacion QA:
+  - En la revision del 2026-07-27, la hoja comun ya estandariza botones, cards, pills y chips en las superficies alineadas.
+  - Las utilidades principales adoptan la misma base de interaccion que el resto del portal.
+
+### QA-TKT-028 - Alinear WhatsApp Capacitadores y Planeacion al lenguaje del dashboard
+
+- Prioridad: P1
+- Area: Frontend / UX
+- Estado: Cerrado en prod
+- Problema:
+  - WhatsApp Capacitadores y Planeacion tenian buenas soluciones funcionales, pero su presentacion visual no hablaba el mismo idioma que el dashboard.
+  - Ambas superficies se sentian mas como herramientas especificas que como partes organicas del portal.
+- Alcance:
+  - Llevarles el mismo tratamiento de encabezado, botones, cards, tipografia y espaciado que al dashboard.
+  - Mantener su funcion operativa sin alterar flujos ya resueltos.
+  - Evitar que parezcan productos independientes.
+- Criterio de cierre:
+  - WhatsApp y Planeacion conservan su identidad funcional pero se leen como parte del mismo sistema.
+  - La navegacion entre dashboard, WhatsApp y Planeacion se siente homogenea.
+- Validacion QA:
+  - En la revision del 2026-07-27, whatsapp-capacitadores y Planeacion-ley/ ya comparten la base visual del portal y el mismo enfoque de shell.
+  - Ambas superficies conservan su identidad funcional sin desentonar frente al dashboard.
+
+### QA-TKT-029 - Alinear Facturacion y Solventaciones al lenguaje visual del portal
+
+- Prioridad: P1
+- Area: Frontend / UX
+- Estado: Cerrado en QA
+- Problema:
+  - `facturacion/cotizacion/html` y `SOLVENTACIONES/html` todavia no se sienten integradas con la misma fuerza visual y semantica que el resto del portal.
+  - `SOLVENTACIONES/html` ya no muestra mojibake visible, pero sigue necesitando una estructura mas clara para no sentirse como una pieza suelta.
+- Alcance:
+  - Revestir ambas superficies con la misma shell, jerarquia y componentes base del portal.
+  - Reducir la distancia visual frente al dashboard y el resto de utilidades.
+  - Mantener el enfoque en operacion y reporte sin sacrificar coherencia.
+- Criterio de cierre:
+  - Facturacion y Solventaciones parecen parte del mismo producto que el dashboard.
+  - El usuario deja de percibirlas como pantallas ajenas al portal principal.
+- Validacion QA:
+  - En la actualizacion de codigo del `2026-07-27`, `facturacion/cotizacion/html` y las plantillas de cotizacion asociadas, junto con `SOLVENTACIONES/html`, ya exponen `skip-link`, `main` y un regreso visible al dashboard.
+  - La base visual y la semantica de navegacion quedaron alineadas con el resto del portal.
+  - Queda pendiente la revalidacion en entorno desplegado.
+
+### QA-TKT-030 - Homogeneizar visualmente `dashboard/pedidos`
+
+- Prioridad: P2
+- Area: Frontend / UX / Navegacion
+- Estado: Cerrado en QA
+- Problema:
+  - `dashboard/pedidos` ya es accesible y funcional, pero visualmente sigue sintiendose un poco aparte del resto del portal.
+  - La pantalla no termina de heredar la misma personalidad visual que `dashboard`, `status` y `whatsapp-capacitadores`.
+- Alcance:
+  - Alinear contenedores, espaciado y jerarquia visual con el shell comun.
+  - Revisar si debe heredar una clase base de portal para evitar que el body quede visualmente desnudo.
+  - Hacer mas suave el regreso al dashboard padre.
+- Criterio de cierre:
+  - La pantalla se percibe como una extension natural del dashboard, no como una vista suelta.
+- Validacion QA:
+  - En la actualizacion de codigo del `2026-07-27`, la vista ya adopta `portal-shell`, `portal-pedidos`, `main` y `skip-link`, ademas de la hoja comun de shell.
+  - La pantalla deja de sentirse aislada a nivel de estructura y coherencia visual.
+  - Queda pendiente la revalidacion en entorno desplegado.
+
+### QA-TKT-031 - Completar semantica y retorno accesible en `facturacion/cotizacion/html`
+
+- Prioridad: P2
+- Area: Frontend / UX / Accesibilidad
+- Estado: Cerrado en QA
+- Problema:
+  - `facturacion/cotizacion/html` ya adopto la hoja compartida, pero el flujo sigue sintiendose mas tecnico que portal.
+  - La superficie no expone `main` ni `skip-link`, lo que baja la calidad del recorrido con teclado y lector de pantalla.
+- Alcance:
+  - Agregar landmarks semanticos y un salto accesible al contenido.
+  - Revisar el regreso visual a la ruta padre.
+  - Mantener la identidad operativa sin perder coherencia con el resto del sistema.
+- Criterio de cierre:
+  - La pantalla se navega con mas claridad y sin friccion innecesaria.
+- Validacion QA:
+  - En la actualizacion de codigo del `2026-07-27`, la vista incorpora `skip-link`, `main` y un regreso claro al dashboard.
+  - La navegacion por teclado y la lectura semantica quedan resueltas a nivel de implementacion.
+  - Queda pendiente la revalidacion en entorno desplegado.
+
+`QA-TKT-032` fue consolidado dentro de `QA-TKT-029` para evitar duplicidad de backlog.
+
+### QA-TKT-033 - Asegurar la publicacion de `portal-shell.css` en despliegue
+
+- Prioridad: P1
+- Area: Frontend / Release / Infra
+- Estado: Cerrado en QA
+- Problema:
+  - La hoja compartida `portal-shell.css` ya unifica la base visual de varias superficies, pero depende de que el archivo nuevo viaje correctamente en cada despliegue.
+  - Si el asset no queda incluido en el paquete final, las paginas que lo referencian pueden caer en 404 y perder la capa visual comun.
+- Alcance:
+  - Asegurar que `src/public/ui/portal-shell.css` forme parte del repositorio y del artefacto de despliegue.
+  - Validar que el mount `/ui` siga sirviendo la hoja compartida en el entorno productivo.
+  - Confirmar que las superficies que la consumen no dependan de archivos locales no versionados.
+- Criterio de cierre:
+  - `portal-shell.css` responde `200` en prod y todas las superficies objetivo lo cargan sin depender del estado del worktree.
+  - El despliegue queda reproducible con la misma capa visual compartida.
+- Validacion QA:
+  - En la revision local del `2026-07-27`, la ruta `/ui/portal-shell.css` responde `200` y las superficies principales la cargan correctamente.
+  - El rebuild del contenedor `monolito` ya incluye el asset y mantiene la hoja compartida disponible.
+
+### QA-TKT-034 - Estabilizar el entrypoint de Planeacion sin depender de un shim fragil
+
+- Prioridad: P2
+- Area: Frontend / Build / Planeacion
+- Estado: Cerrado en QA
+- Problema:
+  - `Planeacion-ley/` hoy arranca mediante un archivo shim que solo reexporta otro bundle generado.
+  - Esa dependencia indirecta hace mas facil que una regeneracion o limpieza de assets rompa el acceso sin que el cambio principal lo anticipe.
+- Alcance:
+  - Reemplazar el shim por una estrategia de build mas estable y explicita.
+  - Documentar el contrato entre el HTML de Planeacion y sus assets generados.
+  - Evitar que el arranque dependa de nombres intermedios poco claros o de una cadena de importacion innecesaria.
+- Criterio de cierre:
+  - Planeacion sigue abriendo despues de un rebuild limpio y no depende de un archivo intermedio para bootear.
+  - La relacion entre HTML, JS y CSS queda clara para mantenimiento futuro.
+- Validacion QA:
+  - En la revision local del `2026-07-27`, `Planeacion-ley/` ya carga directamente el bundle estable `index-planeacion-20260603d.js`.
+  - Tras reconstruir `monolito`, la ruta sigue respondiendo `200` y ya no depende del shim `index-DXGJThHF.js` como entrada principal.
 
 ## Definicion de terminado
 

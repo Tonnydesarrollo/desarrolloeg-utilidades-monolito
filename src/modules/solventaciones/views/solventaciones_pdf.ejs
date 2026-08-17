@@ -566,8 +566,11 @@
       .page-break { break-after: page; page-break-after: always; }
       @media print { body { background: #fff; } }
     </style>
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
   </head>
-  <body>
+  <body class="portal-shell portal-solventaciones">
+    <a class="skip-link" href="#solventaciones-pdf-main">Saltar al contenido principal</a>
+    <main id="solventaciones-pdf-main" class="page" role="main" aria-label="Reporte de solventaciones PDF">
     <div class="sheet">
       <div class="hero">
         <div class="hero-grid">
@@ -817,7 +820,7 @@
         <div class="footer-center">Reporte profesional - Desarrollo EG</div>
         <div class="footer-block" style="text-align:right;"><%= esc(footerRight.join("\n")) %></div>
       </div>
-    </div>
+    </main>
   </body>
 </html>
 

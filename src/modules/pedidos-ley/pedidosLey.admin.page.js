@@ -62,11 +62,12 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
 
   return `<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pedidos Admin | Desarrollo EG</title>
-  <style>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pedidos Admin | Desarrollo EG</title>
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727">
+    <style>
     :root {
       --bg:#f5f7fb;
       --surface:rgba(255,255,255,.98);
@@ -463,7 +464,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     }
   </style>
 </head>
-<body>
+<body class="portal-shell portal-pedidos">
   <a class="skip-link" href="#pedidos-main">Saltar al contenido principal</a>
   <main id="pedidos-main" class="page" role="main" aria-label="Panel administrativo de pedidos">
     <section class="hero">

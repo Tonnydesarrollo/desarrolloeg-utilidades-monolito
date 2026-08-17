@@ -1,0 +1,353 @@
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Montserrat:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+
+:root {
+  --portal-font-display: "Cinzel", "Georgia", serif;
+  --portal-font-ui: "Montserrat", "Segoe UI", Aptos, Inter, system-ui, sans-serif;
+  --portal-font-body: "Inter", "Segoe UI", Aptos, system-ui, sans-serif;
+  --portal-bg: #f4efe8;
+  --portal-surface: rgba(255, 255, 255, 0.96);
+  --portal-surface-soft: rgba(247, 249, 251, 0.94);
+  --portal-ink: #15202b;
+  --portal-muted: #5f6d7a;
+  --portal-line: rgba(33, 49, 63, 0.12);
+  --portal-shadow: 0 18px 60px rgba(21, 32, 43, 0.08);
+  --portal-accent: #0f4c5c;
+  --portal-accent-2: #c0392b;
+  --portal-accent-3: #1d4ed8;
+}
+
+body.portal-shell {
+  margin: 0 !important;
+  min-height: 100vh;
+  color: var(--portal-ink) !important;
+  font-family: var(--portal-font-body) !important;
+  background:
+    radial-gradient(circle at top left, rgba(15, 76, 92, 0.14), transparent 24%),
+    radial-gradient(circle at top right, rgba(192, 57, 43, 0.10), transparent 26%),
+    linear-gradient(180deg, #f8fbff 0%, #eff3f8 46%, #e8edf4 100%);
+}
+
+body.portal-shell a {
+  color: inherit;
+}
+
+body.portal-shell .page,
+body.portal-shell .shell {
+  width: min(1680px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 16px 56px;
+}
+
+body.portal-shell main.page,
+body.portal-shell main.shell,
+body.portal-shell main[role="main"] {
+  width: min(1680px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 16px 56px;
+}
+
+body.portal-shell .skip-link {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 1000;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--portal-ink) !important;
+  color: #fff !important;
+  font-weight: 800;
+  text-decoration: none;
+  transform: translateY(-180%);
+  transition: transform 180ms ease;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18) !important;
+}
+
+body.portal-shell .skip-link:focus {
+  transform: translateY(0);
+}
+
+body.portal-shell .skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 3px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+body.portal-shell :is(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid rgba(29, 78, 216, 0.36);
+  outline-offset: 2px;
+}
+
+body.portal-shell .hero,
+body.portal-shell .panel,
+body.portal-shell .card,
+body.portal-shell .sheet,
+body.portal-shell .auth-card,
+body.portal-shell .stat-card,
+body.portal-shell .topbar,
+body.portal-shell .workflow-card,
+body.portal-shell .viewer,
+body.portal-shell .preview-panel {
+  background: var(--portal-surface) !important;
+  border: 1px solid var(--portal-line) !important;
+  box-shadow: var(--portal-shadow) !important;
+  border-radius: 24px !important;
+}
+
+body.portal-shell .hero,
+body.portal-shell .panel,
+body.portal-shell .card,
+body.portal-shell .sheet {
+  backdrop-filter: blur(14px);
+}
+
+body.portal-shell .hero,
+body.portal-shell .panel,
+body.portal-shell .card,
+body.portal-shell .sheet,
+body.portal-shell .details-panel,
+body.portal-shell .accordion-card,
+body.portal-shell .job-card,
+body.portal-shell .desglose-card,
+body.portal-shell .forma-pago-card,
+body.portal-shell .link-card,
+body.portal-shell .metric,
+body.portal-shell .stat,
+body.portal-shell .field,
+body.portal-shell .hero-note,
+body.portal-shell .link-card {
+  color: var(--portal-ink);
+}
+
+body.portal-shell .button,
+body.portal-shell .btn,
+body.portal-shell .pill,
+body.portal-shell .chip {
+  border-radius: 999px !important;
+  font-weight: 800 !important;
+  min-height: 44px;
+}
+
+body.portal-shell .button.primary,
+body.portal-shell .btn.primary,
+body.portal-shell .pill.strong,
+body.portal-shell .chip-brand {
+  background: linear-gradient(135deg, var(--portal-accent-3), var(--portal-accent)) !important;
+  color: #fff !important;
+}
+
+body.portal-shell .button.secondary,
+body.portal-shell .btn.secondary,
+body.portal-shell .pill,
+body.portal-shell .chip {
+  background: rgba(15, 23, 42, 0.04) !important;
+  color: var(--portal-ink) !important;
+  border: 1px solid var(--portal-line) !important;
+}
+
+body.portal-shell .page-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at top, rgba(255,255,255,0.98), rgba(247,249,251,0.94));
+  backdrop-filter: blur(16px);
+  transition: opacity 260ms ease, visibility 260ms ease;
+}
+
+body.portal-shell .page-loader.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.portal-shell .page-loader-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 28px 32px;
+  border-radius: 28px;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(26,42,58,0.08);
+  box-shadow: 0 24px 60px rgba(26,42,58,0.12);
+}
+
+body.portal-shell .page-loader-spinner {
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  border: 4px solid rgba(198, 59, 34, 0.14);
+  border-top-color: #c0392b;
+  border-right-color: rgba(26,42,58,0.18);
+  animation: pageLoaderSpin 0.85s linear infinite;
+}
+
+body.portal-shell .page-loader-text {
+  margin: 0;
+  font-family: var(--portal-font-ui);
+  font-weight: 800;
+  font-size: 0.88rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--portal-ink);
+}
+
+@keyframes pageLoaderSpin {
+  to { transform: rotate(360deg); }
+}
+
+body.portal-shell input,
+body.portal-shell textarea,
+body.portal-shell select {
+  border-radius: 16px !important;
+  border: 1px solid var(--portal-line) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  color: var(--portal-ink) !important;
+  box-shadow: none !important;
+}
+
+body.portal-shell input:focus,
+body.portal-shell textarea:focus,
+body.portal-shell select:focus {
+  border-color: rgba(29, 78, 216, 0.45) !important;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.10) !important;
+  outline: none !important;
+}
+
+body.portal-shell label {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-family: var(--portal-font-ui);
+  font-weight: 700;
+  color: var(--portal-muted);
+}
+
+body.portal-shell input,
+body.portal-shell textarea,
+body.portal-shell select,
+body.portal-shell option {
+  font-family: var(--portal-font-ui);
+  min-height: 44px;
+}
+
+body.portal-shell textarea {
+  min-height: 120px;
+}
+
+body.portal-shell details {
+  border-radius: 18px;
+}
+
+body.portal-shell summary {
+  cursor: pointer;
+  font-family: var(--portal-font-ui);
+}
+
+body.portal-shell table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+body.portal-shell th {
+  color: var(--portal-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+body.portal-shell td,
+body.portal-shell th {
+  border-top: 1px solid rgba(33, 49, 63, 0.10);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+body.portal-shell .workflow-card,
+body.portal-shell .viewer,
+body.portal-shell .preview-panel {
+  padding: 16px !important;
+}
+
+body.portal-shell .hero h1,
+body.portal-shell h1,
+body.portal-shell .section-title h2,
+body.portal-shell .brand h1,
+body.portal-shell h2,
+body.portal-shell h3,
+body.portal-shell legend {
+  font-family: var(--portal-font-display);
+  letter-spacing: -0.02em;
+}
+
+body.portal-shell .hero p,
+body.portal-shell .panel p,
+body.portal-shell .card p,
+body.portal-shell .sheet p,
+body.portal-shell .hero-note,
+body.portal-shell .hint,
+body.portal-shell .sub,
+body.portal-shell .tag,
+body.portal-shell .badge,
+body.portal-shell .label {
+  font-family: var(--portal-font-ui);
+}
+
+body.portal-shell .workflow-card strong,
+body.portal-shell .hero .accent,
+body.portal-shell .topbar strong {
+  color: var(--portal-ink);
+}
+
+body.portal-shell .tag,
+body.portal-shell .badge,
+body.portal-shell .label,
+body.portal-shell .hint,
+body.portal-shell .sub {
+  color: var(--portal-muted);
+}
+
+body.portal-shell .button:hover,
+body.portal-shell .btn:hover,
+body.portal-shell .pill:hover,
+body.portal-shell .chip:hover {
+  transform: translateY(-1px);
+}
+
+body.portal-shell .hero h1,
+body.portal-shell h1,
+body.portal-shell .section-title h2,
+body.portal-shell .brand h1 {
+  letter-spacing: -0.02em;
+}
+
+body.portal-shell .metric,
+body.portal-shell .stat,
+body.portal-shell .group,
+body.portal-shell .field,
+body.portal-shell .hero-note,
+body.portal-shell .link-card {
+  border-radius: 18px !important;
+  border: 1px solid rgba(33, 49, 63, 0.08) !important;
+}
+
+body.portal-shell .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+body.portal-shell .actions a,
+body.portal-shell .actions button {
+  min-height: 44px;
+}
+
+body.portal-shell .empty-state,
+body.portal-shell .error-state,
+body.portal-shell .notice,
+body.portal-shell .loader,
+body.portal-shell .skeleton {
+  border-radius: 18px;
+  border: 1px solid rgba(33, 49, 63, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+}

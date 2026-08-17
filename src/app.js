@@ -1,6 +1,7 @@
 ﻿import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
+import { env } from "./config/env.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.router.js";
 import { homeRouter } from "./modules/home/home.router.js";
 import { contabilidadRouter } from "./modules/contabilidad/contabilidad.router.js";
@@ -14,8 +15,8 @@ import { separarPipcRouter } from "./modules/separar-pipc/separarPipc.router.js"
 import { whatsappCapacitadoresRouter } from "./modules/whatsapp-capacitadores/whatsappCapacitadores.router.js";
 import { solventacionesRouter } from "./modules/solventaciones/solventaciones.router.js";
 import { sucursalesDocsRouter } from "./modules/sucursales-docs/sucursalesDocs.router.js";
+import { reportesInspeccionesRouter } from "./modules/reportes-inspecciones/reportesInspecciones.router.js";
 import { polizaLeyRouter } from "./modules/poliza-ley/polizaLey.router.js";
-import { bolsaSyncRouter } from "./modules/bolsa-sync/bolsaSync.router.js";
 import { pedidosLeyApiRouter } from "./modules/pedidos-ley/pedidosLey.router.js";
 import { portalPath, runWithPortalContext } from "./modules/home/portalPath.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
@@ -124,6 +125,7 @@ export function createApp() {
   if (publicImgPath) {
     app.use("/img", express.static(publicImgPath));
   }
+  app.use("/ui", express.static(path.join(__dirname, "public", "ui")));
 
   app.use(applyHostCompatibility);
   app.use(applyPortalEnvironmentCompatibility);
@@ -150,14 +152,18 @@ export function createApp() {
   app.use("/solventaciones", solventacionesRouter);
   app.use("/SUCURSALES-DOCS", sucursalesDocsRouter);
   app.use("/sucursales-docs", sucursalesDocsRouter);
+  app.use("/REPORTES-INSPECCIONES", reportesInspeccionesRouter);
+  app.use("/reportes-inspecciones", reportesInspeccionesRouter);
   app.use("/POLIZA_LEY", polizaLeyRouter);
   app.use("/poliza-ley", polizaLeyRouter);
-  app.use("/bolsa-sync", bolsaSyncRouter);
   app.use("/api/pedidos-ley", pedidosLeyApiRouter);
 
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
+      environment: env.environment,
+      nodeEnv: env.nodeEnv,
+      port: env.port,
       release: getReleaseInfo(),
       background: getBackgroundServicesStatus(),
       cluster: getClusterCoordinatorStatus(),

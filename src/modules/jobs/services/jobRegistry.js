@@ -80,6 +80,18 @@ export const jobRegistry = {
       'PEDIDOS_APPSHEET_API_KEY',
     ],
   },
+  'appsheet-base-sync': {
+    id: 'appsheet-base-sync',
+    description: 'Sincroniza las tablas base de AppSheet hacia la base local del monolito',
+    type: 'native',
+    requiredEnv: [],
+    requiredEnvAny: [
+      ['FINANZAS_APPSHEET_APP_ID', 'FINANZAS_APPSHEET_API_KEY'],
+      ['DESARROLLOEG_APPSHEET_APP_ID', 'DESARROLLOEG_APPSHEET_ACCESS_KEY'],
+      ['DESARROLLOEG_V2_APPSHEET_APP_ID', 'DESARROLLOEG_V2_APPSHEET_API_KEY'],
+      ['APPSHEET_APP_ID', 'APPSHEET_API_KEY'],
+    ],
+  },
 };
 
 export function getJobDefinition(jobId) {
@@ -103,10 +115,17 @@ export function getJobConfigurationState(jobId) {
   const definition = getJobDefinition(jobId);
   const requiredEnv = getJobRequiredEnv(jobId);
   const missingEnv = getMissingJobEnv(jobId);
+  const requiredEnvAny = Array.isArray(definition?.requiredEnvAny) ? definition.requiredEnvAny : [];
+  const anyGroupSatisfied = requiredEnvAny.length === 0
+    || requiredEnvAny.some((group) => Array.isArray(group) && group.every((envName) => {
+      const value = process.env[envName];
+      return value !== undefined && value !== null && String(value).trim() !== "";
+    }));
   return {
     exists: Boolean(definition),
     requiredEnv,
     missingEnv,
-    configured: Boolean(definition) && missingEnv.length === 0,
+    requiredEnvAny,
+    configured: Boolean(definition) && missingEnv.length === 0 && anyGroupSatisfied,
   };
 }

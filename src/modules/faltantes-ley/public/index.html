@@ -7,6 +7,7 @@
   <title>Faltantes Ley | Desarrollo EG</title>
   <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
   <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+  <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
   <style>
     :root {
       --bg-a: #07111f;
@@ -805,7 +806,9 @@
     }
   </style>
 </head>
-<body>
+<body class="portal-shell portal-faltantes">
+  <a class="skip-link" href="#faltantes-main">Saltar al contenido principal</a>
+  <main id="faltantes-main" class="page" role="main" aria-label="Faltantes Ley">
   <div class="shell">
     <header class="topbar">
       <div class="brand">
@@ -1664,6 +1667,8 @@
       setStatus(error.message || "No se pudieron cargar los datos.", true);
     });
   </script>
+  </div>
+  </main>
 </body>
 </html>
 

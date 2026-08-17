@@ -1,10 +1,12 @@
 import { spawn } from 'child_process';
 import { getJobConfigurationState, jobRegistry } from './jobRegistry.js';
+import { syncAppsheetBaseToLocal } from '../native/appsheetBaseSync.js';
 import { syncFacturasNative } from '../native/facturas/syncFacturasNative.js';
 import { syncPedidosNative } from '../native/pedidos/syncPedidosNative.js';
 import { exportCasaleyAllNative, syncCasaleyNative } from '../native/casaley/syncCasaleyNative.js';
 
 const nativeHandlers = {
+  'appsheet-base-sync': syncAppsheetBaseToLocal,
   'casaley-export-all': exportCasaleyAllNative,
   'casaley-sync-appsheet': syncCasaleyNative,
   'pagos-ley': () => syncCasaleyNative({ uploadTarget: 'pagos' }),

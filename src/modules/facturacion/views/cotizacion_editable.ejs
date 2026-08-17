@@ -173,10 +173,13 @@
         .no-print { display: none !important; }
       }
     </style>
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
   </head>
-  <body>
-    <div class="page">
-      <div class="actions">
+  <body class="portal-shell portal-facturacion">
+    <a class="skip-link" href="#facturacion-main">Saltar al contenido principal</a>
+    <main id="facturacion-main" class="page" role="main" aria-label="Cotizacion editable">
+      <div class="actions" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+        <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
         <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
       </div>
       <h1>Cotizacion Editable</h1>
@@ -486,6 +489,7 @@
         renderCondiciones();
       })();
     </script>
+    </main>
   </body>
 </html>
 

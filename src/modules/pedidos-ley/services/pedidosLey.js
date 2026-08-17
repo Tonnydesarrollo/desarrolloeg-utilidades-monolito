@@ -7,7 +7,6 @@ const APP_ID = (process.env.FINANZAS_APPSHEET_APP_ID || process.env.PEDIDOS_APPS
 const API_KEY = (process.env.FINANZAS_APPSHEET_API_KEY || process.env.PEDIDOS_APPSHEET_API_KEY || process.env.APPSHEET_API_KEY || '').trim();
 const TABLE = (process.env.FINANZAS_APPSHEET_TABLE_PEDIDOS || process.env.PEDIDOS_APPSHEET_TABLE_PEDIDOS || 'PEDIDOS_LEY').trim();
 const SUCURSALES_TABLE = (process.env.FINANZAS_APPSHEET_TABLE_SUCURSALES || process.env.PEDIDOS_APPSHEET_TABLE_SUCURSALES || process.env.APPSHEET_TABLE_SUCURSALES || 'SUCURSALES').trim();
-const EMPRESA_TABLE = (process.env.PEDIDOS_APPSHEET_TABLE_EMPRESA || process.env.PEDIDOS_APPSHEET_TABLE_EMPRESAS || 'EMPRESA').trim();
 const MUNICIPIO_TABLE = (process.env.PEDIDOS_APPSHEET_TABLE_MUNICIPIO || process.env.PEDIDOS_APPSHEET_TABLE_MUNICIPIOS || 'MUNICIPIOS').trim();
 const ESTADO_TABLE = (process.env.PEDIDOS_APPSHEET_TABLE_ESTADO || process.env.PEDIDOS_APPSHEET_TABLE_ESTADOS || 'ESTADOS').trim();
 const VIEW = (process.env.FINANZAS_APPSHEET_VIEW_SIN_LIBERACION || 'SIN LIBERACION').trim();
@@ -248,16 +247,6 @@ function resolveFacturadorNombre(facturadorId, row = {}) {
   return fromRow;
 }
 
-function normalizeEmpresaRow(row = {}) {
-  const key = normalizeScalarText(getRowValue(row, ['ID', 'Id', 'id', 'Row ID', 'ROW ID']));
-  const nombreComercial = normalizeScalarText(getRowValue(row, ['NOMBRE COMERCIAL', 'Nombre Comercial', 'nombre comercial']));
-  const razonSocial = normalizeScalarText(getRowValue(row, ['RAZON SOCIAL', 'Razón Social', 'RAZON SOCIAL']));
-  const logo = normalizeScalarText(getRowValue(row, ['LOGO', 'Logo']));
-  const logoUrl = normalizeScalarText(getRowValue(row, ['LOGOURL', 'LogoURL', 'LOGO URL']));
-  const displayLabel = razonSocial || nombreComercial || key;
-  return { key, nombreComercial, razonSocial, logo, logoUrl, displayLabel, raw: row };
-}
-
 function normalizeMunicipioRow(row = {}) {
   const key = normalizeScalarText(getRowValue(row, ['ID', 'Id', 'id', 'Row ID', 'ROW ID']));
   const nombre = getFirstMeaningfulText(row, [
@@ -349,7 +338,6 @@ function normalizeSucursalRow(row = {}, catalogs = {}) {
   const empresaIdRaw = getRowValue(row, ['ID EMPRESA', 'EMPRESA', 'Empresa', 'empresa']);
   const municipioIdRaw = getRowValue(row, ['MUNICIPIO', 'Municipio', 'municipio']);
   const estadoIdRaw = getRowValue(row, ['ESTADO', 'Estado', 'estado']);
-  const empresaRow = resolveLookupRow(empresaIdRaw, catalogs.empresasLookup);
   const municipioRow = resolveLookupRow(municipioIdRaw, catalogs.municipiosLookup);
   const estadoRow = resolveLookupRow(estadoIdRaw, catalogs.estadosLookup);
   const direccion = normalizeScalarText(getRowValue(row, ['DIRECCION', 'Direccion', 'direccion']));
@@ -377,7 +365,7 @@ function normalizeSucursalRow(row = {}, catalogs = {}) {
     tienda,
     displayLabel,
     empresaId: normalizeScalarText(empresaIdRaw),
-    empresaLabel: empresaRow?.displayLabel || empresaRow?.razonSocial || empresaRow?.nombreComercial || normalizeScalarText(empresaIdRaw),
+    empresaLabel: normalizeScalarText(empresaIdRaw),
     municipioId: normalizeScalarText(municipioIdRaw),
     municipioLabel: municipioRow?.displayLabel || municipioRow?.nombre || normalizeScalarText(municipioIdRaw),
     municipioNombre: municipioRow?.nombre || municipioRow?.displayLabel || normalizeScalarText(municipioIdRaw),
@@ -399,7 +387,6 @@ function normalizeSucursalRow(row = {}, catalogs = {}) {
     pedido,
     latLng,
     mesPlaneacion,
-    empresa: empresaRow || null,
     municipio: municipioRow || null,
     estado: estadoRow || null,
     raw: row,
@@ -658,7 +645,6 @@ function normalizeRow(row = {}, catalogs = {}, thresholds = {}) {
   const relatedLiberaciones = normalizeScalarText(getRowValue(row, ['Related LIBERACIONESs', 'Related LIBERACIONES', 'related liberaciones']));
   const fechaDate = extractYear(getRowValue(row, ['fecha(DATE)', 'FECHA(DATE)', 'fecha']));
   const tipoClasificacion = classifyPedidoTipo(descripcion, importeNumber, thresholds);
-  const empresaRow = resolveLookupRow(companyIdRaw, catalogs.empresasLookup);
   const municipioRow = resolveLookupRow(municipalityIdRaw, catalogs.municipiosLookup);
   const estadoRow = resolveLookupRow(stateIdRaw, catalogs.estadosLookup);
   const municipioNombre = municipioRow?.nombre || municipioRow?.displayLabel || getFirstMeaningfulText(municipioRow?.raw || {}, ['NOMBRE', 'Nombre', 'LABEL', 'Label', 'LABEL2', 'Label2', 'MUNICIPIO', 'Municipio', 'NAME', 'Name']) || normalizeScalarText(municipalityIdRaw);
@@ -686,7 +672,7 @@ function normalizeRow(row = {}, catalogs = {}, thresholds = {}) {
       ultimoPipcEstatal,
       ultimoPipcMunicipal,
       empresaId: normalizeScalarText(companyIdRaw),
-      empresaLabel: empresaRow?.displayLabel || empresaRow?.razonSocial || empresaRow?.nombreComercial || normalizeScalarText(companyIdRaw),
+      empresaLabel: normalizeScalarText(companyIdRaw),
       municipioId: normalizeScalarText(municipalityIdRaw),
       municipioLabel: municipioNombre,
       municipioNombre,
@@ -725,7 +711,6 @@ function normalizeRow(row = {}, catalogs = {}, thresholds = {}) {
     tipoClasificacion,
     clasificacionLabel,
     clasificacionDetalle,
-    empresa: empresaRow || null,
     municipio: municipioRow || null,
     estado: estadoRow || null,
     raw: row,
@@ -854,18 +839,6 @@ async function fetchSucursalesLookup(forceRefresh = false, catalogs = {}) {
   );
 }
 
-async function fetchEmpresasLookup(forceRefresh = false) {
-  return fetchLookupRows(
-    EMPRESA_TABLE,
-    normalizeEmpresaRow,
-    'empresas',
-    forceRefresh,
-    (rows) => buildIndexedLookup(rows, {
-      labelSelector: (row) => row.displayLabel || row.razonSocial || row.nombreComercial || row.key,
-    })
-  );
-}
-
 async function fetchMunicipiosLookup(forceRefresh = false) {
   return fetchLookupRows(
     MUNICIPIO_TABLE,
@@ -891,20 +864,17 @@ async function fetchEstadosLookup(forceRefresh = false) {
 }
 
 async function fetchPedidosLeyCatalogs(forceRefresh = false) {
-  const [empresasLookup, municipiosLookup, estadosLookup] = await Promise.all([
-    fetchEmpresasLookup(forceRefresh),
+  const [municipiosLookup, estadosLookup] = await Promise.all([
     fetchMunicipiosLookup(forceRefresh),
     fetchEstadosLookup(forceRefresh),
   ]);
 
   const sucursalesLookup = await fetchSucursalesLookup(forceRefresh, {
-    empresasLookup,
     municipiosLookup,
     estadosLookup,
   });
 
   return {
-    empresasLookup,
     municipiosLookup,
     estadosLookup,
     sucursalesLookup,

@@ -652,9 +652,11 @@
         }
       }
     </style>
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
   </head>
-  <body>
-    <div class="page">
+  <body class="portal-shell portal-solventaciones">
+    <a class="skip-link" href="#solventaciones-main">Saltar al contenido principal</a>
+    <main id="solventaciones-main" class="page" role="main" aria-label="Reporte de solventaciones">
       <div class="sheet">
         <section class="hero">
           <div class="hero-top">
@@ -666,6 +668,7 @@
               </div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+              <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
               <span class="chip chip-brand">Datos reales</span>
               <span class="chip">Tabla: <%= esc(reporte.tableName || "STATUS SISTEMA PC") %></span>
             </div>
@@ -923,10 +926,10 @@
         </datalist>
 
         <div class="footer">
-          Reporte generado desde Desarrollo EG Consultores Â· <%= new Date().getFullYear() %>
+          Reporte generado desde Desarrollo EG Consultores · <%= new Date().getFullYear() %>
         </div>
       </div>
-    </div>
+    </main>
   </body>
 </html>
 

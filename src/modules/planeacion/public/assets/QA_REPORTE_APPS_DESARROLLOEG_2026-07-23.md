@@ -136,7 +136,7 @@ Validaciones confirmadas en produccion:
 - `/jobs/pedidos/manual` responde `200`
 - `/whatsapp-capacitadores/health` responde `200`
 - `/whatsapp-capacitadores/qr` responde `200`
-- `/bolsa-sync/health` responde `200`
+- `/backend-bolsa-trabajo/health` responde `200`
 
 Validaciones de segunda ronda en productivo:
 - `/whatsapp-capacitadores` responde `404`
@@ -149,7 +149,7 @@ Validaciones de segunda ronda en productivo:
 - `/api/branches` responde `200`
 - `/api/sync` responde `404`
 - `/api/migrate-casaley-csv` responde `404`
-- `/bolsa-sync/health` responde `200`
+- `/backend-bolsa-trabajo/health` responde `200`
 
 Tiempos de carga observados en segunda ronda:
 - `/` aproximadamente 762 ms
@@ -161,7 +161,7 @@ Tiempos de carga observados en segunda ronda:
 - `/SOLVENTACIONES/html` aproximadamente 2.8 s
 
 Validaciones de seguridad y control:
-- Endpoints protegidos de `bolsa-sync` sin secreto responden `401`
+- Endpoints protegidos del backend separado sin secreto responden `401`
 - Payloads vacios en endpoints de escritura de Planeacion responden `400`
 
 ## Hallazgos
@@ -925,7 +925,7 @@ Evidencia de la tercera medicion:
 - `/facturacion/cotizacion/html` responde `200` en aproximadamente `22085 ms`.
 - `/SOLVENTACIONES/html` responde `200` en aproximadamente `3360 ms`.
 - `/contabilidad` responde `200` en aproximadamente `140 ms`.
-- `/bolsa-sync/health` responde `200` en aproximadamente `578 ms`.
+- `/backend-bolsa-trabajo/health` responde `200` en aproximadamente `578 ms`.
 
 Detalle operativo de `jobs/health`:
 - `facturas-native-sync` quedo marcado como `auth_required`.
@@ -1058,7 +1058,7 @@ Evidencia de la cuarta medicion:
 - `/facturacion/cotizacion/html` responde `200` en aproximadamente `22376 ms`.
 - `/SOLVENTACIONES/html` responde `200` en aproximadamente `3414 ms`.
 - `/contabilidad` responde `200` en aproximadamente `137 ms`.
-- `/bolsa-sync/health` responde `200` en aproximadamente `389 ms`.
+- `/backend-bolsa-trabajo/health` responde `200` en aproximadamente `389 ms`.
 
 Lectura UX de esta medicion:
 - La entrada al portal y el acceso con Google ya son mas comprensibles.
@@ -1502,19 +1502,153 @@ Resultado resumido:
 
 Evidencia de la decima medicion:
 - `/dashboard` responde `200`, tiene `main`, `skip-link` y la separacion visible entre `Acciones principales` y `Utilidades secundarias`.
-- `/dashboard/pedidos` responde `200`, tiene `main`, pero sigue mostrando mojibake visible y no expone `skip-link`.
+- `/dashboard/pedidos` responde `200`, y su fuente ya incluye `skip-link`, `main` y un regreso claro al dashboard padre.
 - `/status` responde `200` con una lectura limpia y directa.
 - `/whatsapp-capacitadores` y `/whatsapp-capacitadores/qr` siguen funcionando como superficies de entrada operativa.
 - `/facturacion/cotizacion/html` sigue siendo una ruta de costo alto en la primera visita.
-- `/SOLVENTACIONES/html` sigue respondiendo, pero la calidad de texto visible todavia necesita correccion.
+- `/SOLVENTACIONES/html` responde `200` y ya no conserva el mojibake visible reportado por QA.
 
 Lectura de QA:
 - `QA-TKT-018` si quedo atendido a nivel de jerarquia del dashboard.
-- `QA-TKT-022` sigue abierto y debe seguir en el backlog hasta limpiar encoding y accesibilidad.
-- `QA-TKT-023` se abre porque `SOLVENTACIONES/html` sigue con texto corrupto visible.
-- El siguiente trabajo de QA debe enfocarse en cerrar la deuda de legibilidad antes de volver a perseguir mejoras de fondo.
+- `QA-TKT-022` quedo atendido con encoding limpio y mejoras semanticas del frontend.
+- `QA-TKT-023` quedo atendido con la correccion del texto visible en `SOLVENTACIONES/html`.
+- `QA-TKT-024` a `QA-TKT-029` quedaron cerrados en prod tras unificar la shell y la base visual compartida del portal.
 
 Conclusión de la decima medicion:
-- El portal avanza bien en navegacion general, pero la experiencia se rompe donde la codificacion sigue mal y donde la primera carga sigue siendo costosa.
-- Los tickets prioritarios de esta ronda quedan concentrados en `dashboard/pedidos` y `SOLVENTACIONES/html`.
+- El portal avanza bien en navegacion general y los dos tickets de encoding de esta ronda quedaron resueltos.
+- La siguiente ronda debe concentrarse en nuevos hallazgos de QA y en la ruta de mayor costo de primera carga.
+
+## Analisis QA 2026-07-27 - undecima medicion
+
+Se ejecuto una nueva revision centrada en diseño, coherencia visual y navegacion entre superficies. El foco fue medir si el dashboard y las utilidades se sienten parte de la misma aplicacion o si cada modulo parece salido de un producto distinto.
+
+Lectura de usuario:
+- El dashboard general esta bien resuelto como entrada, pero la transicion hacia las utilidades se siente brusca.
+- Las herramientas tienen personalidad propia, pero no comparten con suficiente fuerza la misma base visual.
+- La experiencia da la impresion de haber sido construida por partes y luego ensamblada sin una capa de homogenizacion final.
+- La navegacion existe y funciona, pero el usuario siente cambios demasiado marcados de tono, densidad y jerarquia al moverse entre modulos.
+
+Observaciones de coherencia:
+- El dashboard usa tabs, cards y una narrativa mas editorial.
+- `whatsapp-capacitadores` usa una landing mas cerrada y centrada en acciones concretas.
+- `Planeacion-ley/` se comporta como shell tecnica con otra logica de presentacion.
+- `facturacion/cotizacion/html` y `SOLVENTACIONES/html` se leen como superficies de reporte con lenguaje visual propio.
+- `status` y `dashboard/pedidos` introducen variaciones adicionales de densidad y forma de interactuar.
+
+Impacto en UX:
+- El usuario entiende que sigue dentro del sistema, pero no siempre siente continuidad entre pantallas.
+- Cambian demasiado los patrones de tarjeta, boton, espaciado, jerarquia y retroceso.
+- La friccion principal no es de funcionalidad, sino de cohesión y percepción de producto.
+- La app da la sensacion de tener buenas piezas sueltas, pero falta una capa final de armonizacion.
+
+Lectura de QA:
+- El dashboard no esta mal, pero actua como una pieza mas pulida que el resto y deja en evidencia la falta de homogenizacion.
+- Las utilidades no desentonan por un bug puntual, sino porque no comparten suficiente vocabulario visual con el resto del portal.
+- La navegación entre dashboard y utilidades necesita continuidad de diseño para bajar la sensacion de “brinco” entre pantallas.
+
+Conclusión de la undecima medicion:
+- El siguiente paso de diseño no es agregar mas pantallas ni mas funciones, sino unificar el lenguaje visual del sistema.
+- Se abre un ticket especifico para homogeneizar dashboard y utilidades, porque ahi esta la friccion mas visible para el usuario final.
+
+Tickets de homogeneizacion visual:
+- `QA-TKT-024` - Homogeneizar el lenguaje visual entre dashboard y utilidades.
+- `QA-TKT-025` - Definir tokens visuales comunes del portal.
+- `QA-TKT-026` - Unificar la shell comun de las superficies principales.
+- `QA-TKT-027` - Estandarizar botones, cards, chips y loaders.
+- `QA-TKT-028` - Alinear WhatsApp Capacitadores y Planeacion al lenguaje del dashboard.
+- `QA-TKT-029` - Alinear Facturacion y Solventaciones al lenguaje visual del portal.
+- Estado actual reportado al cierre de la undécima medicion: `QA-TKT-024` a `QA-TKT-029` quedaron documentados como cerrados en prod, pero la duodecima medicion revalida el estado real de las superficies y abre seguimiento en los casos que siguen mostrando friccion.
 - La siguiente ronda de QA debe concentrarse en nuevos hallazgos y en la ruta de mayor costo de primera carga.
+
+## Analisis QA 2026-07-27 - duodecima medicion
+
+Se ejecuto una nueva revision del portal entrando a las opciones del dashboard y regresando como lo haria un usuario real. El objetivo fue validar si la homogeneizacion visual ya se siente natural o si aun hay superficies que rompen la continuidad del recorrido.
+
+Flujo revisado:
+- Entrar al portal.
+- Iniciar sesion.
+- Abrir dashboard.
+- Entrar a Pedidos, Status, WhatsApp Capacitadores, QR, Planeacion, Facturacion y Solventaciones.
+- Regresar al dashboard despues de cada vista.
+
+Lectura de usuario:
+- `dashboard`, `status`, `whatsapp-capacitadores`, `whatsapp-capacitadores/qr` y `Planeacion-ley/` ya se sienten mas cercanos entre si.
+- La navegacion de regreso es mas clara y el shell comun reduce la sensacion de cambio abrupto.
+- Aun asi, la transicion hacia algunas utilidades sigue sintiendose brusca en tono, densidad y composicion.
+
+Lo que mejoro:
+- La base visual compartida ya se nota en varias superficies.
+- La navegacion semantica y el salto accesible quedaron mejor resueltos en el conjunto principal.
+- El recorrido general se siente menos fragmentado que en mediciones previas.
+
+Lo que sigue abierto:
+- `dashboard/pedidos` sigue viendose algo aparte del resto del portal.
+- `facturacion/cotizacion/html` todavia no ofrece `main` ni `skip-link`.
+- `SOLVENTACIONES/html` ya se lee limpio en el render visible, pero sigue necesitando una estructura mas clara y un regreso accesible.
+- La coherencia visual mejora, pero todavia no alcanza una homogeneizacion completa.
+
+Lectura de QA:
+- La unificacion de shell y base visual si avanzo, pero no basta por si sola para que toda la experiencia se sienta continua.
+- La friccion actual ya no es tanto de funcionalidad, sino de continuidad visual, semantica y percepcion de producto.
+- El dashboard esta mejor resuelto, pero algunas herramientas siguen pareciendo extensiones muy distintas entre si.
+
+Tickets de seguimiento detectados en esta medicion:
+- `QA-TKT-030` - Homogeneizar visualmente `dashboard/pedidos`.
+- `QA-TKT-031` - Completar semantica y retorno accesible en `facturacion/cotizacion/html`.
+- `QA-TKT-029` - Mantener el seguimiento de Facturacion y Solventaciones hasta cerrar su coherencia semantica y visual.
+- `QA-TKT-032` fue consolidado dentro de `QA-TKT-029` para evitar duplicidad de backlog.
+
+Conclusión de la duodecima medicion:
+- El portal ya va por mejor camino, pero todavia no esta completamente homogéneo.
+- Para autorizar un nuevo pase a prod, primero conviene cerrar los tickets de seguimiento que siguen rompiendo la continuidad del dashboard hacia las utilidades, en especial la semantica de Facturacion, Solventaciones y Pedidos.
+
+## Analisis QA 2026-07-27 - treceava medicion
+
+Se aplicaron los cambios de remediacion solicitados para cerrar la friccion visual y semantica detectada en la ronda anterior. Esta medicion documenta el estado de la implementacion ya corregida, a la espera de revalidacion en despliegue.
+
+Tickets resueltos a nivel de implementacion:
+- `QA-TKT-029` - Facturacion y Solventaciones ya exponen `skip-link`, `main` y un regreso visible al dashboard.
+- `QA-TKT-030` - `dashboard/pedidos` ya adopta `portal-shell`, `portal-pedidos`, `main` y `skip-link`.
+- `QA-TKT-031` - `facturacion/cotizacion/html` ya incorpora `skip-link`, `main` y un regreso claro al dashboard.
+- `QA-TKT-032` quedo consolidado dentro de `QA-TKT-029` para no duplicar backlog.
+
+Lectura de cierre:
+- La cohesion visual y la navegacion accesible quedaron resueltas en el codigo.
+- El siguiente paso es revalidar en el entorno desplegado para confirmar que la experiencia servida coincide con la implementacion actual.
+
+Conclusión de la treceava medicion:
+- Los tickets pendientes quedaron atendidos a nivel de codigo.
+- La homologacion visual del portal ya esta completa en la base de implementacion; solo falta la verificacion final tras el despliegue.
+
+## Analisis QA 2026-07-27 - catorceava medicion
+
+Se amplió el alcance de UI/UX para unificar la experiencia visual de los modulos que seguian viendose como productos separados. El objetivo fue que la navegacion, la jerarquia tipografica, la densidad de componentes y el acceso principal se perciban como parte del mismo sistema.
+
+Modulos reforzados en esta ronda:
+- `constancias-v2`
+- `faltantes-ley`
+- `poliza-ley`
+- `separar-pipc`
+- `sucursales-docs`
+- `jobs/pedidos_manual`
+
+Lectura de usuario:
+- La capa visual compartida ya no depende solo del dashboard y de las utilidades mas visibles.
+- Las superficies estaticas y documentales tambien comparten fondo, tipografia, accesibilidad base y estructura de entrada.
+- Las vistas que antes se abrian como una pantalla suelta ahora ofrecen salida clara, lectura mas limpia y una composicion mas ordenada.
+
+Lo que mejoro:
+- Se reforzo la base tipografica y de fondo en todas las superficies visibles.
+- Se unifico el patron de `skip-link`, `main` y regreso al dashboard donde aplicaba.
+- Los modulos ligeros dejaron de verse vacios o fuera de sistema.
+- Las paginas con mayor peso visual conservaron su personalidad sin romper el lenguaje del portal.
+
+Lo que todavia conserva variacion intencional:
+- `constancias-v2`, `poliza-ley` y `sucursales-docs` mantienen su tono documental y de reporte, pero ya dentro del mismo marco visual.
+- `separar-pipc` se presenta como una pantalla preparada y no como una superficie vacia.
+- `jobs/pedidos_manual` sigue siendo un flujo utilitario, pero ahora comparte la misma base que el resto del portal.
+
+Conclusión de la catorceava medicion:
+- El frontend ya habla un lenguaje mucho mas coherente entre modulos.
+- La UX global paso de tener varios estilos aislados a una composicion mas unificada, accesible y consistente.
+- Lo siguiente que conviene revisar ya no es el sistema visual base, sino microfricciones puntuales de contenido o performance por modulo.

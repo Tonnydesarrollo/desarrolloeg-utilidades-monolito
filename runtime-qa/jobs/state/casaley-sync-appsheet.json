@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-13T20:58:04.597Z",
+  "data": {
+    "pagos": {
+      "lastDate": "1/1/1900 12:00:00 AM"
+    },
+    "facturas": {
+      "lastDate": "2026-07-31"
+    }
+  }
+}
