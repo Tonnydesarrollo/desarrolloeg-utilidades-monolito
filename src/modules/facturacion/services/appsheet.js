@@ -4,7 +4,7 @@ import auth from "../utils/auth.js";
 import { crearDriveClient, construirThumbnailDesdeLogoPath } from "../utils/drive.utils.js";
 
 const drive = crearDriveClient(auth);
-const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 20000);
+const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 60000);
 const APPSHEET_MAX_CONCURRENCY = Number(process.env.APPSHEET_MAX_CONCURRENCY || 4);
 const APPSHEET_MAX_RETRIES = Number(process.env.APPSHEET_MAX_RETRIES || 3);
 const APPSHEET_RETRY_BASE_MS = Number(process.env.APPSHEET_RETRY_BASE_MS || 500);
@@ -115,12 +115,32 @@ async function leerTablaAppSheetCacheada(nombreTabla, ttlMs = APPSHEET_CACHE_TTL
   }
 
   const promise = leerTablaAppSheet(nombreTabla);
-  cachedTables.set(nombreTabla, { expiraEn: now + ttlMs, promise });
+  cachedTables.set(nombreTabla, { expiraEn: now + ttlMs, promise, value: cached?.value || null });
   try {
-    return await promise;
+    const rows = await promise;
+    cachedTables.set(nombreTabla, { expiraEn: now + ttlMs, promise: Promise.resolve(rows), value: rows });
+    return rows;
   } catch (err) {
+    if (cached && Array.isArray(cached.value) && cached.value.length > 0) {
+      cachedTables.set(nombreTabla, {
+        expiraEn: now + ttlMs,
+        promise: Promise.resolve(cached.value),
+        value: cached.value,
+      });
+      return cached.value;
+    }
+
     cachedTables.delete(nombreTabla);
     throw err;
+  }
+}
+
+async function leerTablaAppSheetCacheadaSuave(nombreTabla, ttlMs = APPSHEET_CACHE_TTL_MS) {
+  try {
+    return await leerTablaAppSheetCacheada(nombreTabla, ttlMs);
+  } catch (err) {
+    console.error(`No se pudo leer ${nombreTabla} desde AppSheet:`, err.message);
+    return [];
   }
 }
 
@@ -154,7 +174,7 @@ export async function buscarConceptosPorCotizacion(cotizacionId) {
 }
 
 export async function mapaEmpresas() {
-  const rows = await leerTablaAppSheetCacheada("EMPRESAS");
+  const rows = await leerTablaAppSheetCacheadaSuave("EMPRESAS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = {
@@ -195,7 +215,7 @@ async function actualizarFilaAppSheet(nombreTabla, row) {
 }
 
 export async function mapaMunicipios() {
-  const rows = await leerTablaAppSheetCacheada("MUNICIPIOS");
+  const rows = await leerTablaAppSheetCacheadaSuave("MUNICIPIOS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = { nombre: r.NOMBRE || "", escudo: r.ESCUDO || "" };
@@ -204,7 +224,7 @@ export async function mapaMunicipios() {
 }
 
 export async function mapaEstados() {
-  const rows = await leerTablaAppSheetCacheada("ESTADOS");
+  const rows = await leerTablaAppSheetCacheadaSuave("ESTADOS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = { nombre: r.NOMBRE || "", escudo: r.ESCUDO || "" };
@@ -213,7 +233,7 @@ export async function mapaEstados() {
 }
 
 export async function mapaSucursales() {
-  const rows = await leerTablaAppSheetCacheada("SUCURSALES");
+  const rows = await leerTablaAppSheetCacheadaSuave("SUCURSALES");
   const [municipios, estados] = await Promise.all([mapaMunicipios(), mapaEstados()]);
   const map = {};
 
@@ -234,7 +254,7 @@ export async function mapaSucursales() {
 }
 
 export async function mapaCatalogo() {
-  const rows = await leerTablaAppSheetCacheada("CATALOGO");
+  const rows = await leerTablaAppSheetCacheadaSuave("CATALOGO");
   const map = {};
   rows.forEach(r => {
     map[r["Row ID"] || r.ID] = {
@@ -249,7 +269,7 @@ export async function mapaCatalogo() {
 }
 
 export async function mapaProveedores() {
-  const rows = await leerTablaAppSheetCacheada("PROVEEDORES");
+  const rows = await leerTablaAppSheetCacheadaSuave("PROVEEDORES");
   const map = {};
   rows.forEach(r => {
     map[r["Row ID"] || r.ID] = {
