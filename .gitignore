@@ -9,11 +9,16 @@ node_modules/
 .docker-temp/
 *.log
 runtime/
+runtime-qa/
 secrets/
 publicimg/
+DICTAMENES ESTRUCTURALES/
 
 src/modules/facturacion/services/credentials.json
 src/modules/facturacion/services/token.json
+cloudflared/cert.pem
+cloudflared/desarrolloeg.json
+cookies.txt
 
 src/modules/jobs/native/facturas/data/
 src/modules/jobs/native/casaley/data/*_replica.json
