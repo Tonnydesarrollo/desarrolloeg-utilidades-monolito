@@ -485,9 +485,13 @@ button:hover{background:#b3202a;color:#fff}
         border:none;
         border-bottom:2px solid #b3202a;
         border-top:1px solid #dfe6ef;
-        padding:8px 6px;
+        padding:7px 4px;
         text-transform:uppercase;
-        font-size:0.68rem;
+        font-size:0.62rem;
+        line-height:1.05;
+        letter-spacing:0.03em;
+        white-space:normal;
+        word-break:keep-all;
         color:#333;
         font-weight:700;
       }
@@ -495,13 +499,13 @@ button:hover{background:#b3202a;color:#fff}
       tbody tr:nth-child(odd){background:#f9f9f9}
       tbody td{border-bottom:1px solid #eee;}
 
-      col.sucursal { width:24%; }
-col.desc { width:36%; }
+      col.sucursal { width:22%; }
+col.desc { width:32%; }
 col.cantidad { width:6%; }
-col.precioUnit { width:10%; }
-col.subtotal { width:8%; }
-col.iva { width:8%; }
-col.total { width:8%; }
+col.precioUnit { width:12%; }
+col.subtotal { width:10%; }
+col.iva { width:9%; }
+col.total { width:9%; }
 
       .desc-cell {
         display: block;
@@ -618,10 +622,17 @@ col.total { width:8%; }
   .cotizacion-document{display:block!important}
   .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 10mm;display:block!important;overflow:visible!important;max-width:none!important}
   .content{display:block!important;overflow:visible!important}
-  html,body{font-size:10px} 
-        table{font-size:0.65rem}
-        thead th{padding:6px 4px;}
-        td{padding:5px 4px}
+        html,body{font-size:10px} 
+        table{font-size:0.60rem}
+        col.sucursal { width:21%; }
+        col.desc { width:31%; }
+        col.cantidad { width:6%; }
+        col.precioUnit { width:12%; }
+        col.subtotal { width:10%; }
+        col.iva { width:10%; }
+        col.total { width:10%; }
+        thead th{padding:5px 3px;font-size:0.57rem;line-height:1.02;letter-spacing:0.02em}
+        td{padding:4px 3px}
         .footer-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;min-height:12mm!important;padding:1mm 5mm!important}
         .content{padding-bottom:0!important}
         table{break-inside:auto!important}
