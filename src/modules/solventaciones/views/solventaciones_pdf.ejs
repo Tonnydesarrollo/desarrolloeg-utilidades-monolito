@@ -54,7 +54,7 @@
   const logoSource = company.logoDataUri || company.logoUrl || "https://drive.google.com/thumbnail?id=15YmFa3PwCXcZCdgzrtlFGcdIGXXF0XvL&sz=w400";
   const logoProxy = String(logoSource).startsWith("data:")
     ? logoSource
-    : `${baseUrlValue}/facturacion/img-proxy?url=${encodeURIComponent(logoSource)}`;
+    : `${baseUrlValue}/cotizaciones/img-proxy?url=${encodeURIComponent(logoSource)}`;
 
   const tituloBase = filtros.tienda
     ? `TIENDA ${filtros.tienda}`

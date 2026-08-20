@@ -197,10 +197,10 @@ const GENERAL_ROUTE_CARDS = [
   },
   {
     tone: "slate",
-    label: "Finanzas",
-    title: "Facturación",
-    description: "Cotizaciones y utilidades de facturacion.",
-    href: "/facturacion/cotizacion/html",
+    label: "Cotizaciones",
+    title: "Cotizaciones",
+    description: "Cotizaciones y utilidades del modulo.",
+    href: "/cotizaciones/cotizacion/html",
   },
   {
     tone: "emerald",

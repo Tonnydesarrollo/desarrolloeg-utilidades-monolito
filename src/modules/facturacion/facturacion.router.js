@@ -5,16 +5,17 @@ import { construirDataHTML } from "./services/construirDataHTML.js";
 import { obtenerCotizacionCompleta, mapaSucursales, mapaProveedores, prewarmFacturacionCaches } from "./services/appsheet.js";
 
 export const facturacionRouter = express.Router();
+export const cotizacionesRouter = facturacionRouter;
 prewarmFacturacionCaches();
 
 facturacionRouter.use(express.json());
 facturacionRouter.get(['/', ''], (_req, res) => {
-  res.redirect('/facturacion/cotizacion/html');
+  res.redirect('/cotizaciones/cotizacion/html');
 });
 facturacionRouter.use("/drive", driveRoutes);
 
 facturacionRouter.get("/health", (_req, res) => {
-  res.json({ service: "facturacion", status: "ok" });
+  res.json({ service: "cotizaciones", status: "ok" });
 });
 
 const ALLOWED_PROXY_HOSTS = [
@@ -69,6 +70,7 @@ const handleImgProxy = async (req, res) => {
 };
 
 facturacionRouter.get("/img-proxy", handleImgProxy);
+facturacionRouter.get("/cotizaciones/img-proxy", handleImgProxy);
 
 facturacionRouter.get("/cotizacion/:id/html-data", async (req, res) => {
   try {
@@ -98,7 +100,7 @@ facturacionRouter.get("/cotizacion/html", async (_req, res) => {
       if (!url) return "";
       const str = String(url);
       if (!/drive\.google\.com/i.test(str)) return str;
-      return `/facturacion/img-proxy?url=${encodeURIComponent(str)}`;
+      return `/cotizaciones/img-proxy?url=${encodeURIComponent(str)}`;
     };
 
     const sucursales = Object.values(sucursalesMap || {}).map(s => ({ nombre: s.nombre || "" }));

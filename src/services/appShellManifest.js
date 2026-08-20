@@ -57,7 +57,7 @@ export function getAppShellManifest() {
         id: "operacion",
         title: "Operacion",
         modules: [
-          { title: "Facturacion", path: "/facturacion", description: "Cotizacion, render y salidas.", priority: "P1" },
+          { title: "Cotizaciones", path: "/cotizaciones", description: "Cotizacion, render y salidas.", priority: "P1" },
           { title: "Planeacion", path: "/Planeacion-ley/", description: "Planeacion y cache de soporte.", priority: "P1" },
           { title: "Constancias", path: "/CONSTANCIAS/", description: "Constancias v2.", priority: "P2" },
           { title: "Contabilidad", path: "/contabilidad", description: "Integracion contable.", priority: "P1" },

@@ -14,7 +14,7 @@ function wrapDriveUrl(url) {
   const str = String(url);
   if (!/drive\.google\.com/i.test(str)) return str;
   const encoded = encodeURIComponent(str);
-  return `/facturacion/img-proxy?url=${encoded}`;
+  return `/cotizaciones/img-proxy?url=${encoded}`;
 }
 
 function wrapEscudo(obj) {

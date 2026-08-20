@@ -364,7 +364,7 @@ function buildProxyImageUrl(url) {
   if (!raw) return "";
   if (raw.startsWith("data:")) return raw;
   if (!/^https?:\/\//i.test(raw)) return raw;
-  return `/facturacion/img-proxy?url=${encodeURIComponent(raw)}`;
+  return `/cotizaciones/img-proxy?url=${encodeURIComponent(raw)}`;
 }
 
 async function imageUrlToPdfDataUri(url, options = {}) {

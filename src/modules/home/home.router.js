@@ -132,7 +132,7 @@ function groupAdminRouteCards(cards = []) {
     "/POLIZA_LEY/",
     "/CONSTANCIAS/",
     "/SEPARAR-PIPC/",
-    "/facturacion/cotizacion/html",
+    "/cotizaciones/cotizacion/html",
     "/contabilidad",
   ]);
 

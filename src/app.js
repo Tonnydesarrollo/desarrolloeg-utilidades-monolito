@@ -43,12 +43,12 @@ function applyHostCompatibility(req, _res, next) {
 
   if (host === "api-cotizaciones.desarrolloeg.com") {
     if (req.path === "/health") {
-      req.url = preserveQuery(req, "/facturacion/health");
+      req.url = preserveQuery(req, "/cotizaciones/health");
       return next();
     }
 
     if (req.path === "/") {
-      req.url = preserveQuery(req, "/cotizacion/html");
+      req.url = preserveQuery(req, "/cotizaciones/cotizacion/html");
     }
     return next();
   }
@@ -140,6 +140,7 @@ export function createApp() {
 
   app.use("/contabilidad", contabilidadRouter);
   app.use("/facturacion", facturacionRouter);
+  app.use("/cotizaciones", facturacionRouter);
   app.use("/Planeacion-ley", planeacionRouter);
   app.use("/FALTANTES-LEY", faltantesLeyRouter);
   app.use("/faltantes-ley", faltantesLeyRouter);
