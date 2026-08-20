@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
     ca-certificates \
+    python3 \
+    make \
+    g++ \
     libvips42 \
     tini \
   && rm -rf /var/lib/apt/lists/*
@@ -27,9 +30,6 @@ RUN npm ci --omit=dev
 COPY src ./src
 COPY standalone/sucursales-docs ./standalone/sucursales-docs
 COPY ["POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf", "./POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf"]
-COPY README.md ./ 
-COPY .env.example ./
-
 RUN mkdir -p \
     /app/runtime/facturacion \
     /app/runtime/jobs/facturas \

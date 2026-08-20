@@ -18,6 +18,7 @@ import { sucursalesDocsRouter } from "./modules/sucursales-docs/sucursalesDocs.r
 import { reportesInspeccionesRouter } from "./modules/reportes-inspecciones/reportesInspecciones.router.js";
 import { polizaLeyRouter } from "./modules/poliza-ley/polizaLey.router.js";
 import { pedidosLeyApiRouter } from "./modules/pedidos-ley/pedidosLey.router.js";
+import { appShellRouter } from "./modules/app-shell/appShell.router.js";
 import { portalPath, runWithPortalContext } from "./modules/home/portalPath.js";
 import { getBackgroundServicesStatus } from "./services/backgroundServices.js";
 import { getClusterCoordinatorStatus } from "./services/clusterCoordinator.js";
@@ -169,6 +170,9 @@ export function createApp() {
       cluster: getClusterCoordinatorStatus(),
     });
   });
+
+  app.use("/shell", appShellRouter);
+  app.use("/api/app-shell", appShellRouter);
 
   app.get("/status.json", (_req, res) => {
     res.redirect(302, "/status/status.json");

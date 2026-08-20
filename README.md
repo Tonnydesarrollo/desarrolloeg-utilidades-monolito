@@ -259,8 +259,7 @@ Si prefieres arrancarlo desde PowerShell, usa:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-docker-monolith-qa.ps1
 ```
 
-El backend de bolsa de trabajo vive ahora en el proyecto aparte
-`../Backend Bolsa de trabajo`. El monolito ya no monta ni depende de ese sync.
+El proyecto local `../sistema_bolsa_trabajo` aporta solo el frontend de referencia.
 
 El tunnel corre dentro de Docker y apunta al servicio `monolito` por red interna.
 Cuando el perfil `qa` esta activo, tambien enruta `qa.apps.desarrolloeg.com` al servicio `monolito-qa`.

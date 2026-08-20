@@ -14,6 +14,13 @@ La regla principal es esta:
 - `portal-shell.css` sigue siendo la base comun.
 - `getHomeStyles()` solo debe aportar variaciones del login, no rehacer el sistema visual.
 
+## Regla estricta de copy
+
+- No mostrar textos de trabajo, notas internas, borradores ni explicaciones de arquitectura en el front.
+- No usar cuadros tipo dialogo, callout, aviso interno o bloque de documentacion dentro de la interfaz final.
+- Todo texto tecnico debe quedarse en documentacion, JSON, logs o paneles plegables de diagnostico.
+- Login, dashboard y shell deben limitarse a titulo, contexto, accion y retorno.
+
 ## Archivos a tocar
 
 1. `src/modules/home/home.router.js`

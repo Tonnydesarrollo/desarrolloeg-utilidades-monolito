@@ -1,9 +1,10 @@
 # Mapa de modulos y prioridad de migracion
 
-Fecha: 2026-07-31
+Fecha: 2026-08-19
 
 Base:
 - [Plan de nueva version de `apps.desarrolloeg.com`](./PLAN_NUEVA_VERSION_APPS_DESARROLLOEG.md)
+- [Arquitectura alternativa AppSheet + cache backend](./ARQUITECTURA_APP_CACHE_BACKEND.md)
 
 Objetivo:
 Definir el orden recomendado para analizar, refactorizar y migrar cada parte del sistema actual hacia la nueva version, sin romper la operacion productiva.
@@ -34,6 +35,7 @@ Escala usada:
 
 | Modulo | Prioridad | Motivo | Estrategia |
 |---|---:|---|---|
+| AppShell / Cache backend | P0 | Define la nueva entrada, el contrato AJAX y la cache central | Exponer manifest, shell y capas de datos |
 | Portal / Home | P0 | Es la puerta de entrada de todo el sistema | Unificar layout, rutas, auth y ambiente |
 | Dashboard / Status | P0 | Da visibilidad operativa y puede arrastrar links malos | Hacerlo ambiente-aware y sin enlaces duros |
 | Configuracion y arranque | P0 | Define QA vs prod y evita fugas entre ambientes | Centralizar env vars, cookies, redirects y health |
@@ -42,19 +44,48 @@ Escala usada:
 | Facturacion | P1 | Alto valor y primera carga pesada | Aislar servicios, optimizar render y cache |
 | Contabilidad | P1 | Integracion delicada con dependencia externa | Encapsular cliente y formalizar contrato |
 | WhatsApp Capacitadores | P1 | Experiencia de soporte visible | Crear landing clara, health y QR |
+| Faltantes Ley / Poliza Ley / Pedidos Ley | P2 | Tienen valor operativo pero pueden migrar en lote | Unificar contrato de vistas y APIs |
 | Constancias v2 | P2 | Ya tiene identidad propia y puede evolucionar aparte | Mantener autonomia y evaluar extraccion futura |
 | Modulos auxiliares operativos | P2 | Utiles pero heterogeneos | Estandarizar navegacion, errores y permisos |
 | Bolsa Sync | P2 | Integracion puntual | Encapsular y observar bien |
 | Sucursales Docs | P3 | Funcionalidad de apoyo | Mantener estable con minima intervencion |
 | Separar PIPC | P3 | Alcance acotado | Refactor solo si entra en la ola de UX |
 | Solventaciones | P3 | Utilidad especifica | Normalizar cuando toque limpiar front compartido |
-| Faltantes Ley / Poliza Ley / Pedidos Ley | P2 | Tienen valor operativo pero pueden migrar en lote | Unificar contrato de vistas y APIs |
 
 ---
 
 ## 3. Detalle por modulo
 
-### 3.1 Portal / Home
+### 3.1 AppShell / Cache backend
+
+Ubicacion:
+
+- [`src/modules/app-shell/appShell.router.js`](../../../../src/modules/app-shell/appShell.router.js)
+- [`src/services/appShellManifest.js`](../../../../src/services/appShellManifest.js)
+
+Problemas que resuelve:
+
+- La nueva experiencia necesita un punto de entrada unico.
+- El frontend no debe recalentar datos por usuario.
+- El backend debe exponer capas de cache y un mapa de modulos estable.
+
+Prioridad:
+
+- `P0`
+
+Que hacer:
+
+- Mantener el manifest JSON como contrato base.
+- Servir shell inicial por backend.
+- Exponer prioridades, grupos y capas de datos.
+
+Pruebas:
+
+- `GET /shell` responde HTML util.
+- `GET /shell/manifest` responde JSON valido.
+- `GET /api/app-shell/manifest` funciona como alias para AJAX.
+
+### 3.2 Portal / Home
 
 Ubicacion:
 
@@ -76,7 +107,8 @@ Que hacer:
 
 - Definir un portal unico por ambiente.
 - Separar cookies, callbacks y redirects.
-- Consolidar identidad visual y navegación.
+- Consolidar identidad visual y navegacion.
+- Integrarse con el shell comun y la cache backend.
 
 Pruebas:
 
@@ -84,7 +116,7 @@ Pruebas:
 - Sesion aislada entre ambientes.
 - Links internos siempre apuntan al mismo ambiente.
 
-### 3.2 Dashboard / Status
+### 3.3 Dashboard / Status
 
 Ubicacion:
 
@@ -105,6 +137,7 @@ Que hacer:
 - Convertirlo en panel de salud y version.
 - Mostrar ambiente, release y estado de jobs.
 - Resolver URLs desde configuracion.
+- Leer el manifest del shell y reflejar estado real del backend.
 
 Pruebas:
 
@@ -112,7 +145,7 @@ Pruebas:
 - Prod muestra solo enlaces prod.
 - Health responde con metadata consistente.
 
-### 3.3 Configuracion y arranque
+### 3.4 Configuracion y arranque
 
 Ubicacion:
 
@@ -134,6 +167,7 @@ Que hacer:
 - Formalizar `APP_ENVIRONMENT`.
 - Separar puertos, cookies y callbacks.
 - Dejar QA y prod con runtime totalmente independiente.
+- Asegurar que el shell pueda leer runtime, release y cluster desde un contrato unico.
 
 Pruebas:
 
@@ -141,7 +175,7 @@ Pruebas:
 - Boot correcto en prod.
 - `health` declara ambiente real.
 
-### 3.4 Jobs / Syncs
+### 3.5 Jobs / Syncs
 
 Ubicacion:
 
@@ -166,6 +200,7 @@ Que hacer:
 - Clasificar criticidad.
 - Estandarizar reintentos, timeouts y logs.
 - Crear panel de salud de jobs.
+- Convertir el backend cache en un consumidor natural de los jobs.
 
 Pruebas:
 
@@ -173,7 +208,7 @@ Pruebas:
 - Falla visible con mensaje util.
 - Health de jobs confiable.
 
-### 3.5 Planeacion
+### 3.6 Planeacion
 
 Ubicacion:
 
@@ -194,15 +229,15 @@ Que hacer:
 
 - Separar dominio, UI e integraciones.
 - Reducir peso de CSV como estado principal.
-- Priorizar experiencias de uso reales.
+- Migrarla sobre shell nuevo y consumo AJAX.
 
 Pruebas:
 
-- Búsquedas y flujos principales.
+- Busquedas y flujos principales.
 - Sincronizacion y exportacion.
 - Compatibilidad con AppSheet.
 
-### 3.6 Facturacion
+### 3.7 Facturacion
 
 Ubicacion:
 
@@ -232,7 +267,7 @@ Pruebas:
 - Salidas correctas.
 - Sin romper flujo de cotizacion.
 
-### 3.7 Contabilidad
+### 3.8 Contabilidad
 
 Ubicacion:
 
@@ -253,14 +288,14 @@ Que hacer:
 - Encapsular API externa.
 - Registrar errores y respuestas.
 - No dejar reglas de negocio en el router.
+- Exponer solo lo minimo necesario para el shell nuevo.
 
 Pruebas:
 
 - Llamadas exitosas.
 - Manejo de error externo.
-- Contratos estables.
 
-### 3.8 WhatsApp Capacitadores
+### 3.9 WhatsApp Capacitadores
 
 Ubicacion:
 
@@ -269,7 +304,7 @@ Ubicacion:
 
 Problemas actuales:
 
-- La experiencia base no debe sentirse como ruta suelta o técnica.
+- La experiencia base no debe sentirse como ruta suelta o tecnica.
 
 Prioridad:
 
@@ -280,6 +315,7 @@ Que hacer:
 - Landing clara.
 - Acceso a QR.
 - Health y estado visible.
+- Vincularlo al nuevo shell y no a una pantalla tecnica suelta.
 
 Pruebas:
 
@@ -287,7 +323,35 @@ Pruebas:
 - QR accesible.
 - Estado entendible.
 
-### 3.9 Constancias v2
+### 3.10 Faltantes Ley / Poliza Ley / Pedidos Ley
+
+Incluye:
+
+- [`src/modules/faltantes-ley/`](../../../../src/modules/faltantes-ley/)
+- [`src/modules/poliza-ley/`](../../../../src/modules/poliza-ley/)
+- [`src/modules/pedidos-ley/`](../../../../src/modules/pedidos-ley/)
+
+Problemas actuales:
+
+- Tienen valor operativo pero contratos dispares.
+
+Prioridad:
+
+- `P2`
+
+Que hacer:
+
+- Unificar layout y feedback.
+- Normalizar errores.
+- Alinear rutas y permisos.
+
+Pruebas:
+
+- Smoke test por modulo.
+- Verificacion de rutas publicas.
+- Confirmacion de datos visibles.
+
+### 3.11 Constancias v2
 
 Ubicacion:
 
@@ -306,6 +370,7 @@ Que hacer:
 
 - Mantener su identidad propia.
 - Definir si se queda integrada o se extrae mas adelante.
+- Reutilizar el shell comun si se reescribe su portada.
 
 Pruebas:
 
@@ -313,17 +378,14 @@ Pruebas:
 - Assets correctos.
 - Navegacion estable.
 
-### 3.10 Modulos auxiliares operativos
+### 3.12 Modulos auxiliares operativos
 
 Incluye:
 
-- [`src/modules/faltantes-ley/`](../../../../src/modules/faltantes-ley/)
-- [`src/modules/poliza-ley/`](../../../../src/modules/poliza-ley/)
 - [`src/modules/separar-pipc/`](../../../../src/modules/separar-pipc/)
 - [`src/modules/solventaciones/`](../../../../src/modules/solventaciones/)
 - [`src/modules/sucursales-docs/`](../../../../src/modules/sucursales-docs/)
 - [`src/modules/bolsa-sync/`](../../../../src/modules/bolsa-sync/)
-- [`src/modules/pedidos-ley/`](../../../../src/modules/pedidos-ley/)
 
 Problemas actuales:
 
@@ -338,6 +400,7 @@ Que hacer:
 - Unificar layout y feedback.
 - Normalizar errores.
 - Alinear rutas y permisos.
+- Integrarlos como cards dentro del nuevo shell progresivo.
 
 Pruebas:
 
@@ -351,10 +414,11 @@ Pruebas:
 
 ### Ola 1: Base tecnica
 
-1. Configuracion y arranque
-2. Portal / Home
-3. Dashboard / Status
-4. Jobs / Syncs
+1. AppShell / Cache backend
+2. Configuracion y arranque
+3. Portal / Home
+4. Dashboard / Status
+5. Jobs / Syncs
 
 ### Ola 2: Modulos de mayor valor
 
@@ -393,7 +457,7 @@ El siguiente paso correcto es:
 3. Seleccionar el primer modulo piloto para refactor.
 4. Asegurar que QA siga corriendo paralelo.
 
-Mi recomendacion para piloto es `Portal / Home`, porque afecta toda la experiencia y obliga a sanear configuracion, rutas y ambiente desde la base.
+Mi recomendacion para piloto ahora es `AppShell / Cache backend`, porque obliga a sanear contrato, navegacion, datos comunes y experiencia antes de mover el resto.
 
 ---
 
@@ -402,6 +466,7 @@ Mi recomendacion para piloto es `Portal / Home`, porque afecta toda la experienc
 Al terminar esta primera secuencia deberiamos tener:
 
 - una entrada clara al sistema,
+- una cache backend util y persistente,
 - una QA realmente separada de prod,
 - observabilidad util,
 - modulos principales mejor encapsulados,

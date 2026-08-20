@@ -1300,35 +1300,143 @@ function getHomeStyles() {
         max-width: 1600px;
       }
       .dashboard-main .hero {
-        padding: 16px 18px;
+        padding: 18px clamp(16px, 2vw, 26px) 16px;
+        border-radius: 32px;
       }
       .dashboard-main .hero-grid {
-        grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.48fr);
+        grid-template-columns: minmax(0, 1.28fr) minmax(300px, 0.72fr);
+        gap: 16px;
+        align-items: center;
       }
-      .dashboard-main .hero p {
+      .dashboard-main .hero-grid > div:first-child {
         display: none;
       }
+      .dashboard-main .hero p {
+        display: block;
+        max-width: 34ch;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 0.96rem;
+        line-height: 1.45;
+      }
       .dashboard-main .hero-actions {
-        margin-top: 12px;
+        display: none;
       }
-      .dashboard-main .hero-callout,
-      .dashboard-main .hero-note {
-        padding: 12px 14px;
-      }
-      .dashboard-main .hero-callout-compact {
+      .dashboard-main .hero-side {
+        display: grid;
         gap: 10px;
+        align-content: start;
+      }
+      .dashboard-main .hero-session-card {
+        display: grid;
+        grid-template-columns: 78px minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
+        min-height: auto;
+        padding: 14px;
+        border-radius: 24px;
+        border: 1px solid rgba(26,42,58,0.10);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,249,251,0.94));
+        box-shadow: 0 18px 38px rgba(26,42,58,0.08);
+      }
+      .dashboard-main .hero-session-media {
+        display: grid;
+        place-items: center;
+        width: 78px;
+        min-width: 78px;
+        height: 78px;
+        border-radius: 20px;
+        background:
+          radial-gradient(circle at 30% 30%, rgba(192,57,43,0.10), transparent 42%),
+          linear-gradient(180deg, rgba(255,255,255,0.96), rgba(246,249,253,0.92));
+        border: 1px solid rgba(26,42,58,0.08);
+        overflow: hidden;
+      }
+      .dashboard-main .hero-logo-button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+      }
+      .dashboard-main .hero-logo-button:focus-visible {
+        outline: 3px solid rgba(192,57,43,0.28);
+        outline-offset: 4px;
       }
       .dashboard-main .hero-logo {
-        max-width: 88px;
-        width: min(88px, 24vw);
+        width: 62px;
+        height: 62px;
+        object-fit: contain;
       }
-      .dashboard-main .hero-callout h2 {
-        font-size: clamp(0.98rem, 1.65vw, 1.12rem);
+      .dashboard-main .hero-session-body {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+      .dashboard-main .hero-session-body h2 {
+        margin: 0;
+        font-size: clamp(1rem, 1.8vw, 1.3rem);
+        line-height: 1.02;
+        text-transform: uppercase;
+      }
+      .dashboard-main .hero-session-body p {
+        display: block;
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+      .dashboard-main .hero-brand-card {
+        grid-template-columns: 78px minmax(0, 1fr);
+      }
+      .dashboard-main .hero-brand-copy {
+        display: grid;
+        gap: 5px;
+      }
+      .dashboard-main .hero-brand-copy strong {
+        color: var(--ink);
+        font-size: clamp(1rem, 1.8vw, 1.18rem);
+        line-height: 1.05;
+        text-transform: uppercase;
+      }
+      .dashboard-main .hero-brand-copy p {
+        max-width: 24ch;
+      }
+      .dashboard-main .hero-session-meta,
+      .dashboard-main .hero-quick-actions,
+      .dashboard-main .hero-role-card,
+      .dashboard-main .hero-menu-toggle {
+        display: none;
+      }
+      .dashboard-main .hero h1 {
+        max-width: 11ch;
+        font-size: clamp(2.6rem, 5vw, 4.25rem);
+        line-height: 0.94;
+        letter-spacing: -0.04em;
+      }
+      .dashboard-main .hero {
+        overflow: hidden;
       }
       .dashboard-main .hero::after {
-        width: 190px;
-        height: 190px;
-        inset: auto -3% -28% auto;
+        inset: auto -3% -34% auto;
+        width: 220px;
+        height: 220px;
+      }
+      .dashboard-main .hero::after {
+        pointer-events: none;
+      }
+      .dashboard-main .hero-session-card {
+        animation: dashboardHeroRise 520ms ease both;
+      }
+      @keyframes dashboardHeroRise {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       .hero {
         overflow: hidden;
@@ -1573,27 +1681,291 @@ function getHomeStyles() {
       .tone-indigo { --card-accent: var(--indigo); --card-soft: var(--indigo-soft); }
       .tone-slate { --card-accent: var(--slate); --card-soft: var(--slate-soft); }
       .dashboard-tabs {
-        margin-top: 26px;
+        margin-top: 18px;
         display: grid;
         gap: 18px;
       }
-      .dashboard-tabs-nav {
-        position: sticky;
-        top: 10px;
-        z-index: 18;
-        display: flex;
-        gap: 8px;
-        padding: 8px;
-        margin: 0;
-        border-radius: 24px;
+      .dashboard-shell {
+        position: relative;
+        display: grid;
+        gap: 14px;
+        margin-top: 10px;
+      }
+      .dashboard-fab {
+        display: none;
+        position: fixed;
+        left: 14px;
+        top: 14px;
+        right: auto;
+        bottom: auto;
+        z-index: 26;
+        min-height: 48px;
+        padding-inline: 16px;
+        border-radius: 999px;
+        box-shadow: 0 16px 34px rgba(26,42,58,0.18);
+      }
+      .dashboard-mobile-dock {
+        display: none;
+      }
+      .dashboard-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+      }
+      .dashboard-sidebar {
+        display: none;
+      }
+      .dashboard-content {
+        min-width: 0;
+      }
+      .dashboard-sidebar__content {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        min-height: 100%;
+      }
+      .dashboard-sidebar__header {
+        display: grid;
+        gap: 4px;
+        padding: 20px 18px 16px;
+        border-bottom: 1px solid rgba(26,42,58,0.08);
+      }
+      .dashboard-sidebar__user-card {
+        display: grid;
+        grid-template-columns: 68px minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
+        margin: 14px 14px 0;
+        padding: 14px;
+        border-radius: 20px;
         border: 1px solid rgba(26,42,58,0.10);
-        background: rgba(247, 249, 251, 0.92);
-        backdrop-filter: blur(18px);
-        box-shadow: 0 14px 28px rgba(26,42,58,0.08);
-        overflow-x: auto;
-        overscroll-behavior-x: contain;
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,249,251,0.94));
+        box-shadow: 0 14px 28px rgba(26,42,58,0.06);
+      }
+      .dashboard-sidebar__user-media {
+        display: grid;
+        place-items: center;
+        width: 68px;
+        height: 68px;
+        border-radius: 18px;
+        border: 1px solid rgba(26,42,58,0.08);
+        background:
+          radial-gradient(circle at 30% 30%, rgba(192,57,43,0.10), transparent 42%),
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(246,249,253,0.92));
+      }
+      .dashboard-sidebar__user-logo {
+        width: 52px;
+        height: 52px;
+        object-fit: contain;
+      }
+      .dashboard-sidebar__user-body {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+      .dashboard-sidebar__user-body strong {
+        color: var(--ink);
+        font-size: 0.98rem;
+        line-height: 1.15;
+        text-transform: uppercase;
+      }
+      .dashboard-sidebar__user-body p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.35;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dashboard-sidebar__user-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .dashboard-sidebar__user-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .dashboard-sidebar__groups {
+        display: grid;
+        gap: 14px;
+        padding: 6px 14px 18px;
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .dashboard-nav-group {
+        display: grid;
+        gap: 8px;
+      }
+      .dashboard-nav-group h2 {
+        padding-inline: 8px;
+        color: var(--muted);
+        font-family: var(--portal-font-ui);
+        font-size: 0.72rem;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+      .dashboard-nav-group__links {
+        display: grid;
+        gap: 6px;
+      }
+      .dashboard-nav-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 46px;
+        padding: 0 14px;
+        border-radius: 14px;
+        border: 1px solid transparent;
+        background: rgba(255,255,255,0.78);
+        color: var(--ink);
+        font-family: var(--portal-font-ui);
+        font-weight: 850;
+        text-decoration: none;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+      }
+      .dashboard-nav-link:hover {
+        transform: translateX(2px);
+        border-color: rgba(26,42,58,0.10);
+        background: rgba(255,255,255,0.96);
+        box-shadow: 0 10px 22px rgba(26,42,58,0.08);
+      }
+      .dashboard-nav-link.active {
+        color: #fff;
+        border-color: rgba(192,57,43,0.24);
+        background: linear-gradient(135deg, #18293e, #263a52);
+        box-shadow: 0 14px 30px rgba(24,41,62,0.18);
+      }
+      .dashboard-nav-link__leading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .dashboard-nav-link__icon {
+        width: 1.35rem;
+        flex: 0 0 auto;
+        text-align: center;
+      }
+      .dashboard-nav-link__label {
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dashboard-nav-link__count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        height: 30px;
+        padding: 0 8px;
+        border-radius: 999px;
+        background: rgba(192,57,43,0.10);
+        color: var(--crimson);
+        font-size: 0.74rem;
+        font-weight: 900;
+      }
+      .dashboard-nav-link.active .dashboard-nav-link__count {
+        background: rgba(255,255,255,0.16);
+        color: #fff;
+      }
+      .dashboard-nav-link--compact {
+        justify-content: flex-start;
+      }
+      .dashboard-nav-link--drawer {
+        min-height: 50px;
+      }
+      .dashboard-sidebar__footer {
+        display: grid;
+        gap: 10px;
+        padding: 16px 14px 18px;
+        border-top: 1px solid rgba(26,42,58,0.08);
+      }
+      .dashboard-sidebar__action {
+        width: 100%;
+      }
+      .dashboard-drawer {
+        position: fixed;
+        inset: 0;
+        z-index: 120;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 220ms ease;
+      }
+      .dashboard-drawer.is-open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .dashboard-drawer__backdrop {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(8,20,46,0.34);
+        backdrop-filter: blur(6px);
+        opacity: 0;
+        transition: opacity 220ms ease;
+      }
+      .dashboard-drawer.is-open .dashboard-drawer__backdrop {
+        opacity: 1;
+      }
+      .dashboard-drawer__panel {
+        position: absolute;
+        inset: 10px auto 10px 10px;
+        width: min(360px, calc(100vw - 20px));
+        height: calc(100dvh - 20px);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        overflow: hidden;
+        border-radius: 24px;
+        border: 1px solid rgba(26,42,58,0.12);
+        background: rgba(255,255,255,0.88);
+        backdrop-filter: blur(24px);
+        box-shadow: 0 28px 80px rgba(0, 31, 84, 0.24);
+        transform: translateX(-18px) scale(0.94);
+        transform-origin: top left;
+        opacity: 0;
+        will-change: transform, opacity;
+        transition: transform 220ms ease, opacity 220ms ease, background 220ms ease;
+      }
+      .dashboard-drawer.is-open .dashboard-drawer__panel {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+        background: rgba(255,255,255,0.95);
+      }
+      .dashboard-drawer__top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 14px;
+        border-bottom: 1px solid rgba(26,42,58,0.08);
+      }
+      .dashboard-drawer__top strong {
+        color: var(--ink);
+        font-family: var(--portal-font-ui);
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+      .dashboard-drawer__panel .dashboard-sidebar__content {
+        min-height: 0;
+      }
+      .dashboard-drawer__panel .dashboard-sidebar__groups {
+        overflow-y: auto;
+        overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
+      }
+      .dashboard-tabs-nav {
+        display: none;
       }
       .dashboard-mobile-bar {
         display: none;
@@ -1610,7 +1982,7 @@ function getHomeStyles() {
         align-items: center;
         gap: 8px;
         min-height: 44px;
-        padding: 11px 16px;
+        padding: 12px 18px;
         border-radius: 999px;
         border: 1px solid transparent;
         background: transparent;
@@ -1626,7 +1998,7 @@ function getHomeStyles() {
         transform: translateY(-1px);
       }
       .dashboard-tab-btn.active {
-        background: #fff;
+        background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
         color: var(--crimson);
         border-color: rgba(198, 59, 34, 0.14);
         box-shadow: 0 8px 18px rgba(26,42,58,0.09);
@@ -1657,12 +2029,11 @@ function getHomeStyles() {
         display: none !important;
       }
       .dashboard-tab-panel {
-        content-visibility: auto;
-        contain-intrinsic-size: 1200px;
+        display: block;
       }
       .dashboard-tab-panel-content {
         display: grid;
-        gap: 20px;
+        gap: 18px;
       }
       .dashboard-route-families {
         display: grid;
@@ -1699,6 +2070,33 @@ function getHomeStyles() {
       }
       .dashboard-tab-panel--management .panel + .panel {
         margin-top: 0;
+      }
+      @media (max-width: 1020px) {
+        .dashboard-content {
+          min-width: 0;
+        }
+      }
+      @media (max-width: 560px) {
+        .dashboard-shell {
+          gap: 14px;
+        }
+        .dashboard-fab {
+          display: none;
+        }
+        .dashboard-drawer__panel {
+          inset: 8px auto 8px 8px;
+          width: min(360px, calc(100vw - 16px));
+        }
+      }
+      @media (min-width: 561px) {
+        .dashboard-fab {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 44px;
+          padding-inline: 14px;
+        }
       }
       .panel {
         background: var(--surface);
@@ -2252,8 +2650,6 @@ function getHomeStyles() {
           radial-gradient(circle at top right, rgba(192,57,43,0.06), transparent 34%),
           radial-gradient(circle at left bottom, rgba(26,42,58,0.04), transparent 30%),
           linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94));
-        content-visibility: auto;
-        contain-intrinsic-size: 980px;
       }
       .calendar-split {
         display: grid;
@@ -3493,7 +3889,11 @@ function getHomeStyles() {
         min-height: 100vh;
         display: grid;
         place-items: center;
-        padding: 24px 18px;
+        padding: 28px 18px;
+        background:
+          radial-gradient(circle at top left, rgba(192,57,43,0.10), transparent 30%),
+          radial-gradient(circle at bottom right, rgba(15, 76, 92, 0.12), transparent 30%),
+          linear-gradient(180deg, #f7f2ea 0%, #f3eee7 42%, #edf2f7 100%);
       }
       .skip-link {
         position: absolute;
@@ -3526,18 +3926,22 @@ function getHomeStyles() {
         border: 0;
       }
       .auth-card {
-        width: min(980px, 100%);
-        background: rgba(255,255,255,0.98);
+        width: min(1080px, 100%);
+        background: rgba(255,255,255,0.96);
         border: 1px solid rgba(26,42,58,0.10);
-        border-radius: 32px;
+        border-radius: 34px;
         overflow: hidden;
-        box-shadow: var(--shadow);
+        box-shadow: 0 28px 80px rgba(20, 32, 43, 0.14);
         display: grid;
-        grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+        grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
       }
       .auth-visual {
-        padding: 34px;
-        background: linear-gradient(160deg, var(--navy) 0%, #20364a 55%, #111e29 100%);
+        position: relative;
+        overflow: hidden;
+        padding: 38px;
+        background:
+          radial-gradient(circle at top right, rgba(255,211,122,0.20), transparent 26%),
+          linear-gradient(160deg, var(--navy) 0%, #20364a 55%, #111e29 100%);
         color: #f8fbff;
         border-right: 6px solid var(--crimson);
         display: flex;
@@ -3546,14 +3950,26 @@ function getHomeStyles() {
         min-height: 100%;
         text-align: center;
       }
+      .auth-visual::after {
+        content: "";
+        position: absolute;
+        inset: auto -18% -34% auto;
+        width: 280px;
+        height: 280px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255,255,255,0.16), transparent 72%);
+        pointer-events: none;
+      }
       .auth-brand {
         display: grid;
-        gap: 14px;
+        gap: 16px;
         justify-items: center;
-        max-width: 360px;
+        max-width: 420px;
+        position: relative;
+        z-index: 1;
       }
       .auth-logo {
-        width: min(260px, 68vw);
+        width: min(250px, 70vw);
         height: auto;
         object-fit: contain;
         filter: drop-shadow(0 16px 30px rgba(0,0,0,0.28));
@@ -3564,7 +3980,8 @@ function getHomeStyles() {
         font-family: "Cinzel", serif;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: clamp(1.3rem, 2.8vw, 1.9rem);
+        font-size: clamp(1.4rem, 3vw, 2.05rem);
+        line-height: 1.05;
       }
       .auth-pill {
         display: inline-flex;
@@ -3579,10 +3996,13 @@ function getHomeStyles() {
         font-family: "Montserrat", sans-serif;
       }
       .auth-form {
-        padding: 34px;
+        padding: 36px;
         display: flex;
         flex-direction: column;
         justify-content: center;
+        gap: 18px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(251,252,254,0.96));
       }
       .auth-form h2 {
         margin: 0;
@@ -3590,12 +4010,18 @@ function getHomeStyles() {
         font-family: "Cinzel", serif;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: clamp(1.25rem, 2.2vw, 1.7rem);
+        font-size: clamp(1.25rem, 2.2vw, 1.8rem);
+      }
+      .auth-form .hint {
+        margin-top: 0;
+        color: var(--muted);
+        line-height: 1.5;
+        font-family: "Montserrat", sans-serif;
       }
       .field {
         display: grid;
         gap: 10px;
-        margin-top: 26px;
+        margin-top: 6px;
       }
       .field label {
         font-size: 0.78rem;
@@ -3604,6 +4030,12 @@ function getHomeStyles() {
         font-weight: 900;
         color: var(--crimson);
         font-family: "Montserrat", sans-serif;
+      }
+      .auth-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
       }
       .field input {
         width: 100%;
@@ -3652,12 +4084,24 @@ function getHomeStyles() {
         font-family: "Montserrat", sans-serif;
       }
       .message {
-        margin-top: 14px;
+        margin-top: 4px;
         font-weight: 800;
         font-family: "Montserrat", sans-serif;
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid rgba(26,42,58,0.10);
+        background: rgba(255,255,255,0.88);
       }
-      .message.error { color: #b91c1c; }
-      .message.ok { color: #166534; }
+      .message.error {
+        color: #991b1b;
+        background: rgba(254,226,226,0.86);
+        border-color: rgba(185,28,28,0.18);
+      }
+      .message.ok {
+        color: #166534;
+        background: rgba(220,252,231,0.84);
+        border-color: rgba(22,101,52,0.16);
+      }
       .footer-note {
         margin-top: 18px;
         text-align: center;
@@ -3690,11 +4134,27 @@ function getHomeStyles() {
         border: 1px solid rgba(26,42,58,0.08);
         box-shadow: 0 24px 60px rgba(26,42,58,0.12);
       }
+      .page-loader-logo-wrap {
+        position: relative;
+        width: 92px;
+        height: 92px;
+        display: grid;
+        place-items: center;
+      }
+      .page-loader-logo {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+        filter: drop-shadow(0 10px 18px rgba(26,42,58,0.14));
+        animation: pageLoaderPulse 1.4s ease-in-out infinite;
+      }
       .page-loader-spinner {
-        width: 52px;
-        height: 52px;
+        position: absolute;
+        inset: 0;
+        width: 92px;
+        height: 92px;
         border-radius: 999px;
-        border: 4px solid rgba(198, 59, 34, 0.14);
+        border: 4px solid rgba(198, 59, 34, 0.12);
         border-top-color: var(--crimson);
         border-right-color: rgba(26,42,58,0.18);
         animation: pageLoaderSpin 0.85s linear infinite;
@@ -3710,6 +4170,10 @@ function getHomeStyles() {
       }
       @keyframes pageLoaderSpin {
         to { transform: rotate(360deg); }
+      }
+      @keyframes pageLoaderPulse {
+        0%, 100% { transform: scale(1); filter: drop-shadow(0 10px 18px rgba(26,42,58,0.14)); }
+        50% { transform: scale(0.96); filter: drop-shadow(0 14px 22px rgba(26,42,58,0.18)); }
       }
       @media (max-width: 980px) {
         .hero-grid {
@@ -3737,6 +4201,69 @@ function getHomeStyles() {
       @media (max-width: 640px) {
         main { padding: 12px 8px 24px; }
         .hero, .panel, .auth-form, .auth-visual { padding: 16px; border-radius: 20px; }
+        .dashboard-main .hero {
+          padding: 12px 12px 10px;
+        }
+        .dashboard-main .hero-grid {
+          gap: 8px;
+          grid-template-columns: 1fr;
+        }
+        .dashboard-main .hero-side {
+          display: grid;
+          gap: 6px;
+          grid-template-columns: 1fr;
+        }
+        .dashboard-main .hero-session-card {
+          grid-template-columns: 56px minmax(0, 1fr);
+          gap: 10px;
+          min-height: auto;
+          padding: 10px 12px;
+          border-radius: 18px;
+        }
+        .dashboard-main .hero-session-media {
+          width: 56px;
+          min-width: 56px;
+          height: 56px;
+          border-radius: 16px;
+        }
+        .dashboard-main .hero-logo {
+          width: 42px;
+          height: 42px;
+        }
+        .dashboard-main .hero-session-body h2 {
+          font-size: 0.95rem;
+        }
+        .dashboard-main .hero-session-body p {
+          display: block;
+          font-size: 0.78rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .dashboard-main .hero-session-meta {
+          display: grid;
+          gap: 8px;
+          margin-top: 2px;
+        }
+        .dashboard-main .hero-quick-actions {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 8px;
+          padding-top: 0;
+        }
+        .dashboard-main .hero-menu-toggle {
+          display: none;
+        }
+        .dashboard-main .hero-quick-actions .button {
+          width: 100%;
+          justify-content: center;
+        }
+        .dashboard-main .hero-role-card {
+          width: 100%;
+        }
+        .dashboard-main .hero-actions {
+          display: none;
+        }
         .hero::after {
           width: 180px;
           height: 180px;
@@ -3756,6 +4283,9 @@ function getHomeStyles() {
           width: 100%;
         }
         .auth-visual { border-right: 0; border-bottom: 6px solid var(--crimson); }
+        .auth-form {
+          padding-top: 22px;
+        }
         .section-head {
           flex-direction: column;
           align-items: flex-start;
@@ -3767,62 +4297,94 @@ function getHomeStyles() {
           margin-top: 18px;
           gap: 12px;
         }
-        .dashboard-tabs-nav {
+        .dashboard-shell {
+          padding-bottom: 148px;
+        }
+        .dashboard-mobile-dock {
+          position: fixed;
+          left: 10px;
+          right: 10px;
+          bottom: 10px;
+          z-index: 90;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 12px;
+          border-radius: 22px;
+          border: 1px solid rgba(26,42,58,0.12);
+          background: rgba(247, 249, 251, 0.96);
+          box-shadow: 0 18px 36px rgba(26,42,58,0.16);
+          backdrop-filter: blur(18px);
+          touch-action: manipulation;
+          overflow-x: auto;
+          overflow-y: hidden;
+          white-space: nowrap;
+          overscroll-behavior-x: contain;
+          -webkit-overflow-scrolling: touch;
+          scroll-snap-type: x proximity;
+        }
+        .dashboard-mobile-dock__menu {
+          flex: 0 0 auto;
+          min-width: 76px;
+          min-height: 44px;
+          padding: 0 10px;
+          border-radius: 16px;
+          justify-content: center;
+          box-shadow: 0 10px 24px rgba(26,42,58,0.12);
+        }
+        .dashboard-mobile-dock__track {
+          flex: 1 1 auto;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          white-space: nowrap;
+          overscroll-behavior-x: contain;
+          -webkit-overflow-scrolling: touch;
+          scroll-snap-type: x proximity;
+          scrollbar-width: none;
+          padding: 2px 2px 2px 0;
+          mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+        }
+        .dashboard-mobile-dock__track::-webkit-scrollbar {
           display: none;
         }
-        .dashboard-mobile-bar {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-          padding: 10px;
-          border-radius: 22px;
-          background: rgba(247, 249, 251, 0.96);
-          border: 1px solid rgba(26,42,58,0.12);
-          box-shadow: 0 16px 34px rgba(26,42,58,0.16);
-          backdrop-filter: blur(18px);
-          overflow: hidden;
-        }
-        .dashboard-mobile-chip {
-          display: inline-flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          width: 100%;
-          min-width: 0;
-          min-height: 54px;
-          padding: 0 14px;
-          border-radius: 18px;
-          border: 1px solid rgba(26,42,58,0.12);
-          background: rgba(255,255,255,0.88);
-          color: var(--ink);
-          font: inherit;
-          font-weight: 900;
-          cursor: pointer;
-        }
-        .dashboard-mobile-chip.active {
-          background: rgba(192,57,43,0.10);
-          color: var(--crimson);
-          border-color: rgba(192,57,43,0.20);
-        }
-        .dashboard-mobile-chip-label {
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          font-size: 0.84rem;
-        }
-        .dashboard-mobile-chip-count {
+        .dashboard-mobile-dock__group {
           flex: 0 0 auto;
-          min-width: 1.7rem;
-          height: 1.7rem;
-          padding: 0 0.4rem;
-          border-radius: 999px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(26,42,58,0.08);
-          font-size: 0.76rem;
+          padding: 0 6px 0 2px;
+          color: var(--muted);
+          font-family: var(--portal-font-ui);
+          font-size: 0.68rem;
           font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          scroll-snap-align: start;
+        }
+        .dashboard-mobile-dock .dashboard-nav-link {
+          flex: 0 0 auto;
+          min-width: 132px;
+          min-height: 48px;
+          padding: 0 12px;
+          border-radius: 16px;
+          justify-content: center;
+          text-align: left;
+          scroll-snap-align: start;
+        }
+        .dashboard-mobile-dock .dashboard-nav-link__leading {
+          gap: 8px;
+          flex: 1 1 auto;
+        }
+        .dashboard-mobile-dock .dashboard-nav-link__label {
+          white-space: nowrap;
+          line-height: 1.05;
+          font-size: 0.8rem;
+        }
+        .dashboard-mobile-dock .dashboard-nav-link__count {
+          display: inline-flex;
+          min-width: 1.55rem;
+          height: 1.55rem;
+          font-size: 0.7rem;
         }
         .calendar-header {
           gap: 12px;
@@ -3993,6 +4555,7 @@ function getHomeStyles() {
 
 function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAction, sideContent, bodyContent, footer, headExtra = "", bodyScripts = "", mainClass = "" }) {
   const portalBasePath = getActivePortalBasePath();
+  const loaderLogoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
   return `<!DOCTYPE html>
   <html lang="es">
   <head>
@@ -4008,7 +4571,10 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
     <a class="skip-link" href="#contenido-principal">Saltar al contenido principal</a>
     <div class="page-loader" id="page-loader" aria-hidden="true">
       <div class="page-loader-card" role="status" aria-live="polite" aria-label="Cargando">
-        <div class="page-loader-spinner" aria-hidden="true"></div>
+        <div class="page-loader-logo-wrap" aria-hidden="true">
+          <img class="page-loader-logo" src="${loaderLogoPath}" alt="" />
+          <div class="page-loader-spinner"></div>
+        </div>
         <p class="page-loader-text">Cargando Desarrollo EG</p>
       </div>
     </div>
@@ -4017,7 +4583,7 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
         <div class="hero-grid">
           <div>
             <span class="eyebrow">Desarrollo EG</span>
-            <h1>${escapeHtml(heroTitle)}</h1>
+            ${heroTitle ? `<h1>${escapeHtml(heroTitle)}</h1>` : ""}
             ${heroIntro ? `<p>${escapeHtml(heroIntro)}</p>` : ""}
             <div class="hero-actions">
               ${primaryAction || ""}
@@ -4126,18 +4692,16 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
         </section>
         <section class="auth-form">
           <h2>Iniciar sesion</h2>
-          <p class="hint" style="margin-top:0;">${isQaPortal
-    ? "Este es el acceso de pruebas. Usa la misma cuenta corporativa de Google que en prod y entraras al entorno QA."
-    : "El portal es la entrada. Usa tu cuenta corporativa de Google y, si ya tienes una sesion activa, pasaras directo al dashboard."}</p>
           <div class="field">
             <label>Acceso corporativo con Google</label>
-            <a class="submit-btn" href="${portalPath("/auth/google/start")}" style="text-decoration:none;text-align:center;display:inline-flex;justify-content:center;align-items:center;">Entrar con Google</a>
+            <div class="auth-links">
+              <a class="submit-btn" href="${portalPath("/auth/google/start")}" style="text-decoration:none;text-align:center;display:inline-flex;justify-content:center;align-items:center;">Entrar con Google</a>
+            </div>
           </div>
           ${shouldShowQaAccess ? `
           <form class="field" method="post" action="/auth/qa/start">
             <label for="qa-access-token">Acceso QA controlado</label>
             <input id="qa-access-token" name="token" type="password" autocomplete="one-time-code" placeholder="Token de QA" />
-            <p class="hint" style="margin:0;">Usa este acceso solo para validar tickets con sesion de administracion.</p>
             <button class="submit-btn" type="submit">Entrar como QA</button>
           </form>
           ` : ""}
@@ -4789,7 +5353,7 @@ async function renderDashboardPage({
   const role = selected.role || "capacitador";
   const routeCards = getRouteCardsForRole(role);
   const groupedRouteCards = role === "admin" ? groupAdminRouteCards(routeCards) : null;
-  const title = role === "admin" ? "Tablero general" : "Tablero personal";
+  const title = "Portal";
   const logoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
   const viewingOtherDashboard = user?.role === "admin" && user?.rowId !== selected.rowId;
   const capacitadorView = role === "capacitador";
@@ -4810,19 +5374,28 @@ async function renderDashboardPage({
       employeeId: selectedEmployeeId,
       returnPath: dashboardReturnHref,
     });
+  const getDashboardTabIcon = (tabId) => ({
+    calendar: "📅",
+    gestion: "⚙️",
+    pedidos: "🧾",
+    faltantes: "⚠️",
+    diplomas: "🎓",
+    ley: "⚖️",
+  })[String(tabId || "").trim()] || "•";
+  const floatingMenuButton = showRoutes
+    ? `<button class="dashboard-fab button primary" type="button" data-dashboard-drawer-open aria-label="Abrir menu">☰ Menú</button>`
+    : "";
 
   const sideContent = `
-    <div class="hero-callout hero-callout-compact">
-      <img class="hero-logo" src="${logoPath}" alt="Desarrollo EG" />
-      <div>
-        <span class="eyebrow">Sesión</span>
-        <h2>${escapeHtml(selected.nombre || "Usuario")}</h2>
-        <p>${escapeHtml(selected.correo || "")}</p>
+    <div class="hero-session-card hero-brand-card">
+      <button class="hero-session-media hero-logo-button" type="button" data-dashboard-reload aria-label="Recargar tablero">
+        <img class="hero-logo" src="${logoPath}" alt="Desarrollo EG" />
+      </button>
+      <div class="hero-session-body hero-brand-copy">
+        <span class="eyebrow">Portal activo</span>
+        <strong>Desarrollo EG</strong>
+        <p>Toca el logo para recargar la vista.</p>
       </div>
-    </div>
-    <div class="hero-note">
-      <strong>${escapeHtml(role)}</strong>
-      <p>Panel activo</p>
     </div>
   `;
 
@@ -4981,33 +5554,108 @@ async function renderDashboardPage({
       : []),
   ].filter((tab) => Boolean(tab.content));
   const activeTabId = dashboardTabs[0]?.id || "calendar";
-  const dashboardTabsNav = dashboardTabs.map((tab) => `
+  const dashboardPrimaryLinks = showRoutes
+    ? Array.from(new Map((groupedRouteCards?.primary || routeCards.slice(0, 5))
+        .slice(0, 6)
+        .map((card) => [String(card.label || card.title || "").trim().toLowerCase(), card])).values())
+    : [];
+  const renderDashboardTabButton = (tab, { compact = false, drawer = false } = {}) => `
     <button
       type="button"
-      class="dashboard-tab-btn${tab.id === activeTabId ? " active" : ""}"
+      class="dashboard-nav-link${tab.id === activeTabId ? " active" : ""}${compact ? " dashboard-nav-link--compact" : ""}${drawer ? " dashboard-nav-link--drawer" : ""}"
       role="tab"
       aria-selected="${tab.id === activeTabId ? "true" : "false"}"
       aria-controls="dashboard-tab-${tab.id}"
       data-dashboard-tab="${escapeAttr(tab.id)}"
     >
-      <span class="dashboard-tab-label">${escapeHtml(tab.label)}</span>
-      ${typeof tab.count === "number" ? `<span class="dashboard-tab-count">${escapeHtml(String(tab.count))}</span>` : ""}
+      <span class="dashboard-nav-link__leading">
+        <span class="dashboard-nav-link__icon" aria-hidden="true">${escapeHtml(getDashboardTabIcon(tab.id))}</span>
+        <span class="dashboard-nav-link__label">${escapeHtml(tab.label)}</span>
+      </span>
+      ${typeof tab.count === "number" ? `<span class="dashboard-nav-link__count">${escapeHtml(String(tab.count))}</span>` : ""}
     </button>
-  `).join("");
-  const dashboardMobileBar = `
-    <div class="dashboard-mobile-bar" aria-label="Navegación rápida del dashboard">
-      ${dashboardTabs.map((tab) => `
-        <button
-          type="button"
-          class="dashboard-mobile-chip${tab.id === activeTabId ? " active" : ""}"
-          data-dashboard-tab="${escapeAttr(tab.id)}"
-          aria-pressed="${tab.id === activeTabId ? "true" : "false"}"
-        >
-          <span class="dashboard-mobile-chip-label">${escapeHtml(tab.label)}</span>
-          ${typeof tab.count === "number" ? `<span class="dashboard-mobile-chip-count">${escapeHtml(String(tab.count))}</span>` : ""}
-        </button>
-      `).join("")}
+  `;
+  const dashboardSidebarContent = `
+      <div class="dashboard-sidebar__content">
+      <div class="dashboard-sidebar__user-card">
+        <div class="dashboard-sidebar__user-media">
+          <img class="dashboard-sidebar__user-logo" src="${logoPath}" alt="Desarrollo EG" />
+        </div>
+        <div class="dashboard-sidebar__user-body">
+          <span class="eyebrow">Sesión</span>
+          <strong>${escapeHtml(selected.nombre || "Usuario")}</strong>
+          <p>${escapeHtml(selected.correo || "")}</p>
+          <div class="dashboard-sidebar__user-meta">
+            <span class="eyebrow">Rol</span>
+            <strong>${escapeHtml(String(role || "").toUpperCase())}</strong>
+          </div>
+          <div class="dashboard-sidebar__user-actions">
+            <a class="button primary button--compact" href="/api/auth/logout">Cerrar sesión</a>
+          </div>
+        </div>
+      </div>
+      <div class="dashboard-sidebar__header">
+        <span class="eyebrow">Navegación</span>
+      </div>
+      <div class="dashboard-sidebar__groups">
+        <section class="dashboard-nav-group">
+          <h2>Secciones</h2>
+          <div class="dashboard-nav-group__links">
+            ${dashboardTabs.map((tab) => renderDashboardTabButton(tab)).join("")}
+          </div>
+        </section>
+        ${showRoutes ? `
+        <section class="dashboard-nav-group">
+          <h2>Accesos</h2>
+          <div class="dashboard-nav-group__links">
+            ${dashboardPrimaryLinks.map((card) => `
+              <a class="dashboard-nav-link dashboard-nav-link--compact" href="${escapeAttr(card.href)}">
+                <span class="dashboard-nav-link__label">${escapeHtml(card.label || card.title || "")}</span>
+              </a>
+            `).join("")}
+          </div>
+        </section>
+        ` : ""}
+      </div>
     </div>
+  `;
+  const dashboardDrawer = `
+    <div class="dashboard-drawer" data-dashboard-drawer hidden>
+      <button class="dashboard-drawer__backdrop" type="button" aria-label="Cerrar menu" data-dashboard-drawer-close></button>
+      <aside class="dashboard-drawer__panel" data-dashboard-drawer-panel tabindex="-1">
+        <div class="dashboard-drawer__top">
+          <strong>Menú</strong>
+          <button class="button ghost button--compact" type="button" data-dashboard-drawer-close>Cerrar</button>
+        </div>
+        ${dashboardSidebarContent}
+      </aside>
+    </div>
+  `;
+  const dashboardMobileDock = `
+    <nav class="dashboard-mobile-dock" aria-label="Navegacion movil">
+      <button
+        class="dashboard-nav-link dashboard-nav-link--compact dashboard-mobile-dock__menu"
+        type="button"
+        aria-label="Abrir menu"
+        aria-expanded="false"
+        data-dashboard-drawer-open
+      >
+        ☰ <span class="dashboard-nav-link__label">Menú</span>
+      </button>
+      <div class="dashboard-mobile-dock__track">
+        ${dashboardTabs.map((tab) => renderDashboardTabButton(tab, { compact: true, drawer: true })).join("")}
+        ${showRoutes ? `
+          ${dashboardPrimaryLinks.map((card) => `
+            <a class="dashboard-nav-link dashboard-nav-link--compact dashboard-nav-link--drawer" href="${escapeAttr(card.href)}">
+              <span class="dashboard-nav-link__leading">
+                <span class="dashboard-nav-link__icon" aria-hidden="true">↗</span>
+                <span class="dashboard-nav-link__label">${escapeHtml(card.label || card.title || "")}</span>
+              </span>
+            </a>
+          `).join("")}
+        ` : ""}
+      </div>
+    </nav>
   `;
   const dashboardTabPanels = dashboardTabs.map((tab) => `
     <section
@@ -5021,12 +5669,6 @@ async function renderDashboardPage({
       ${tab.content}
     </section>
   `).join("");
-  const headerAction = `<a class="button primary" href="/api/auth/logout">Cerrar sesión</a>`;
-  const headerAction2 = user?.role === "admin"
-    ? (viewingOtherDashboard
-      ? `<a class="button ghost" href="/dashboard/general">Volver a mi dashboard</a>`
-      : `<a class="button ghost" href="/dashboard">Recargar</a>`)
-    : "";
   const calendarBootstrap = user
     ? `
       <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js"></script>
@@ -5864,25 +6506,93 @@ async function renderDashboardPage({
 
   return renderLayout({
     title: `${title} | Desarrollo EG`,
-    heroTitle: title,
-    heroIntro: role === "admin"
-      ? "Vista administrativa para revisar actividad, capacitaciones y accesos internos sin volver al portal."
-      : "Tu tablero personal para ver capacitaciones, calendario y pendientes despues de autenticarte en el portal.",
-    primaryAction: headerAction,
-    secondaryAction: headerAction2,
+    heroTitle: "",
+    heroIntro: "",
+    primaryAction: "",
+    secondaryAction: "",
     sideContent,
     headExtra: "",
     mainClass: "dashboard-main",
     bodyContent: `
-      <section class="dashboard-tabs" data-dashboard-tabs>
-        <div class="dashboard-tabs-nav" role="tablist" aria-label="Secciones del dashboard">
-          ${dashboardTabsNav}
+      <section class="dashboard-shell">
+        ${floatingMenuButton}
+        <div class="dashboard-content">
+          ${dashboardTabPanels}
         </div>
-        ${dashboardMobileBar}
-        ${dashboardTabPanels}
+        ${dashboardMobileDock}
+        ${dashboardDrawer}
       </section>
     `,
-    bodyScripts: calendarBootstrap,
+    bodyScripts: `
+      ${calendarBootstrap}
+      <script>
+        (function () {
+          const reloadButtons = Array.from(document.querySelectorAll("[data-dashboard-reload]"));
+          const drawer = document.querySelector("[data-dashboard-drawer]");
+          const drawerPanel = document.querySelector("[data-dashboard-drawer-panel]");
+          const openButtons = Array.from(document.querySelectorAll("[data-dashboard-drawer-open]"));
+          const closeButtons = Array.from(document.querySelectorAll("[data-dashboard-drawer-close]"));
+          if (!drawer || !drawerPanel || openButtons.length === 0) return;
+          const focusables = () => Array.from(drawerPanel.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+          let lastActive = null;
+          let closeTimer = null;
+          const setOpenState = (isOpen) => {
+            openButtons.forEach((button) => button.setAttribute("aria-expanded", isOpen ? "true" : "false"));
+          };
+          const openDrawer = () => {
+            if (closeTimer) {
+              window.clearTimeout(closeTimer);
+              closeTimer = null;
+            }
+            lastActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            drawer.hidden = false;
+            requestAnimationFrame(() => drawer.classList.add("is-open"));
+            document.body.style.overflow = "hidden";
+            setOpenState(true);
+            requestAnimationFrame(() => (drawerPanel.querySelector("button, a, [tabindex]") || drawerPanel).focus());
+          };
+          const closeDrawer = () => {
+            drawer.classList.remove("is-open");
+            document.body.style.overflow = "";
+            setOpenState(false);
+            closeTimer = window.setTimeout(() => {
+              drawer.hidden = true;
+            }, 240);
+            lastActive?.focus?.();
+          };
+          reloadButtons.forEach((button) => {
+            button.addEventListener("click", () => window.location.reload());
+          });
+          openButtons.forEach((button) => button.addEventListener("click", openDrawer));
+          closeButtons.forEach((button) => button.addEventListener("click", closeDrawer));
+          drawer.addEventListener("click", (event) => {
+            if (event.target === drawer) closeDrawer();
+          });
+          document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !drawer.hidden) {
+              event.preventDefault();
+              closeDrawer();
+              return;
+            }
+            if (event.key !== "Tab" || drawer.hidden) return;
+            const elements = focusables();
+            if (elements.length === 0) return;
+            const first = elements[0];
+            const last = elements[elements.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          });
+          drawer.querySelectorAll("[data-dashboard-tab]").forEach((button) => {
+            button.addEventListener("click", () => closeDrawer());
+          });
+        })();
+      </script>
+    `,
     footer: "",
   });
 }

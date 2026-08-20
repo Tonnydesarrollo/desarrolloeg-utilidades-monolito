@@ -76,6 +76,7 @@ Plan:
 - Mantener un solo proceso base por ahora, pero modularizar internamente.
 - Separar configuracion por ambiente desde el inicio de la nueva version.
 - Introducir convenciones de rutas y naming estables.
+- Como rama alternativa, formalizar una arquitectura donde AppSheet siga siendo la base principal y el backend sostenga cache persistente para servir al frontend por AJAX. Ver [arquitectura alternativa AppSheet + cache backend](/C:/Users/devssh/Documents/Programacion/DESARROLLOEG_UTILIDADES_MONOLITO/docs/proyectos/nueva-version-apps-desarrolloeg/ARQUITECTURA_APP_CACHE_BACKEND.md).
 
 ### 3.2 Portal y autenticacion
 

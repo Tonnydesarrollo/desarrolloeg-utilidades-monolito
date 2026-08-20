@@ -377,6 +377,7 @@ function initSchema() {
         fecha_capacitacion TEXT,
         hora_inicio TEXT,
         hora_fin TEXT,
+        cede_sucursal_id TEXT,
         cede TEXT,
         sucursales TEXT,
         capacitadores TEXT,
@@ -416,6 +417,7 @@ function initSchema() {
     db.exec(`
       CREATE TABLE IF NOT EXISTS calendario (
         id TEXT PRIMARY KEY,
+        row_id TEXT,
         fecha TEXT,
         icono TEXT,
         titulo TEXT,
@@ -442,6 +444,7 @@ function initSchema() {
     db.exec(`
       CREATE TABLE IF NOT EXISTS catalogo (
         id TEXT PRIMARY KEY,
+        row_id TEXT,
         codigo TEXT,
         nombre TEXT,
         precio_sugerido REAL,
@@ -457,6 +460,7 @@ function initSchema() {
     db.exec(`
       CREATE TABLE IF NOT EXISTS proveedores (
         id TEXT PRIMARY KEY,
+        row_id TEXT,
         nombre TEXT,
         banco TEXT,
         cuenta_bancaria TEXT,
@@ -473,6 +477,7 @@ function initSchema() {
     db.exec(`
       CREATE TABLE IF NOT EXISTS cotizaciones (
         id TEXT PRIMARY KEY,
+        row_id TEXT,
         empresa_id TEXT,
         fecha TEXT,
         proveedor_id TEXT,
@@ -498,6 +503,7 @@ function initSchema() {
     db.exec(`
       CREATE TABLE IF NOT EXISTS conceptos_cotizacion (
         id TEXT PRIMARY KEY,
+        row_id TEXT,
         cotizacion_id TEXT,
         centro_trabajo_id TEXT,
         concepto_id TEXT,
@@ -633,9 +639,11 @@ function initSchema() {
   ]);
   ensureColumns("capacitaciones", [
     ["id", "TEXT"],
+    ["row_id", "TEXT"],
     ["fecha_capacitacion", "TEXT"],
     ["hora_inicio", "TEXT"],
     ["hora_fin", "TEXT"],
+    ["cede_sucursal_id", "TEXT"],
     ["cede", "TEXT"],
     ["sucursales", "TEXT"],
     ["capacitadores", "TEXT"],
@@ -665,7 +673,19 @@ function initSchema() {
     ["sync_appsheet_operacion", "TEXT"],
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_capacitaciones_id ON capacitaciones(id);`);
+  ensureColumns("calendario_empleados", [
+    ["id", "TEXT"],
+    ["calendario_id", "TEXT"],
+    ["empleado_id", "TEXT"],
+    ["orden", "INTEGER NOT NULL DEFAULT 0"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
   ensureColumns("calendario", [
+    ["row_id", "TEXT"],
     ["fecha", "TEXT"],
     ["icono", "TEXT"],
     ["titulo", "TEXT"],
@@ -686,6 +706,7 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("catalogo", [
+    ["row_id", "TEXT"],
     ["codigo", "TEXT"],
     ["nombre", "TEXT"],
     ["precio_sugerido", "REAL"],
@@ -698,6 +719,7 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("proveedores", [
+    ["row_id", "TEXT"],
     ["nombre", "TEXT"],
     ["banco", "TEXT"],
     ["cuenta_bancaria", "TEXT"],
@@ -711,6 +733,7 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("cotizaciones", [
+    ["row_id", "TEXT"],
     ["empresa_id", "TEXT"],
     ["fecha", "TEXT"],
     ["proveedor_id", "TEXT"],
@@ -730,6 +753,7 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("conceptos_cotizacion", [
+    ["row_id", "TEXT"],
     ["cotizacion_id", "TEXT"],
     ["centro_trabajo_id", "TEXT"],
     ["concepto_id", "TEXT"],
@@ -1120,13 +1144,15 @@ function mapEmpleadoRow(row) {
 }
 
 function mapCapacitacionRow(row) {
+  const cedeSucursalId = pickFirst(row, ["cede_sucursal_id", "cede", "CEDE"]);
   return {
-    row_id: pickFirst(row, ["Row ID", "ROW ID", "row_id"]),
+    row_id: pickFirst(row, ["Row ID", "ROW ID", "Row Id", "row_id"]),
     id: pickFirst(row, ["id", "ID"]),
     fecha_capacitacion: pickFirst(row, ["fecha_capacitacion", "FECHA CAPACITACION"]),
     hora_inicio: pickFirst(row, ["hora_inicio", "HORA INICIO"]),
     hora_fin: pickFirst(row, ["hora_fin", "HORA FIN"]),
-    cede: pickFirst(row, ["cede", "CEDE"]),
+    cede_sucursal_id: cedeSucursalId,
+    cede: cedeSucursalId,
     sucursales: pickFirst(row, ["sucursales", "SUCURSALES"]),
     capacitadores: pickFirst(row, ["capacitadores", "CAPACITADORES"]),
     status: pickFirst(row, ["status", "STATUS", "Estatus", "ESTATUS"]),
@@ -1939,7 +1965,7 @@ export function upsertEmpleadosLocalRows(rows = []) {
 }
 
 export function upsertCapacitacionesLocalRows(rows = []) {
-  upsertMany("capacitaciones", rows, "row_id", mapCapacitacionRow);
+  upsertMany("capacitaciones", rows, "id", mapCapacitacionRow);
 }
 
 export function upsertCalendarioLocalRows(rows = []) {
@@ -2043,7 +2069,7 @@ export function getEmpleadosLocalRows() {
 export function getCapacitacionesLocalRows() {
   initSchema();
   if (!isRetryWindowOpen()) return [];
-  return getDb()?.prepare(`SELECT * FROM capacitaciones ORDER BY row_id`).all() || [];
+  return getDb()?.prepare(`SELECT * FROM capacitaciones ORDER BY id`).all() || [];
 }
 
 export function getCalendarioLocalRows() {

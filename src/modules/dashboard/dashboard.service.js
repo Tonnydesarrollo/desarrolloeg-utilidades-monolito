@@ -766,7 +766,6 @@ function renderSchedulerCard(scheduler) {
         </div>
         ${renderBadge(scheduler.tone, scheduler.label)}
       </div>
-      <p class="panel-copy">Resumen del motor interno que reemplaza los cron y procesos sueltos.</p>
       <dl class="meta-list">
         <div><dt>Habilitados</dt><dd>${escapeHtml(String(scheduler.enabledJobs))}</dd></div>
         <div><dt>Ejecutando</dt><dd>${escapeHtml(String(scheduler.runningJobs))}</dd></div>
@@ -870,8 +869,8 @@ export function renderDashboardHtml(data) {
   <style>
     :root {
       --bg: #f4efe8;
-      --panel: rgba(255, 251, 245, 0.86);
-      --panel-strong: rgba(255, 255, 255, 0.92);
+      --panel: rgba(255, 255, 255, 0.90);
+      --panel-strong: rgba(255, 255, 255, 0.96);
       --ink: #15202b;
       --muted: #5f6d7a;
       --line: rgba(33, 49, 63, 0.12);
@@ -891,15 +890,15 @@ export function renderDashboardHtml(data) {
       margin: 0;
       color: var(--ink);
       background:
-        radial-gradient(circle at top left, rgba(15, 76, 92, 0.16), transparent 24%),
-        radial-gradient(circle at top right, rgba(196, 138, 48, 0.18), transparent 28%),
-        linear-gradient(180deg, #f0e9df 0%, #f8f4ee 48%, #efe7dc 100%);
-      font-family: Bahnschrift, Aptos, "Segoe UI", sans-serif;
+        radial-gradient(circle at top left, rgba(192, 57, 43, 0.10), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(15, 76, 92, 0.12), transparent 28%),
+        linear-gradient(180deg, #f7f2ea 0%, #f3eee7 42%, #edf2f7 100%);
+      font-family: "Montserrat", "Segoe UI", Aptos, sans-serif;
     }
     main {
-      max-width: 1280px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 30px 18px 56px;
+      padding: 28px 18px 56px;
     }
     .skip-link {
       position: absolute;
@@ -924,47 +923,65 @@ export function renderDashboardHtml(data) {
     .hero {
       position: relative;
       overflow: hidden;
-      background: linear-gradient(135deg, rgba(15, 76, 92, 0.92), rgba(21, 32, 43, 0.94));
-      color: #f6f8fb;
+      background:
+        radial-gradient(circle at top right, rgba(255, 211, 122, 0.18), transparent 26%),
+        linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
+      color: var(--ink);
       border-radius: 28px;
       padding: 28px;
-      box-shadow: var(--shadow);
-      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 28px 80px rgba(20, 32, 43, 0.12);
+      border: 1px solid rgba(26, 42, 58, 0.10);
+      border-top: 5px solid var(--accent);
     }
     .hero::after {
       content: "";
       position: absolute;
-      inset: auto -8% -40% auto;
-      width: 320px;
-      height: 320px;
+      inset: auto -10% -42% auto;
+      width: 340px;
+      height: 340px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(255, 211, 122, 0.30), transparent 70%);
+      background: radial-gradient(circle, rgba(192,57,43,0.10), transparent 70%);
       pointer-events: none;
     }
     .hero-grid {
       position: relative;
       z-index: 1;
       display: grid;
-      grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.85fr);
       gap: 22px;
+      align-items: center;
+    }
+    .dashboard-kicker {
+      display: inline-flex;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(192,57,43,0.10);
+      color: var(--accent);
+      font-size: 0.76rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
     }
     .hero h1 {
-      margin: 0;
-      font-size: clamp(2rem, 4vw, 3.4rem);
-      line-height: 0.95;
+      margin: 12px 0 0;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      line-height: 0.96;
       letter-spacing: -0.03em;
+      font-family: "Cinzel", serif;
+      text-transform: uppercase;
     }
     .hero p {
-      margin: 14px 0 0;
+      margin: 12px 0 0;
       max-width: 720px;
-      color: rgba(246, 248, 251, 0.82);
+      color: var(--muted);
       font-size: 1rem;
+      line-height: 1.55;
     }
     .hero-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-top: 20px;
+      margin-top: 18px;
     }
     .button {
       appearance: none;
@@ -976,19 +993,21 @@ export function renderDashboardHtml(data) {
       justify-content: center;
       padding: 11px 14px;
       border-radius: 999px;
-      font-weight: 700;
+      font-weight: 800;
       font-size: 0.95rem;
-      transition: transform 180ms ease;
+      transition: transform 180ms ease, background 180ms ease, color 180ms ease;
+      font-family: "Montserrat", sans-serif;
     }
     .button:hover { transform: translateY(-1px); }
     .button.primary {
-      background: #f4c15d;
-      color: #1b1c1d;
+      background: linear-gradient(135deg, var(--accent-3), var(--accent));
+      color: #ffffff;
+      box-shadow: 0 10px 24px rgba(26,42,58,0.16);
     }
     .button.ghost {
-      background: rgba(255,255,255,0.10);
-      color: #f6f8fb;
-      border: 1px solid rgba(255,255,255,0.12);
+      background: #ffffff;
+      color: var(--accent);
+      border: 1px solid rgba(26,42,58,0.14);
     }
     .hero-side {
       display: grid;
@@ -996,21 +1015,23 @@ export function renderDashboardHtml(data) {
       align-content: start;
     }
     .hero-note {
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(26,42,58,0.10);
       border-radius: 18px;
-      padding: 16px;
+      padding: 16px 18px;
+      box-shadow: 0 10px 24px rgba(26,42,58,0.06);
     }
     .hero-note p {
-      margin: 4px 0 0;
+      margin: 6px 0 0;
       font-size: 0.95rem;
+      line-height: 1.4;
     }
     .hero-note strong {
       display: block;
       font-size: 0.84rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: rgba(246, 248, 251, 0.72);
+      color: var(--accent);
     }
     .summary-grid,
     .panel-grid {
@@ -1025,7 +1046,7 @@ export function renderDashboardHtml(data) {
       backdrop-filter: blur(14px);
       border: 1px solid var(--line);
       border-radius: 24px;
-      box-shadow: var(--shadow);
+      box-shadow: 0 18px 54px rgba(21, 32, 43, 0.08);
     }
     .stat-card {
       padding: 18px 18px 20px;
@@ -1048,13 +1069,14 @@ export function renderDashboardHtml(data) {
       font-weight: 800;
       letter-spacing: 0.11em;
       text-transform: uppercase;
-      color: var(--muted);
+      color: var(--accent);
     }
     .stat-value {
       font-size: clamp(1.7rem, 4vw, 2.8rem);
       font-weight: 800;
       letter-spacing: -0.04em;
       line-height: 0.95;
+      font-family: "Cinzel", serif;
     }
     .stat-detail,
     .panel-copy,
@@ -1101,11 +1123,14 @@ export function renderDashboardHtml(data) {
       margin: 0;
       font-size: clamp(1.35rem, 2.2vw, 1.9rem);
       letter-spacing: -0.02em;
+      font-family: "Cinzel", serif;
+      text-transform: uppercase;
     }
     .section-head p {
       margin: 0;
       max-width: 760px;
       color: var(--muted);
+      line-height: 1.5;
     }
     .section-head strong { color: var(--ink); }
     .panel-head {
@@ -1117,6 +1142,8 @@ export function renderDashboardHtml(data) {
     .panel h3 {
       margin: 0;
       font-size: 1.18rem;
+      font-family: "Cinzel", serif;
+      text-transform: uppercase;
     }
     .badge {
       display: inline-flex;
@@ -1136,6 +1163,12 @@ export function renderDashboardHtml(data) {
     .badge.tone-warn { color: var(--warn); background: var(--warn-soft); }
     .badge.tone-fail { color: var(--fail); background: var(--fail-soft); }
     .badge.tone-neutral { color: var(--neutral); background: var(--neutral-soft); }
+    .stat-card p,
+    .panel p,
+    .details-panel p,
+    .footer-note {
+      font-family: "Montserrat", sans-serif;
+    }
     .meta-list {
       display: grid;
       gap: 10px;
@@ -1167,6 +1200,7 @@ export function renderDashboardHtml(data) {
       color: var(--accent);
       font-weight: 800;
       text-decoration: none;
+      font-family: "Montserrat", sans-serif;
     }
     .inline-link:hover { text-decoration: underline; }
     .link-row {
@@ -1200,9 +1234,33 @@ export function renderDashboardHtml(data) {
       margin-top: 18px;
       color: var(--muted);
       font-size: 0.92rem;
+      text-align: center;
     }
     @media (max-width: 900px) {
       .hero-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      main {
+        padding: 14px 8px 24px;
+      }
+      .hero,
+      .panel,
+      .stat-card,
+      .details-panel {
+        border-radius: 20px;
+      }
+      .hero::after {
+        width: 180px;
+        height: 180px;
+        inset: auto -24px -72px auto;
+      }
+      .hero-actions .button {
+        width: 100%;
+      }
+      .panel-grid,
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -1212,8 +1270,8 @@ export function renderDashboardHtml(data) {
     <section class="hero">
       <div class="hero-grid">
         <div>
+          <span class="dashboard-kicker">Centro operativo</span>
           <h1>Estado de Servicios</h1>
-          <p>Vista resumida del monolito: primero salud pública, luego servicios de fondo y por último el diagnóstico técnico que solo se despliega cuando hace falta.</p>
           <div class="hero-actions">
             <a class="button primary" href="/status/status.json" target="_blank" rel="noreferrer">Ver JSON técnico</a>
             <a class="button ghost" href="/" rel="noreferrer">Inicio</a>
@@ -1225,14 +1283,6 @@ export function renderDashboardHtml(data) {
           <div class="hero-note">
             <strong>Actualizado</strong>
             <p>${escapeHtml(formatDateTime(data.generatedAt))}</p>
-          </div>
-          <div class="hero-note">
-            <strong>Resumen</strong>
-            <p>${escapeHtml(summary.overall.label)} / ${escapeHtml(summary.overall.detail)}</p>
-          </div>
-          <div class="hero-note">
-            <strong>Auto refresh</strong>
-            <p>La página se recarga en <span data-refresh-count>60</span>s.</p>
           </div>
         </div>
       </div>
@@ -1248,7 +1298,6 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>Entrada principal</h2>
-          <p class="section-copy">Servicios visibles primero para consultas rapidas, integraciones y chequeos basicos.</p>
         </div>
       </div>
       <div class="panel-grid">
@@ -1260,7 +1309,6 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>Soporte tecnico</h2>
-          <p class="section-copy">Coordinacion del nodo, scheduler, jobs y WhatsApp en una lectura secundaria y clara.</p>
         </div>
       </div>
       <div class="panel-grid">
@@ -1274,7 +1322,6 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>Operacion de jobs</h2>
-          <p class="section-copy">Cada tarjeta resume frecuencia, siguiente corrida y resultado reciente.</p>
         </div>
       </div>
       <div class="panel-grid">
@@ -1286,7 +1333,6 @@ export function renderDashboardHtml(data) {
       <div class="section-head">
         <div>
           <h2>PM2 y diagnostico</h2>
-          <p class="section-copy">El proceso principal sigue visible; el legado y los retirados quedan agrupados para revisar solo cuando sea necesario.</p>
         </div>
       </div>
       <div class="panel-grid">
