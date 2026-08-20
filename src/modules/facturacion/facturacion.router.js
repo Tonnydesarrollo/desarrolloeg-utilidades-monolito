@@ -2,19 +2,19 @@ import express from "express";
 import fetch from "node-fetch";
 import driveRoutes from "./routes/drive.js";
 import { construirDataHTML } from "./services/construirDataHTML.js";
-import { obtenerCotizacionCompleta, mapaSucursales, mapaProveedores, prewarmFacturacionCaches } from "./services/appsheet.js";
+import { obtenerCotizacionCompleta, mapaSucursales, mapaProveedores, prewarmCotizacionesCaches } from "./services/appsheet.js";
 
-export const facturacionRouter = express.Router();
-export const cotizacionesRouter = facturacionRouter;
-prewarmFacturacionCaches();
+export const cotizacionesRouter = express.Router();
+export const facturacionRouter = cotizacionesRouter;
+prewarmCotizacionesCaches();
 
-facturacionRouter.use(express.json());
-facturacionRouter.get(['/', ''], (_req, res) => {
+cotizacionesRouter.use(express.json());
+cotizacionesRouter.get(['/', ''], (_req, res) => {
   res.redirect('/cotizaciones/cotizacion/html');
 });
-facturacionRouter.use("/drive", driveRoutes);
+cotizacionesRouter.use("/drive", driveRoutes);
 
-facturacionRouter.get("/health", (_req, res) => {
+cotizacionesRouter.get("/health", (_req, res) => {
   res.json({ service: "cotizaciones", status: "ok" });
 });
 
@@ -69,10 +69,10 @@ const handleImgProxy = async (req, res) => {
   }
 };
 
-facturacionRouter.get("/img-proxy", handleImgProxy);
-facturacionRouter.get("/cotizaciones/img-proxy", handleImgProxy);
+cotizacionesRouter.get("/img-proxy", handleImgProxy);
+cotizacionesRouter.get("/cotizaciones/img-proxy", handleImgProxy);
 
-facturacionRouter.get("/cotizacion/:id/html-data", async (req, res) => {
+cotizacionesRouter.get("/cotizacion/:id/html-data", async (req, res) => {
   try {
     const json = await obtenerCotizacionCompleta(req.params.id);
     const data = construirDataHTML(json);
@@ -83,7 +83,7 @@ facturacionRouter.get("/cotizacion/:id/html-data", async (req, res) => {
   }
 });
 
-facturacionRouter.get("/pruebas", async (_req, res) => {
+cotizacionesRouter.get("/pruebas", async (_req, res) => {
   try {
     res.render("pruebas");
   } catch (err) {
@@ -92,7 +92,7 @@ facturacionRouter.get("/pruebas", async (_req, res) => {
   }
 });
 
-facturacionRouter.get("/cotizacion/html", async (_req, res) => {
+cotizacionesRouter.get("/cotizacion/html", async (_req, res) => {
   try {
     const [sucursalesMap, proveedoresMap] = await Promise.all([mapaSucursales(), mapaProveedores()]);
 
@@ -117,7 +117,7 @@ facturacionRouter.get("/cotizacion/html", async (_req, res) => {
   }
 });
 
-facturacionRouter.get("/cotizacion/:id/html", async (req, res) => {
+cotizacionesRouter.get("/cotizacion/:id/html", async (req, res) => {
   try {
     const json = await obtenerCotizacionCompleta(req.params.id);
     const data = construirDataHTML(json);

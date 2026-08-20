@@ -17,7 +17,7 @@ const appsheetAgent = new https.Agent({
 
 const cachedTables = new Map();
 const cachedCotizacionesCompletas = new Map();
-let facturacionWarmupStarted = false;
+let cotizacionesWarmupStarted = false;
 
 let appsheetActive = 0;
 const appsheetQueue = [];
@@ -393,9 +393,9 @@ export async function obtenerCotizacionCompleta(cotizacionId) {
   }
 }
 
-export function prewarmFacturacionCaches() {
-  if (facturacionWarmupStarted) return;
-  facturacionWarmupStarted = true;
+export function prewarmCotizacionesCaches() {
+  if (cotizacionesWarmupStarted) return;
+  cotizacionesWarmupStarted = true;
 
   if (!process.env.APPSHEET_APP_ID || !process.env.APPSHEET_API_KEY) {
     return;
@@ -410,3 +410,5 @@ export function prewarmFacturacionCaches() {
     ]);
   }, 1500);
 }
+
+export const prewarmFacturacionCaches = prewarmCotizacionesCaches;

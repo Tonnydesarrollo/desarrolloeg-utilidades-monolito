@@ -257,31 +257,35 @@ if (data && data.centros) {
 }
 
 .desglose-card {
-  border: 1px solid #dbe4f0;
+  border: 1px solid rgba(26,42,58,0.10);
   border-left: 5px solid #1f4e79;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   padding: 12px 14px;
-  border-radius: 4px;
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(26,42,58,0.06);
 }
 
 .desglose-card h2 {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   color: #1f4e79;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
 }
 
 .desglose-options {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .desglose-option {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  padding: 12px;
+  padding: 10px 11px;
   border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  border-radius: 14px;
   background: #fff;
+  box-shadow: 0 4px 12px rgba(26,42,58,0.04);
 }
 
 .desglose-option input {
@@ -294,12 +298,12 @@ if (data && data.centros) {
 .desglose-option strong {
   display: block;
   margin-bottom: 4px;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
 }
 
 .desglose-option p {
   margin: 0;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   line-height: 1.45;
   color: #4b5563;
 }
@@ -344,17 +348,20 @@ if (data && data.centros) {
 }
 
 .forma-pago-card {
-  border: 1px solid #dbe4f0;
+  border: 1px solid rgba(26,42,58,0.10);
   border-left: 5px solid #1f4e79;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   padding: 12px 14px;
-  border-radius: 4px;
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(26,42,58,0.06);
   margin-top: 12px;
 }
 
 .forma-pago-card h2 {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   color: #1f4e79;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
 }
 
 .forma-pago-card select {
@@ -385,6 +392,37 @@ if (data && data.centros) {
         flex-direction:column;
         box-shadow:0 6px 18px rgba(0,0,0,0.08);
         overflow:hidden;
+      }
+      .cotizacion-shell{
+        display:flex;
+        align-items:flex-start;
+        gap:12px;
+      }
+      .cotizacion-sidebar{
+        width:clamp(220px, 20vw, 260px);
+        flex:0 0 clamp(220px, 20vw, 260px);
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+        position:sticky;
+        top:10mm;
+        max-height:calc(100vh - 24mm);
+        overflow:auto;
+        padding-right:2px;
+      }
+      .cotizacion-sidebar .botonera{
+        text-align:left;
+        margin-bottom:0;
+        gap:8px !important;
+      }
+      .cotizacion-sidebar .botonera a,
+      .cotizacion-sidebar .botonera button{
+        width:100%;
+        border-radius:999px;
+        min-height:42px;
+      }
+      .cotizacion-sidebar .desglose-toolbar{
+        margin:0;
       }
       .content{position:relative;z-index:1;padding-bottom:0;flex:1}
       
@@ -559,11 +597,13 @@ col.total { width:8%; }
       }
 
       /* MEDIA PRINT (Ajuste de tamaño de imagen para impresión) */
-@media print{
-  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+      @media print{
+        *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+  .cotizacion-sidebar{display:none!important}
   .botonera{display:none!important}
   .desglose-toolbar{display:none!important}
   .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 10mm;display:block!important;overflow:visible!important}
+  .cotizacion-shell{display:block!important}
   .content{display:block!important;overflow:visible!important}
   html,body{font-size:10px} 
         table{font-size:0.65rem}
@@ -587,6 +627,16 @@ col.total { width:8%; }
       @media (max-width:720px){
         .header{flex-direction:column; text-align: center;}
         .header-left, .header-center, .header-right{text-align:center; margin-bottom: 8px;}
+        .cotizacion-shell{flex-direction:column}
+        .cotizacion-sidebar{
+          width:100%;
+          flex:1 1 auto;
+          position:static;
+          top:auto;
+          max-height:none;
+          overflow:visible;
+          padding-right:0;
+        }
         .page{width:auto;margin:6mm}
         .bottom-section{flex-direction: column; align-items: stretch;}
         .firma-wrapper, .totales-wrapper{flex-basis: 100%; order: unset; margin-top: 15px;}
@@ -606,7 +656,7 @@ col.total { width:8%; }
     <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
   </head>
 
-  <body class="portal-shell portal-facturacion">
+  <body class="portal-shell portal-cotizaciones portal-facturacion">
     <% /* helper formato moneda */ %>
     <%  function fmtMoney(v){ 
 var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2}); } %>
@@ -692,15 +742,16 @@ function shouldOmitLine(ln){
 }
 %>
 
-    <a class="skip-link" href="#facturacion-main">Saltar al contenido principal</a>
-    <main id="facturacion-main" class="page" role="main" aria-label="Cotizacion">
-      <div class="content">
-      <div class="botonera" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
-        <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
-        <button onclick="window.print()">Imprimir / Guardar como PDF</button>
-      </div>
+    <a class="skip-link" href="#cotizaciones-main">Saltar al contenido principal</a>
+    <main id="cotizaciones-main" class="page" role="main" aria-label="Cotizacion">
+      <div class="cotizacion-shell">
+        <aside class="cotizacion-sidebar no-print">
+          <div class="botonera" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+            <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
+            <button onclick="window.print()">Imprimir / Guardar como PDF</button>
+          </div>
 
-      <div class="desglose-toolbar no-print">
+          <div class="desglose-toolbar no-print">
         <div class="desglose-card">
           <h2>Desglose opcional</h2>
           <div class="desglose-options">
@@ -742,8 +793,10 @@ function shouldOmitLine(ln){
             <option value="una_exhibicion">Una sola exhibición</option>
           </select>
         </div>
-      </div>
+          </div>
+        </aside>
 
+        <div class="content">
       <div class="header">
 
 <!-- IZQUIERDA â†’ EMPRESA CLIENTE -->
@@ -1182,6 +1235,8 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
         <div class="footer-bar-inner">
           <div>Río Tehuantepec 1397-Local 6, Morelos, 80170 Culiacán Rosales, Sin.</div>
           <div>WhatsApp: (667) 3059813 · Cel: (667) 3059813 y (667)4950697 · Oficina: (667) 690 2218</div>
+        </div>
+      </div>
         </div>
       </div>
     </main>
