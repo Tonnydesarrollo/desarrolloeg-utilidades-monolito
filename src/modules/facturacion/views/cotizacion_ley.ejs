@@ -345,20 +345,21 @@
         box-shadow:0 6px 18px rgba(0,0,0,0.08);
         overflow:hidden;
       }
-      .cotizacion-shell{
+      .cotizacion-layout{
         display:flex;
         align-items:flex-start;
-        gap:12px;
+        gap:18px;
+        padding:10px 14px 14px;
       }
       .cotizacion-sidebar{
-        width:clamp(220px, 20vw, 260px);
-        flex:0 0 clamp(220px, 20vw, 260px);
+        width:clamp(240px, 22vw, 280px);
+        flex:0 0 clamp(240px, 22vw, 280px);
         display:flex;
         flex-direction:column;
         gap:10px;
         position:sticky;
-        top:10mm;
-        max-height:calc(100vh - 24mm);
+        top:14px;
+        max-height:calc(100vh - 28px);
         overflow:auto;
         padding-right:2px;
       }
@@ -374,6 +375,17 @@
         min-height:42px;
       }
       .cotizacion-sidebar .desglose-toolbar{
+        margin:0;
+      }
+      .cotizacion-document{
+        flex:1;
+        min-width:0;
+        display:flex;
+        justify-content:center;
+      }
+      .page{
+        width:100%;
+        max-width:215.9mm;
         margin:0;
       }
       .content{position:relative;z-index:1;padding-bottom:0;flex:1}
@@ -554,8 +566,9 @@
   .cotizacion-sidebar{display:none!important}
   .botonera{display:none!important}
   .desglose-toolbar{display:none!important}
-  .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 10mm;display:block!important;overflow:visible!important}
-  .cotizacion-shell{display:block!important}
+  .cotizacion-layout{display:block!important;padding:0!important}
+  .cotizacion-document{display:block!important}
+  .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 10mm;display:block!important;overflow:visible!important;max-width:none!important}
   .content{display:block!important;overflow:visible!important}
         html,body{font-size:10px} 
         table{font-size:0.65rem}
@@ -577,9 +590,12 @@
 
       /* Responsive se mantienen */
       @media (max-width:720px){
+        .cotizacion-layout{
+          flex-direction:column;
+          padding:0;
+        }
         .header{flex-direction:column; text-align: center;}
         .header-left, .header-center, .header-right{text-align:center; margin-bottom: 8px;}
-        .cotizacion-shell{flex-direction:column}
         .cotizacion-sidebar{
           width:100%;
           flex:1 1 auto;
@@ -589,7 +605,14 @@
           overflow:visible;
           padding-right:0;
         }
-        .page{width:auto;margin:6mm}
+        .cotizacion-document{
+          width:100%;
+        }
+        .page{
+          width:auto;
+          max-width:none;
+          margin:6mm 0;
+        }
         .bottom-section{flex-direction: column; align-items: stretch;}
         .firma-wrapper, .totales-wrapper{flex-basis: 100%; order: unset; margin-top: 15px;}
         .totales-wrapper{text-align: left;}
@@ -668,9 +691,8 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
     %>
 
     <a class="skip-link" href="#cotizaciones-main">Saltar al contenido principal</a>
-    <main id="cotizaciones-main" class="page" role="main" aria-label="Cotizacion ley">
-      <div class="cotizacion-shell">
-        <aside class="cotizacion-sidebar no-print">
+    <main id="cotizaciones-main" class="cotizacion-layout" role="main" aria-label="Cotizacion ley">
+      <aside class="cotizacion-sidebar no-print">
           <div class="botonera" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
             <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
             <button onclick="window.print()">Imprimir / Guardar como PDF</button>
@@ -718,10 +740,11 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
             <option value="una_exhibicion">Una sola exhibición</option>
           </select>
         </div>
-          </div>
-        </aside>
+      </aside>
 
-        <div class="content">
+      <section class="cotizacion-document">
+        <div class="page">
+      <div class="content">
       <div class="header">
 
   <!-- IZQUIERDA â†’ EMPRESA CLIENTE -->
@@ -1105,7 +1128,8 @@ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{min
         </div>
       </div>
         </div>
-      </div>
+        </div>
+      </section>
     </main>
   </body>
 </html>
