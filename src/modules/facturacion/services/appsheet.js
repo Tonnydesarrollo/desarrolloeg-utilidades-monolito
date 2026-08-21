@@ -331,15 +331,17 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
     const empresa = empresas[cotizacion["RAZON SOCIAL"]] || {};
 
     if (empresa.logo && !empresa.logoUrl) {
-      try {
-        const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
-        if (logoUrl) {
-          empresa.logoUrl = logoUrl;
-          await actualizarFilaAppSheet("EMPRESAS", { ID: empresa.id, LOGOURL: logoUrl });
+      void (async () => {
+        try {
+          const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
+          if (logoUrl) {
+            empresa.logoUrl = logoUrl;
+            await actualizarFilaAppSheet("EMPRESAS", { ID: empresa.id, LOGOURL: logoUrl });
+          }
+        } catch (err) {
+          console.error("No se pudo generar LOGOURL:", err.message);
         }
-      } catch (err) {
-        console.error("No se pudo generar LOGOURL:", err.message);
-      }
+      })();
     }
 
     const proveedor = proveedores[cotizacion.PROVEEDOR] || null;
