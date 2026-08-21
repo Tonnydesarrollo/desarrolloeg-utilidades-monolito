@@ -233,9 +233,12 @@ runtime/
 cloudflared/
   config.yml
   desarrolloeg.json
+  cert.pem
 ```
 
-El directorio `cloudflared/` queda dentro del compose y no depende de rutas del host. El tunnel usa el servicio `monolito` por red interna, asi que no importa desde que servidor se arranque mientras el stack tenga el mismo archivo de credenciales.
+El directorio `cloudflared/` queda dentro del compose y no depende de rutas del host. El tunnel usa el servicio `monolito` por red interna, asi que no importa desde que servidor se arranque mientras el stack tenga el mismo archivo de credenciales y el `cert.pem` que vive dentro de `cloudflared/`.
+
+Nota: el servicio `desarrolloeg-sync` sigue construyendose desde el repositorio hermano `../appsheet_local_sync`. Si quieres un despliegue 100% autocontenido en una sola carpeta, ese servicio tambien hay que empaquetarlo o publicar su imagen previamente.
 
 ### 3. Levantar el stack
 
