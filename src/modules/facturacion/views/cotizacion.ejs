@@ -400,16 +400,48 @@ if (data && data.centros) {
         padding:10px 14px 14px;
       }
       .cotizacion-sidebar{
-        width:clamp(240px, 22vw, 280px);
-        flex:0 0 clamp(240px, 22vw, 280px);
+        width:min(360px, calc(100vw - 24px));
+        flex:0 0 auto;
         display:flex;
         flex-direction:column;
         gap:10px;
-        position:sticky;
-        top:14px;
-        max-height:calc(100vh - 28px);
+        position:fixed;
+        inset:12px auto 12px 12px;
+        z-index:120;
+        max-height:calc(100dvh - 24px);
         overflow:auto;
-        padding-right:2px;
+        padding:14px;
+        border-radius:24px;
+        border:1px solid rgba(26,42,58,0.12);
+        background:rgba(255,255,255,0.94);
+        box-shadow:0 28px 80px rgba(0,31,84,0.22);
+        transform:translateX(-16px) scale(0.96);
+        opacity:0;
+        pointer-events:none;
+        transition:transform 220ms ease, opacity 220ms ease, background 220ms ease;
+      }
+      .cotizacion-sidebar.is-open{
+        transform:translateX(0) scale(1);
+        opacity:1;
+        pointer-events:auto;
+        background:rgba(255,255,255,0.98);
+      }
+      .cotizacion-sidebar__top{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        margin-bottom:2px;
+        padding-bottom:10px;
+        border-bottom:1px solid rgba(26,42,58,0.08);
+      }
+      .cotizacion-sidebar__top strong{
+        color:#1f2d3d;
+        font-family:'Montserrat',sans-serif;
+        font-size:0.82rem;
+        font-weight:900;
+        letter-spacing:0.08em;
+        text-transform:uppercase;
       }
       .cotizacion-sidebar .botonera{
         text-align:left;
@@ -424,6 +456,40 @@ if (data && data.centros) {
       }
       .cotizacion-sidebar .desglose-toolbar{
         margin:0;
+      }
+      .cotizacion-options-fab{
+        position:fixed;
+        left:12px;
+        top:12px;
+        z-index:130;
+        min-height:44px;
+        padding:0 14px;
+        border-radius:999px;
+        box-shadow:0 16px 34px rgba(26,42,58,0.18);
+      }
+      .cotizacion-print-fab{
+        position:fixed;
+        left:12px;
+        top:64px;
+        z-index:129;
+        min-height:44px;
+        padding:0 14px;
+        border-radius:999px;
+        box-shadow:0 16px 34px rgba(26,42,58,0.18);
+      }
+      .cotizacion-drawer-backdrop{
+        position:fixed;
+        inset:0;
+        z-index:115;
+        background:rgba(8,20,46,0.28);
+        backdrop-filter:blur(6px);
+        opacity:0;
+        pointer-events:none;
+        transition:opacity 220ms ease;
+      }
+      .cotizacion-drawer-backdrop.is-open{
+        opacity:1;
+        pointer-events:auto;
       }
       .cotizacion-document{
         flex:1;
@@ -485,27 +551,58 @@ button:hover{background:#b3202a;color:#fff}
         border:none;
         border-bottom:2px solid #b3202a;
         border-top:1px solid #dfe6ef;
+        border-right:1px solid #dfe6ef;
         padding:7px 4px;
         text-transform:uppercase;
-        font-size:0.62rem;
-        line-height:1.05;
+        font-size:0.60rem;
+        line-height:1.0;
         letter-spacing:0.03em;
         white-space:normal;
         word-break:keep-all;
         color:#333;
         font-weight:700;
+        text-align:center !important;
+        vertical-align:middle !important;
+      }
+      thead th > span{
+        display:block;
+        width:100%;
+        text-align:center !important;
+      }
+      thead th.cantidad-col{
+        text-align:center !important;
+        padding-left:0;
+        padding-right:0;
+        width:7%;
+      }
+      thead th.cantidad-col > span{
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        white-space:nowrap;
+        letter-spacing:0.02em;
+        width:100%;
+      }
+      thead th:last-child{
+        border-right:none;
       }
       th,td{border:none;padding:6px;vertical-align:top;}
       tbody tr:nth-child(odd){background:#f9f9f9}
-      tbody td{border-bottom:1px solid #eee;}
+      tbody td{
+        border-bottom:1px solid #eee;
+        border-right:1px solid #f0f0f0;
+      }
+      tbody td:last-child{
+        border-right:none;
+      }
 
       col.sucursal { width:22%; }
-col.desc { width:32%; }
-col.cantidad { width:6%; }
-col.precioUnit { width:12%; }
-col.subtotal { width:10%; }
-col.iva { width:9%; }
-col.total { width:9%; }
+      col.desc { width:31%; }
+      col.cantidad { width:7%; }
+      col.precioUnit { width:12%; }
+      col.subtotal { width:10%; }
+      col.iva { width:9%; }
+      col.total { width:9%; }
 
       .desc-cell {
         display: block;
@@ -618,6 +715,9 @@ col.total { width:9%; }
   .cotizacion-sidebar{display:none!important}
   .botonera{display:none!important}
   .desglose-toolbar{display:none!important}
+  .cotizacion-options-fab{display:none!important}
+  .cotizacion-print-fab{display:none!important}
+  .cotizacion-drawer-backdrop{display:none!important}
   .cotizacion-layout{display:block!important;padding:0!important}
   .cotizacion-document{display:block!important}
   .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 10mm;display:block!important;overflow:visible!important;max-width:none!important}
@@ -625,13 +725,13 @@ col.total { width:9%; }
         html,body{font-size:10px} 
         table{font-size:0.60rem}
         col.sucursal { width:21%; }
-        col.desc { width:31%; }
-        col.cantidad { width:6%; }
+        col.desc { width:30%; }
+        col.cantidad { width:7%; }
         col.precioUnit { width:12%; }
         col.subtotal { width:10%; }
         col.iva { width:10%; }
         col.total { width:10%; }
-        thead th{padding:5px 3px;font-size:0.57rem;line-height:1.02;letter-spacing:0.02em}
+        thead th{padding:5px 3px;font-size:0.56rem;line-height:1.02;letter-spacing:0.02em;text-align:center !important;vertical-align:middle !important}
         td{padding:4px 3px}
         .footer-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;min-height:12mm!important;padding:1mm 5mm!important}
         .content{padding-bottom:0!important}
@@ -691,6 +791,66 @@ col.total { width:9%; }
   </head>
 
   <body class="portal-shell portal-cotizaciones portal-facturacion">
+    <style>
+      .cotizacion-loading{
+        position:fixed;
+        inset:0;
+        z-index:9999;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:20px;
+        background:rgba(250,251,253,.96);
+        backdrop-filter:blur(8px);
+      }
+      .cotizacion-loading-card{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:12px;
+        min-width:240px;
+        padding:24px 28px;
+        background:#fff;
+        border:1px solid #dde3ec;
+        border-radius:20px;
+        box-shadow:0 18px 40px rgba(17,24,39,.10);
+        color:#1f2d3d;
+        text-align:center;
+      }
+      .cotizacion-loading-spinner{
+        width:42px;
+        height:42px;
+        border-radius:50%;
+        border:4px solid rgba(178,32,42,.15);
+        border-top-color:#b3202a;
+        animation:cotizacionSpin 1s linear infinite;
+      }
+      .cotizacion-loading-title{
+        font-size:0.92rem;
+        font-weight:800;
+        letter-spacing:0.04em;
+        text-transform:uppercase;
+        color:#b3202a;
+      }
+      .cotizacion-loading-text{
+        font-size:0.82rem;
+        color:#5e6a78;
+        line-height:1.35;
+      }
+      @keyframes cotizacionSpin{
+        to{transform:rotate(360deg);}
+      }
+      @media print{
+        .cotizacion-loading{display:none!important;}
+      }
+    </style>
+    <div id="cotizacion-loading" class="cotizacion-loading" aria-live="polite" aria-busy="true">
+      <div class="cotizacion-loading-card">
+        <div class="cotizacion-loading-spinner" aria-hidden="true"></div>
+        <div class="cotizacion-loading-title">Cargando cotización</div>
+        <div class="cotizacion-loading-text">Consultando datos y preparando la vista...</div>
+      </div>
+    </div>
     <% /* helper formato moneda */ %>
     <%  function fmtMoney(v){ 
 var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2}); } %>
@@ -777,11 +937,17 @@ function shouldOmitLine(ln){
 %>
 
     <a class="skip-link" href="#cotizaciones-main">Saltar al contenido principal</a>
+    <button class="cotizacion-options-fab no-print" type="button" data-cotizacion-drawer-open>☰ Opciones</button>
+    <button class="cotizacion-print-fab no-print" type="button" onclick="window.print()">🖨 Imprimir / PDF</button>
+    <div class="cotizacion-drawer-backdrop no-print" data-cotizacion-drawer-backdrop hidden></div>
     <main id="cotizaciones-main" class="cotizacion-layout" role="main" aria-label="Cotizacion">
-      <aside class="cotizacion-sidebar no-print">
+      <aside class="cotizacion-sidebar no-print" data-cotizacion-drawer hidden>
+          <div class="cotizacion-sidebar__top">
+            <strong>Opciones</strong>
+            <button class="button ghost button--compact" type="button" data-cotizacion-drawer-close>Cerrar</button>
+          </div>
           <div class="botonera" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
             <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
-            <button onclick="window.print()">Imprimir / Guardar como PDF</button>
           </div>
 
           <div class="desglose-toolbar no-print">
@@ -838,10 +1004,13 @@ function shouldOmitLine(ln){
 
   <% if (data.logoCliente) { %>
   <img
-    src="<%= data.logoCliente %>&sz=200"
+    src="<%= data.logoCliente %>&sz=200&cb=<%= Date.now() %>"
     class="empresa-logo"
     alt="Logo empresa cliente"
     referrerpolicy="no-referrer"
+    loading="eager"
+    decoding="async"
+    onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src=this.src+(this.src.indexOf('?')===-1?'?':'&')+'retry='+Date.now();}"
   >
 <% } %>
 
@@ -893,12 +1062,12 @@ function shouldOmitLine(ln){
 
           <thead>
             <tr>
-              <th>Sucursal</th>
-              <th>Producto / Servicio</th>
-              <% if(showQtyAndUnit){ %><th>Cant.</th><th>P. Unitario</th><% } %>
-              <th>SubTotal</th>
-              <th>IVA</th>
-              <th>Total</th>
+              <th><span>Sucursal</span></th>
+              <th><span>Producto / Servicio</span></th>
+              <% if(showQtyAndUnit){ %><th class="cantidad-col"><span>Cant.</span></th><th><span>Precio Unitario</span></th><% } %>
+              <th><span>SubTotal</span></th>
+              <th><span>IVA</span></th>
+              <th><span>Total</span></th>
             </tr>
           </thead>
 
@@ -1116,6 +1285,59 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
       </div>
 
       <script>
+        (function(){
+          var drawer = document.querySelector('[data-cotizacion-drawer]');
+          var openButtons = Array.from(document.querySelectorAll('[data-cotizacion-drawer-open]'));
+          var closeTargets = Array.from(document.querySelectorAll('[data-cotizacion-drawer-close]'));
+          var backdrop = document.querySelector('[data-cotizacion-drawer-backdrop]');
+          if (!drawer || openButtons.length === 0) return;
+
+          function openDrawer(){
+            drawer.hidden = false;
+            if (backdrop) backdrop.hidden = false;
+            requestAnimationFrame(function(){
+              drawer.classList.add('is-open');
+              if (backdrop) backdrop.classList.add('is-open');
+            });
+          }
+
+          function closeDrawer(){
+            drawer.classList.remove('is-open');
+            if (backdrop) backdrop.classList.remove('is-open');
+            window.setTimeout(function(){
+              drawer.hidden = true;
+              if (backdrop) backdrop.hidden = true;
+            }, 220);
+          }
+
+          openButtons.forEach(function(btn){
+            btn.addEventListener('click', openDrawer);
+          });
+          closeTargets.forEach(function(btn){
+            btn.addEventListener('click', closeDrawer);
+          });
+          if (backdrop) {
+            backdrop.addEventListener('click', closeDrawer);
+          }
+          document.addEventListener('keydown', function(event){
+            if (event.key === 'Escape' && !drawer.hidden) closeDrawer();
+          });
+        })();
+
+        (function(){
+          var loader = document.getElementById('cotizacion-loading');
+          function hideLoader(){
+            if(!loader) return;
+            loader.style.opacity = '0';
+            loader.style.pointerEvents = 'none';
+            setTimeout(function(){
+              if(loader && loader.parentNode) loader.parentNode.removeChild(loader);
+            }, 180);
+          }
+          if (document.readyState === 'complete') hideLoader();
+          else window.addEventListener('load', hideLoader, { once: true });
+        })();
+
         (function() {
           var desglosePipc = document.getElementById('desglosePipc');
           var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');

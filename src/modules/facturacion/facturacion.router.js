@@ -74,7 +74,8 @@ cotizacionesRouter.get("/cotizaciones/img-proxy", handleImgProxy);
 
 cotizacionesRouter.get("/cotizacion/:id/html-data", async (req, res) => {
   try {
-    const json = await obtenerCotizacionCompleta(req.params.id);
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const json = await obtenerCotizacionCompleta(req.params.id, { forceFresh: true });
     const data = construirDataHTML(json);
     res.json({ ok: true, data });
   } catch (err) {
@@ -119,7 +120,8 @@ cotizacionesRouter.get("/cotizacion/html", async (_req, res) => {
 
 cotizacionesRouter.get("/cotizacion/:id/html", async (req, res) => {
   try {
-    const json = await obtenerCotizacionCompleta(req.params.id);
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const json = await obtenerCotizacionCompleta(req.params.id, { forceFresh: true });
     const data = construirDataHTML(json);
     const empresaId = String(json.empresaId || "").trim();
     const usarPlantillaLey = empresaId === "1" || empresaId === "25";

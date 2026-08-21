@@ -106,7 +106,7 @@ function renderEmployeeCard(employee, basePath = portalPath("/dashboard/capacita
       </div>
       <div class="employee-foot">
         <span class="badge">${escapeHtml(badge || "Sin permiso")}</span>
-        <span class="employee-link">Abrir dashboard</span>
+        <span class="employee-link">Ver como</span>
       </div>
     </a>
   `;
@@ -1304,12 +1304,15 @@ function getHomeStyles() {
         border-radius: 32px;
       }
       .dashboard-main .hero-grid {
-        grid-template-columns: minmax(0, 1.28fr) minmax(300px, 0.72fr);
+        grid-template-columns: minmax(0, 1fr);
         gap: 16px;
         align-items: center;
       }
       .dashboard-main .hero-grid > div:first-child {
         display: none;
+      }
+      .dashboard-main .hero-side {
+        width: 100%;
       }
       .dashboard-main .hero p {
         display: block;
@@ -1323,30 +1326,49 @@ function getHomeStyles() {
         display: none;
       }
       .dashboard-main .hero-side {
+        display: block;
+      }
+      .dashboard-main .hero-side-row {
         display: grid;
-        gap: 10px;
-        align-content: start;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: center;
       }
       .dashboard-main .hero-session-card {
         display: grid;
-        grid-template-columns: 78px minmax(0, 1fr);
-        gap: 12px;
+        grid-template-columns: 64px minmax(0, 1fr);
+        gap: 10px;
         align-items: center;
         min-height: auto;
-        padding: 14px;
-        border-radius: 24px;
+        padding: 10px 12px;
+        border-radius: 20px;
         border: 1px solid rgba(26,42,58,0.10);
         background:
           linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,249,251,0.94));
-        box-shadow: 0 18px 38px rgba(26,42,58,0.08);
+        box-shadow: 0 12px 26px rgba(26,42,58,0.06);
+      }
+      .dashboard-main .hero-brand-card {
+        width: 112px;
+        grid-template-columns: 1fr;
+        justify-items: center;
+        padding: 10px;
+      }
+      .dashboard-main .hero-brand-card .hero-session-media {
+        width: 56px;
+        min-width: 56px;
+        height: 56px;
+        border-radius: 16px;
+      }
+      .dashboard-main .hero-session-card--user {
+        display: none;
       }
       .dashboard-main .hero-session-media {
         display: grid;
         place-items: center;
-        width: 78px;
-        min-width: 78px;
-        height: 78px;
-        border-radius: 20px;
+        width: 64px;
+        min-width: 64px;
+        height: 64px;
+        border-radius: 16px;
         background:
           radial-gradient(circle at 30% 30%, rgba(192,57,43,0.10), transparent 42%),
           linear-gradient(180deg, rgba(255,255,255,0.96), rgba(246,249,253,0.92));
@@ -1365,14 +1387,17 @@ function getHomeStyles() {
         outline-offset: 4px;
       }
       .dashboard-main .hero-logo {
-        width: 62px;
-        height: 62px;
+        width: 46px;
+        height: 46px;
         object-fit: contain;
       }
       .dashboard-main .hero-session-body {
         display: grid;
-        gap: 8px;
+        gap: 5px;
         align-content: start;
+      }
+      .dashboard-main .hero-session-body--user {
+        gap: 4px;
       }
       .dashboard-main .hero-session-body h2 {
         margin: 0;
@@ -1386,21 +1411,75 @@ function getHomeStyles() {
         color: var(--muted);
         line-height: 1.35;
       }
+      .dashboard-main .hero-session-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 0;
+      }
       .dashboard-main .hero-brand-card {
-        grid-template-columns: 78px minmax(0, 1fr);
+        grid-template-columns: 1fr;
       }
-      .dashboard-main .hero-brand-copy {
+      .dashboard-main .hero-header-copy {
         display: grid;
-        gap: 5px;
+        gap: 4px;
+        align-content: center;
+        align-self: center;
+        padding: 0 4px;
       }
-      .dashboard-main .hero-brand-copy strong {
+      .dashboard-main .hero-header-copy strong {
         color: var(--ink);
-        font-size: clamp(1rem, 1.8vw, 1.18rem);
-        line-height: 1.05;
+        font-size: clamp(1.15rem, 2vw, 1.55rem);
+        line-height: 0.98;
+        text-transform: uppercase;
+        letter-spacing: -0.03em;
+      }
+      .dashboard-main .hero-header-copy p {
+        margin: 0;
+        color: var(--muted);
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.82rem;
+        line-height: 1.2;
+      }
+      .dashboard-main .hero-header-copy .eyebrow {
+        width: fit-content;
+      }
+      .dashboard-main .hero-session-inline {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        justify-self: end;
+        width: 100%;
+        min-width: 0;
+      }
+      .dashboard-main .hero-session-inline__meta {
+        display: grid;
+        gap: 3px;
+        justify-items: end;
+        min-width: 0;
+      }
+      .dashboard-main .hero-session-inline__meta strong {
+        color: var(--ink);
+        font-size: 1.02rem;
+        line-height: 1.1;
         text-transform: uppercase;
       }
-      .dashboard-main .hero-brand-copy p {
-        max-width: 24ch;
+      .dashboard-main .hero-session-inline__meta p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.2;
+        text-align: right;
+      }
+      .dashboard-main .hero-session-inline__actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .dashboard-main .hero-session-inline__actions .button.secondary {
+        background: rgba(255,255,255,0.92);
+        border-color: rgba(26,42,58,0.12);
       }
       .dashboard-main .hero-session-meta,
       .dashboard-main .hero-quick-actions,
@@ -1415,6 +1494,7 @@ function getHomeStyles() {
         letter-spacing: -0.04em;
       }
       .dashboard-main .hero {
+        padding: 16px 16px 12px;
         overflow: hidden;
       }
       .dashboard-main .hero::after {
@@ -1695,9 +1775,9 @@ function getHomeStyles() {
         display: none;
         position: fixed;
         left: 14px;
-        top: 14px;
+        top: auto;
         right: auto;
-        bottom: auto;
+        bottom: 14px;
         z-index: 26;
         min-height: 48px;
         padding-inline: 16px;
@@ -4213,12 +4293,28 @@ function getHomeStyles() {
           gap: 6px;
           grid-template-columns: 1fr;
         }
+        .dashboard-main .hero-side-row {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
         .dashboard-main .hero-session-card {
           grid-template-columns: 56px minmax(0, 1fr);
           gap: 10px;
           min-height: auto;
           padding: 10px 12px;
           border-radius: 18px;
+        }
+        .dashboard-main .hero-brand-card {
+          width: 100%;
+          grid-template-columns: 1fr;
+          justify-items: start;
+          gap: 8px;
+        }
+        .dashboard-main .hero-brand-card .hero-session-media {
+          width: 56px;
+          min-width: 56px;
+          height: 56px;
+          border-radius: 16px;
         }
         .dashboard-main .hero-session-media {
           width: 56px;
@@ -4240,10 +4336,28 @@ function getHomeStyles() {
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .dashboard-main .hero-session-meta {
-          display: grid;
+        .dashboard-main .hero-header-copy {
+          padding: 0;
+        }
+        .dashboard-main .hero-header-copy strong {
+          font-size: 1.34rem;
+        }
+        .dashboard-main .hero-header-copy p {
+          font-size: 0.84rem;
+        }
+        .dashboard-main .hero-session-inline {
+          grid-template-columns: 1fr;
+          justify-self: start;
           gap: 8px;
-          margin-top: 2px;
+        }
+        .dashboard-main .hero-session-inline__meta {
+          justify-items: start;
+        }
+        .dashboard-main .hero-session-inline__meta p {
+          text-align: left;
+        }
+        .dashboard-main .hero-session-inline__actions {
+          width: 100%;
         }
         .dashboard-main .hero-quick-actions {
           flex-direction: column;
@@ -5374,6 +5488,8 @@ async function renderDashboardPage({
       employeeId: selectedEmployeeId,
       returnPath: dashboardReturnHref,
     });
+  const sessionUser = user || selected;
+  const dashboardHeaderTitle = "Calendario";
   const getDashboardTabIcon = (tabId) => ({
     calendar: "📅",
     gestion: "⚙️",
@@ -5387,14 +5503,26 @@ async function renderDashboardPage({
     : "";
 
   const sideContent = `
-    <div class="hero-session-card hero-brand-card">
-      <button class="hero-session-media hero-logo-button" type="button" data-dashboard-reload aria-label="Recargar tablero">
-        <img class="hero-logo" src="${logoPath}" alt="Desarrollo EG" />
-      </button>
-      <div class="hero-session-body hero-brand-copy">
-        <span class="eyebrow">Portal activo</span>
-        <strong>Desarrollo EG</strong>
-        <p>Toca el logo para recargar la vista.</p>
+    <div class="hero-side-row">
+      <div class="hero-session-card hero-brand-card">
+        <button class="hero-session-media hero-logo-button" type="button" data-dashboard-reload aria-label="Recargar tablero">
+          <img class="hero-logo" src="${logoPath}" alt="Desarrollo EG" />
+        </button>
+      </div>
+      <div class="hero-header-copy">
+        <span class="eyebrow">Operación</span>
+        <strong data-dashboard-operation-title>${escapeHtml(dashboardHeaderTitle)}</strong>
+      </div>
+      <div class="hero-session-inline">
+        <div class="hero-session-inline__meta">
+          <span class="eyebrow">Sesión</span>
+          <strong>${escapeHtml(sessionUser?.nombre || "Usuario")}</strong>
+          <p>${escapeHtml(sessionUser?.correo || "")}</p>
+        </div>
+        <div class="hero-session-inline__actions">
+          ${viewingOtherDashboard ? `<a class="button secondary button--compact" href="/dashboard">Volver a mi vista</a>` : ""}
+          <a class="button primary button--compact" href="/api/auth/logout">Cerrar sesión</a>
+        </div>
       </div>
     </div>
   `;
@@ -5577,23 +5705,6 @@ async function renderDashboardPage({
   `;
   const dashboardSidebarContent = `
       <div class="dashboard-sidebar__content">
-      <div class="dashboard-sidebar__user-card">
-        <div class="dashboard-sidebar__user-media">
-          <img class="dashboard-sidebar__user-logo" src="${logoPath}" alt="Desarrollo EG" />
-        </div>
-        <div class="dashboard-sidebar__user-body">
-          <span class="eyebrow">Sesión</span>
-          <strong>${escapeHtml(selected.nombre || "Usuario")}</strong>
-          <p>${escapeHtml(selected.correo || "")}</p>
-          <div class="dashboard-sidebar__user-meta">
-            <span class="eyebrow">Rol</span>
-            <strong>${escapeHtml(String(role || "").toUpperCase())}</strong>
-          </div>
-          <div class="dashboard-sidebar__user-actions">
-            <a class="button primary button--compact" href="/api/auth/logout">Cerrar sesión</a>
-          </div>
-        </div>
-      </div>
       <div class="dashboard-sidebar__header">
         <span class="eyebrow">Navegación</span>
       </div>
@@ -5696,6 +5807,15 @@ async function renderDashboardPage({
           const tabs = Array.from(document.querySelectorAll("[data-dashboard-tab]"));
           const panels = Array.from(document.querySelectorAll("[data-dashboard-tab-panel]"));
           const mobileChips = Array.from(document.querySelectorAll(".dashboard-mobile-chip"));
+          const operationTitle = document.querySelector("[data-dashboard-operation-title]");
+          const operationTitleMap = {
+            calendar: "Calendario",
+            gestion: "Gestión",
+            pedidos: "Pedidos",
+            faltantes: "Faltantes",
+            diplomas: "Diplomas faltantes",
+            ley: "Faltantes Ley",
+          };
           let activeCapacitadorFilter = defaultCapacitadorFilter;
           const escapeHtml = (value) => String(value ?? "")
             .replaceAll("&", "&amp;")
@@ -6223,6 +6343,9 @@ async function renderDashboardPage({
           };
           const setActiveTab = (tabId, { focus = false } = {}) => {
             const nextTab = String(tabId || "").trim() || (tabs[0]?.dataset.dashboardTab || "calendar");
+            if (operationTitle) {
+              operationTitle.textContent = operationTitleMap[nextTab] || operationTitleMap.calendar;
+            }
             tabs.forEach((button) => {
               const isActive = button.dataset.dashboardTab === nextTab;
               button.classList.toggle("active", isActive);

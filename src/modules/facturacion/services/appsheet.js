@@ -51,7 +51,7 @@ async function fetchWithTimeout(url, options) {
 
 function shouldRetryError(err) {
   const code = err?.code || err?.errno;
-  return ["ENOBUFS", "EADDRINUSE", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ECONNREFUSED", "ENETUNREACH"].includes(code);
+  return err?.name === "AbortError" || ["ENOBUFS", "EADDRINUSE", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ECONNREFUSED", "ENETUNREACH"].includes(code);
 }
 
 function getRetryDelayMs(attempt) {
@@ -67,6 +67,7 @@ async function fetchWithRetry(url, options) {
     try {
       return await fetchWithTimeout(url, options);
     } catch (err) {
+      console.warn("AppSheet fetch fallo, reintentando", { attempt, error: err?.name || err?.code || err?.message });
       if (!shouldRetryError(err) || attempt > APPSHEET_MAX_RETRIES) throw err;
       await new Promise(resolve => setTimeout(resolve, getRetryDelayMs(attempt)));
     }
@@ -153,28 +154,38 @@ async function leerTablaAppSheetFresca(nombreTabla) {
   }
 }
 
-export async function obtenerCotizacion(cotizacionId) {
+export async function obtenerCotizacion(cotizacionId, forceFresh = false) {
   const wantedId = String(cotizacionId || "").trim();
-  const rows = await leerTablaAppSheetCacheada("COTIZACIONES_VARIOS_CT");
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("COTIZACIONES_VARIOS_CT")
+    : await leerTablaAppSheetCacheada("COTIZACIONES_VARIOS_CT");
   const cachedMatch = rows.find(r => String(r["Row ID"] || r.ID) === wantedId) || null;
   if (cachedMatch) return cachedMatch;
 
-  const freshRows = await leerTablaAppSheetFresca("COTIZACIONES_VARIOS_CT");
+  const freshRows = forceFresh
+    ? rows
+    : await leerTablaAppSheetFresca("COTIZACIONES_VARIOS_CT");
   return freshRows.find(r => String(r["Row ID"] || r.ID) === wantedId) || null;
 }
 
-export async function buscarConceptosPorCotizacion(cotizacionId) {
+export async function buscarConceptosPorCotizacion(cotizacionId, forceFresh = false) {
   const wantedId = String(cotizacionId || "").trim();
-  const rows = await leerTablaAppSheetCacheada("CONCEPTOS_VARIOS_CT");
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("CONCEPTOS_VARIOS_CT")
+    : await leerTablaAppSheetCacheada("CONCEPTOS_VARIOS_CT");
   const cachedMatches = rows.filter(r => String(r.COTIZACION) === wantedId);
   if (cachedMatches.length > 0) return cachedMatches;
 
-  const freshRows = await leerTablaAppSheetFresca("CONCEPTOS_VARIOS_CT");
+  const freshRows = forceFresh
+    ? rows
+    : await leerTablaAppSheetFresca("CONCEPTOS_VARIOS_CT");
   return freshRows.filter(r => String(r.COTIZACION) === wantedId);
 }
 
-export async function mapaEmpresas() {
-  const rows = await leerTablaAppSheetCacheadaSuave("EMPRESAS");
+export async function mapaEmpresas(forceFresh = false) {
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("EMPRESAS")
+    : await leerTablaAppSheetCacheadaSuave("EMPRESAS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = {
@@ -214,8 +225,10 @@ async function actualizarFilaAppSheet(nombreTabla, row) {
   if (!res.ok) throw new Error(`Error AppSheet Edit: ${text}`);
 }
 
-export async function mapaMunicipios() {
-  const rows = await leerTablaAppSheetCacheadaSuave("MUNICIPIOS");
+export async function mapaMunicipios(forceFresh = false) {
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("MUNICIPIOS")
+    : await leerTablaAppSheetCacheadaSuave("MUNICIPIOS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = { nombre: r.NOMBRE || "", escudo: r.ESCUDO || "" };
@@ -223,8 +236,10 @@ export async function mapaMunicipios() {
   return map;
 }
 
-export async function mapaEstados() {
-  const rows = await leerTablaAppSheetCacheadaSuave("ESTADOS");
+export async function mapaEstados(forceFresh = false) {
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("ESTADOS")
+    : await leerTablaAppSheetCacheadaSuave("ESTADOS");
   const map = {};
   rows.forEach(r => {
     map[r.ID] = { nombre: r.NOMBRE || "", escudo: r.ESCUDO || "" };
@@ -232,9 +247,11 @@ export async function mapaEstados() {
   return map;
 }
 
-export async function mapaSucursales() {
-  const rows = await leerTablaAppSheetCacheadaSuave("SUCURSALES");
-  const [municipios, estados] = await Promise.all([mapaMunicipios(), mapaEstados()]);
+export async function mapaSucursales(forceFresh = false) {
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("SUCURSALES")
+    : await leerTablaAppSheetCacheadaSuave("SUCURSALES");
+  const [municipios, estados] = await Promise.all([mapaMunicipios(forceFresh), mapaEstados(forceFresh)]);
   const map = {};
 
   rows.forEach(r => {
@@ -253,8 +270,10 @@ export async function mapaSucursales() {
   return map;
 }
 
-export async function mapaCatalogo() {
-  const rows = await leerTablaAppSheetCacheadaSuave("CATALOGO");
+export async function mapaCatalogo(forceFresh = false) {
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("CATALOGO")
+    : await leerTablaAppSheetCacheadaSuave("CATALOGO");
   const map = {};
   rows.forEach(r => {
     map[r["Row ID"] || r.ID] = {
@@ -268,8 +287,10 @@ export async function mapaCatalogo() {
   return map;
 }
 
-export async function mapaProveedores() {
-  const rows = await leerTablaAppSheetCacheadaSuave("PROVEEDORES");
+export async function mapaProveedores(forceFresh = false) {
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("PROVEEDORES")
+    : await leerTablaAppSheetCacheadaSuave("PROVEEDORES");
   const map = {};
   rows.forEach(r => {
     map[r["Row ID"] || r.ID] = {
@@ -285,39 +306,40 @@ export async function mapaProveedores() {
   return map;
 }
 
-export async function obtenerCotizacionCompleta(cotizacionId) {
+export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = false } = {}) {
   const cacheKey = String(cotizacionId || "").trim();
-  const cached = cachedCotizacionesCompletas.get(cacheKey);
   const now = Date.now();
-  if (cached && cached.expiraEn > now) {
-    return cached.promise;
+  if (!forceFresh) {
+    const cached = cachedCotizacionesCompletas.get(cacheKey);
+    if (cached && cached.expiraEn > now) {
+      return cached.promise;
+    }
   }
 
   const promise = (async () => {
-    const cotizacion = await obtenerCotizacion(cotizacionId);
+    const cotizacion = await obtenerCotizacion(cotizacionId, forceFresh);
     if (!cotizacion) throw new Error("Cotizacion no encontrada");
 
     const [conceptos, empresas, sucursales, catalogo, proveedores] = await Promise.all([
-      buscarConceptosPorCotizacion(cotizacionId),
-      mapaEmpresas(),
-      mapaSucursales(),
-      mapaCatalogo(),
-      mapaProveedores()
+      buscarConceptosPorCotizacion(cotizacionId, forceFresh),
+      mapaEmpresas(forceFresh),
+      mapaSucursales(forceFresh),
+      mapaCatalogo(forceFresh),
+      mapaProveedores(forceFresh)
     ]);
 
     const empresa = empresas[cotizacion["RAZON SOCIAL"]] || {};
 
     if (empresa.logo && !empresa.logoUrl) {
-      void (async () => {
-        try {
-          const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
-          if (!logoUrl) return;
+      try {
+        const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
+        if (logoUrl) {
           empresa.logoUrl = logoUrl;
           await actualizarFilaAppSheet("EMPRESAS", { ID: empresa.id, LOGOURL: logoUrl });
-        } catch (err) {
-          console.error("No se pudo generar LOGOURL:", err.message);
         }
-      })();
+      } catch (err) {
+        console.error("No se pudo generar LOGOURL:", err.message);
+      }
     }
 
     const proveedor = proveedores[cotizacion.PROVEEDOR] || null;
@@ -384,11 +406,13 @@ export async function obtenerCotizacionCompleta(cotizacionId) {
     };
   })();
 
-  cachedCotizacionesCompletas.set(cacheKey, { expiraEn: now + APPSHEET_CACHE_TTL_MS, promise });
+  if (!forceFresh) {
+    cachedCotizacionesCompletas.set(cacheKey, { expiraEn: now + APPSHEET_CACHE_TTL_MS, promise });
+  }
   try {
     return await promise;
   } catch (err) {
-    cachedCotizacionesCompletas.delete(cacheKey);
+    if (!forceFresh) cachedCotizacionesCompletas.delete(cacheKey);
     throw err;
   }
 }
