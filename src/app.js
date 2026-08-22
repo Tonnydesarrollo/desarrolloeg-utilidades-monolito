@@ -110,6 +110,19 @@ function applyPortalEnvironmentCompatibility(req, res, next) {
   runWithPortalContext({ portalBasePath }, next);
 }
 
+function serveBrandLogo(req, res, next) {
+  const publicImgPath = process.env.PUBLICIMG_PATH;
+  if (!publicImgPath) {
+    next();
+    return;
+  }
+
+  const logoPath = path.join(publicImgPath, "Logo sin fondo 3D HD.png");
+  res.sendFile(logoPath, (err) => {
+    if (err) next(err);
+  });
+}
+
 export function createApp() {
   const app = express();
 
@@ -125,6 +138,7 @@ export function createApp() {
   const publicImgPath = process.env.PUBLICIMG_PATH;
   if (publicImgPath) {
     app.use("/img", express.static(publicImgPath));
+    app.get("/img/brand-logo.png", serveBrandLogo);
   }
   app.use("/ui", express.static(path.join(__dirname, "public", "ui")));
 

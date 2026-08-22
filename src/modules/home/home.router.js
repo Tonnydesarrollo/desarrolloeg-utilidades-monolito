@@ -36,7 +36,7 @@ import { renderPedidosLeyAdminPage } from "../pedidos-ley/pedidosLey.admin.page.
 export const homeRouter = express.Router();
 
 const HOME_FAVICON_PATH = "/img/Logo%20sin%20fondo%203D%20HD.png";
-const BRAND_LOGO_PATH = `${HOME_FAVICON_PATH}?v=20260822`;
+const BRAND_LOGO_PATH = "/img/brand-logo.png?v=20260822";
 
 function getConstanciasBaseUrl() {
   const fallback = "https://api-constancias.desarrolloeg.com";
@@ -4800,7 +4800,7 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
         <section class="auth-visual">
           <div class="auth-brand">
             <span class="auth-pill">${isQaPortal ? "Portal de pruebas" : "Portal de acceso"}</span>
-            <img class="auth-logo" src="${BRAND_LOGO_PATH}" alt="Desarrollo EG" />
+            <img class="auth-logo" src="${BRAND_LOGO_PATH}" alt="Desarrollo EG" onerror="this.onerror=null;this.src='${HOME_FAVICON_PATH}?v=20260822';" />
             <h1>${isQaPortal ? "Portal QA de Desarrollo EG" : "Portal de Desarrollo EG"}</h1>
           </div>
         </section>
@@ -5468,7 +5468,7 @@ async function renderDashboardPage({
   const routeCards = getRouteCardsForRole(role);
   const groupedRouteCards = role === "admin" ? groupAdminRouteCards(routeCards) : null;
   const title = "Portal";
-  const logoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
+  const logoPath = BRAND_LOGO_PATH;
   const viewingOtherDashboard = user?.role === "admin" && user?.rowId !== selected.rowId;
   const capacitadorView = role === "capacitador";
   const resolvedDashboardData = dashboardData || await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: selected });
