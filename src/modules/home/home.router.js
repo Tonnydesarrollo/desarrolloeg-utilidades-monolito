@@ -36,6 +36,7 @@ import { renderPedidosLeyAdminPage } from "../pedidos-ley/pedidosLey.admin.page.
 export const homeRouter = express.Router();
 
 const HOME_FAVICON_PATH = "/img/Logo%20sin%20fondo%203D%20HD.png";
+const BRAND_LOGO_PATH = `${HOME_FAVICON_PATH}?v=20260822`;
 
 function getConstanciasBaseUrl() {
   const fallback = "https://api-constancias.desarrolloeg.com";
@@ -4782,7 +4783,6 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
   const isQaPortal = portalBasePath === "/QA";
   const shouldShowQaAccess = showQaAccess && isQaPortal;
   const errorHtml = errorMessage ? `<div class="message error" id="message">${escapeHtml(errorMessage)}</div>` : `<div class="message" id="message"></div>`;
-  const logoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
   return `<!DOCTYPE html>
   <html lang="es">
   <head>
@@ -4800,7 +4800,7 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
         <section class="auth-visual">
           <div class="auth-brand">
             <span class="auth-pill">${isQaPortal ? "Portal de pruebas" : "Portal de acceso"}</span>
-            <img class="auth-logo" src="${logoPath}" alt="Desarrollo EG" />
+            <img class="auth-logo" src="${BRAND_LOGO_PATH}" alt="Desarrollo EG" />
             <h1>${isQaPortal ? "Portal QA de Desarrollo EG" : "Portal de Desarrollo EG"}</h1>
           </div>
         </section>
@@ -6734,6 +6734,7 @@ homeRouter.get("/", async (req, res) => {
     return;
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.type("html").send(renderLoginPage());
 });
 
@@ -6744,6 +6745,7 @@ homeRouter.get("/login", async (req, res) => {
     return;
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.type("html").send(renderLoginPage());
 });
 

@@ -60,6 +60,15 @@ function getRetryDelayMs(attempt) {
   return exp + jitter;
 }
 
+function normalizeLookupText(value) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
 async function fetchWithRetry(url, options) {
   let attempt = 0;
   while (true) {
@@ -306,6 +315,36 @@ export async function mapaProveedores(forceFresh = false) {
   return map;
 }
 
+function findEmpresaFromCotizacion(cotizacion, empresas = {}) {
+  const candidateValues = [
+    cotizacion?.["RAZON SOCIAL"],
+    cotizacion?.RAZON_SOCIAL,
+    cotizacion?.EMPRESA,
+    cotizacion?.empresa,
+    cotizacion?.["NOMBRE COMERCIAL"],
+    cotizacion?.["NOMBRE COMERCIAL CLIENTE"],
+  ]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+
+  for (const candidate of candidateValues) {
+    if (empresas[candidate]) {
+      return empresas[candidate];
+    }
+  }
+
+  const normalizedCandidates = candidateValues.map((value) => normalizeLookupText(value));
+  return Object.values(empresas).find((empresa) => {
+    const keys = [
+      empresa?.id,
+      empresa?.razonSocial,
+      empresa?.nombreComercial,
+    ].map((value) => normalizeLookupText(value));
+    return normalizedCandidates.some((candidate) => candidate && keys.includes(candidate));
+  }) || {};
+}
+
 export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = false } = {}) {
   const cacheKey = String(cotizacionId || "").trim();
   const now = Date.now();
@@ -328,20 +367,20 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
       mapaProveedores(forceFresh)
     ]);
 
-    const empresa = empresas[cotizacion["RAZON SOCIAL"]] || {};
+    const empresa = findEmpresaFromCotizacion(cotizacion, empresas);
 
     if (empresa.logo && !empresa.logoUrl) {
-      void (async () => {
-        try {
-          const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
-          if (logoUrl) {
-            empresa.logoUrl = logoUrl;
-            await actualizarFilaAppSheet("EMPRESAS", { ID: empresa.id, LOGOURL: logoUrl });
-          }
-        } catch (err) {
-          console.error("No se pudo generar LOGOURL:", err.message);
+      try {
+        const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
+        if (logoUrl) {
+          empresa.logoUrl = logoUrl;
+          void actualizarFilaAppSheet("EMPRESAS", { ID: empresa.id, LOGOURL: logoUrl }).catch((err) => {
+            console.error("No se pudo persistir LOGOURL:", err?.message || err);
+          });
         }
-      })();
+      } catch (err) {
+        console.error("No se pudo generar LOGOURL:", err?.message || err);
+      }
     }
 
     const proveedor = proveedores[cotizacion.PROVEEDOR] || null;
@@ -387,7 +426,7 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
     });
 
     return {
-      empresaId: cotizacion["RAZON SOCIAL"],
+      empresaId: empresa.id || cotizacion["RAZON SOCIAL"] || "",
       empresa,
       cotizacion: {
         id: cotizacion["Row ID"],
