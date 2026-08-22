@@ -1,5 +1,5 @@
 tunnel: Desarrolloeg
-credentials-file: /etc/cloudflared/desarrolloeg.json
+credentials-file: /app/cloudflared/desarrolloeg.json
 
 ingress:
   - hostname: qa.apps.desarrolloeg.com

@@ -33,6 +33,10 @@ services:
       WHATSAPP_CAP_CHROME_PATH: /usr/bin/chromium
       WHATSAPP_CAP_GOOGLE_SERVICE_ACCOUNT_JSON: /app/secrets/whatsapp/credentials.json
       WHATSAPP_CAP_GOOGLE_OAUTH_TOKEN_PATH: /app/runtime/whatsapp-capacitadores/token.json
+      CLOUDFLARED_ENABLED: ${CLOUDFLARED_ENABLED:-1}
+      CLOUDFLARED_BIN_PATH: /usr/local/bin/cloudflared
+      CLOUDFLARED_CONFIG_PATH: /app/cloudflared/config.yml
+      CLOUDFLARED_WORKDIR: /app
     healthcheck:
       test:
         [
@@ -106,6 +110,10 @@ services:
       WHATSAPP_CAP_CHROME_PATH: /usr/bin/chromium
       WHATSAPP_CAP_GOOGLE_SERVICE_ACCOUNT_JSON: /app/secrets/whatsapp/credentials.json
       WHATSAPP_CAP_GOOGLE_OAUTH_TOKEN_PATH: /app/runtime/whatsapp-capacitadores/token.json
+      CLOUDFLARED_ENABLED: ${CLOUDFLARED_ENABLED:-1}
+      CLOUDFLARED_BIN_PATH: /usr/local/bin/cloudflared
+      CLOUDFLARED_CONFIG_PATH: /app/cloudflared/config.yml
+      CLOUDFLARED_WORKDIR: /app
     healthcheck:
       test:
         [
@@ -121,11 +129,3 @@ services:
       - ./secrets:/app/secrets:ro
       - ./publicimg:/app/publicimg:ro
       - ../appsheet_local_sync/data:/app/desarrolloeg-sync-data
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: desarrolloeg-cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
-    volumes:
-      - ./cloudflared:/etc/cloudflared:ro
-      - ./cloudflared/cert.pem:/etc/cloudflared/cert.pem:ro

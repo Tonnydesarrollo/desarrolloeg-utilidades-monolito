@@ -4,6 +4,11 @@ import {
   startWhatsAppCapacitadoresService,
   stopWhatsAppCapacitadoresService,
 } from "../modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
+import {
+  getCloudflaredTunnelStatus,
+  startCloudflaredTunnel,
+  stopCloudflaredTunnel,
+} from "./cloudflaredTunnel.js";
 
 let started = false;
 
@@ -16,6 +21,11 @@ export function startBackgroundServices() {
   startWhatsAppCapacitadoresService().catch((error) => {
     console.error("[whatsapp-capacitadores]", error instanceof Error ? error.message : error);
   });
+
+  const cloudflaredResult = startCloudflaredTunnel();
+  if (cloudflaredResult?.started) {
+    console.log("[cloudflared] tunel ligado por arranque de servicios en segundo plano");
+  }
 }
 
 export function getBackgroundServicesStatus() {
@@ -23,10 +33,12 @@ export function getBackgroundServicesStatus() {
     started,
     scheduler: getJobSchedulerStatus(),
     whatsappCapacitadores: getWhatsAppCapacitadoresStatus(),
+    cloudflared: getCloudflaredTunnelStatus(),
   };
 }
 
 export async function stopBackgroundServices() {
   await stopWhatsAppCapacitadoresService();
+  await stopCloudflaredTunnel();
   started = false;
 }

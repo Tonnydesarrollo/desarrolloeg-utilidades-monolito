@@ -1,5 +1,6 @@
 FROM node:22-bookworm-slim
 
+ARG TARGETARCH=amd64
 ARG APP_RELEASE_VERSION=0.1.0
 ARG APP_BUILD_SHA=unknown
 ARG APP_BUILD_TIMESTAMP=unknown
@@ -15,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
     ca-certificates \
+    curl \
     python3 \
     make \
     g++ \
@@ -22,12 +24,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tini \
   && rm -rf /var/lib/apt/lists/*
 
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) CLOUDFLARED_ARCH="amd64" ;; \
+      arm64) CLOUDFLARED_ARCH="arm64" ;; \
+      *) echo "Unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/cloudflared "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CLOUDFLARED_ARCH}"; \
+    chmod +x /usr/local/bin/cloudflared
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY src ./src
+COPY cloudflared ./cloudflared
 COPY standalone/sucursales-docs ./standalone/sucursales-docs
 COPY ["POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf", "./POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf"]
 RUN mkdir -p \

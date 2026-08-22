@@ -236,7 +236,7 @@ cloudflared/
   cert.pem
 ```
 
-El directorio `cloudflared/` queda dentro del compose y no depende de rutas del host. El tunnel usa el servicio `monolito` por red interna, asi que no importa desde que servidor se arranque mientras el stack tenga el mismo archivo de credenciales y el `cert.pem` que vive dentro de `cloudflared/`.
+El directorio `cloudflared/` se copia dentro de la imagen del monolito y el tunnel se levanta solo cuando ese nodo toma el rol de lider. Ya no depende de un contenedor separado ni de rutas del host para operar.
 
 Nota: el servicio `desarrolloeg-sync` sigue construyendose desde el repositorio hermano `../appsheet_local_sync`. Si quieres un despliegue 100% autocontenido en una sola carpeta, ese servicio tambien hay que empaquetarlo o publicar su imagen previamente.
 
@@ -246,7 +246,7 @@ Nota: el servicio `desarrolloeg-sync` sigue construyendose desde el repositorio 
 docker compose up -d --build
 ```
 
-Ese compose levanta `monolito` y `cloudflared`.
+Ese compose levanta `monolito` y, cuando corresponde, el propio monolito inicia `cloudflared` internamente.
 
 Si quieres levantar la version de QA en paralelo, crea primero un archivo `.env.qa.docker` a partir de la plantilla `.env.qa.example` y luego ejecuta:
 
@@ -264,8 +264,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-docker-monol
 
 El proyecto local `../sistema_bolsa_trabajo` aporta solo el frontend de referencia.
 
-El tunnel corre dentro de Docker y apunta al servicio `monolito` por red interna.
-Cuando el perfil `qa` esta activo, tambien enruta `qa.apps.desarrolloeg.com` al servicio `monolito-qa`.
+El tunnel corre dentro del contenedor del monolito y apunta a los servicios internos por red de Docker.
+Cuando el perfil `qa` esta activo, el nodo QA tambien puede iniciar su propio tunnel desde el mismo binario interno.
 Si quieres forzar el arranque completo de CasaLey en una sola corrida, usa el job `casaley-sync-appsheet` desde `/jobs` o dale `CASALEY_SYNC_ALL_ENABLED=1`.
 
 ### 4. Instalador y autoactualizacion
@@ -295,12 +295,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-docker-mon
 Si quieres alta disponibilidad, puedes desplegar el mismo stack en mas de una maquina:
 
 1. Copia el mismo repo y el mismo `.env.docker`.
-2. Copia `runtime/`, `runtime-qa/`, `secrets/`, `publicimg/` y `cloudflared/` a cada servidor.
-3. Asegura que todos los nodos usen el mismo tunnel de Cloudflare.
+2. Copia `runtime/`, `runtime-qa/`, `secrets/` y `publicimg/` a cada servidor.
+3. Asegura que todos los nodos usen la misma configuracion de Cloudflare dentro de la imagen del monolito.
 4. Arranca el mismo `docker compose up -d --build` en cada maquina.
 5. Si quieres exponer QA, arranca tambien `docker compose --profile qa up -d --build`.
 
-Con eso, `cloudflared` puede abrir mas de una conexion al mismo tunnel y el acceso externo deja de depender de un solo host.
+Con eso, `cloudflared` puede abrir mas de una conexion al mismo tunnel desde el propio monolito y el acceso externo deja de depender de un solo host.
 
 Importante: el monolito ya tiene coordinacion de lider/standby para servicios singulares, pero no tiene un lock distribuido real para correr jobs identicos de forma activa-activa en varios nodos al mismo tiempo. Para evitar duplicidad, deja `CLUSTER_ENABLED=1` solo en el nodo que deba tomar liderazgo, o agrega un backend compartido de bloqueo si despues quieres ejecucion activa-activa de jobs.
 
@@ -319,7 +319,6 @@ Para mover el monolito completo a otra PC:
 2. Copia `.env.docker`.
 3. Copia `secrets/`.
 4. Copia `runtime/` si quieres conservar snapshots, tokens y la sesion de WhatsApp.
-5. Copia `cloudflared/`.
-6. Ejecuta `docker compose up -d --build`.
+5. Ejecuta `docker compose up -d --build`.
 
 Si no copias `runtime/`, los jobs reconstruyen su estado local y WhatsApp pedira QR otra vez.

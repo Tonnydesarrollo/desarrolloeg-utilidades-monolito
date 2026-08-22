@@ -38,7 +38,7 @@ Register-ScheduledTask `
   -Trigger $triggers `
   -Principal $principal `
   -Settings $settings `
-  -Description "Alta disponibilidad: Docker, monolito, Cloudflared y AppSheet local sync" | Out-Null
+  -Description "Alta disponibilidad: Docker, monolito y AppSheet local sync" | Out-Null
 
 Start-ScheduledTask -TaskName $TaskName
 Write-Output "Tarea $TaskName registrada e iniciada."
