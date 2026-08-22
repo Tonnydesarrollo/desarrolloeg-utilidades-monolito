@@ -40,6 +40,7 @@ RUN npm ci --omit=dev
 
 COPY src ./src
 COPY cloudflared ./cloudflared
+COPY publicimg ./publicimg
 COPY standalone/sucursales-docs ./standalone/sucursales-docs
 COPY ["POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf", "./POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf"]
 RUN mkdir -p \

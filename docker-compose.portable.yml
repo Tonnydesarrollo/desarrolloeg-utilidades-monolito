@@ -43,7 +43,6 @@ services:
     volumes:
       - ./runtime:/app/runtime
       - ./secrets:/app/secrets:ro
-      - ./publicimg:/app/publicimg
       - ../appsheet_local_sync/data:/app/desarrolloeg-sync-data
 
   desarrolloeg-sync:
@@ -110,5 +109,4 @@ services:
     volumes:
       - ./runtime-qa:/app/runtime
       - ./secrets:/app/secrets:ro
-      - ./publicimg:/app/publicimg:ro
       - ../appsheet_local_sync/data:/app/desarrolloeg-sync-data
