@@ -304,6 +304,32 @@ Con eso, `cloudflared` puede abrir mas de una conexion al mismo tunnel desde el 
 
 Importante: el monolito ya tiene coordinacion de lider/standby para servicios singulares, pero no tiene un lock distribuido real para correr jobs identicos de forma activa-activa en varios nodos al mismo tiempo. Para evitar duplicidad, deja `CLUSTER_ENABLED=1` solo en el nodo que deba tomar liderazgo, o agrega un backend compartido de bloqueo si despues quieres ejecucion activa-activa de jobs.
 
+### 6. Paquete portable para PC B
+
+Si quieres llevar exactamente el mismo stack a otra PC sin clonar el repo completo, usa el flujo portable:
+
+1. En la PC A, genera el paquete:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-portable-release.ps1
+```
+
+2. Copia `release\desarrolloeg-release.zip` a la PC B.
+3. En la PC B, aplica el paquete:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\ruta\al\paquete\apply-portable-release.ps1 -PackagePath C:\ruta\al\paquete\desarrolloeg-release.zip
+```
+
+Ese paquete ya incluye:
+
+- `docker-compose.yml` portable
+- `.env.docker`
+- `desarrolloeg-utilidades-monolito:latest`
+- `desarrolloeg-appsheet-local-sync:latest`
+
+`cloudflared` ya viene dentro de la imagen del monolito, asi que no hace falta copiar un contenedor aparte ni montar una carpeta adicional para el tunnel.
+
 ### 6. Validar
 
 ```bash
