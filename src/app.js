@@ -1,4 +1,5 @@
-﻿import express from "express";
+import express from "express";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { env } from "./config/env.js";
@@ -26,6 +27,34 @@ import { getReleaseInfo } from "./services/releaseInfo.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const BRAND_LOGO_FILENAME = "Logo sin fondo 3D HD.png";
+const BRAND_IMAGE_DIRS = [
+  process.env.PUBLICIMG_PATH,
+  path.resolve(__dirname, "..", "publicimg"),
+].filter(Boolean);
+
+function resolveBrandImagePath() {
+  for (const baseDir of BRAND_IMAGE_DIRS) {
+    const candidate = path.join(baseDir, BRAND_LOGO_FILENAME);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
+function sendBrandImage(_req, res, next) {
+  const imagePath = resolveBrandImagePath();
+  if (!imagePath) {
+    next();
+    return;
+  }
+
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.sendFile(imagePath, (err) => {
+    if (err) next(err);
+  });
+}
 
 function getRequestHost(req) {
   return String(req.hostname || req.get("host") || "")
@@ -110,19 +139,6 @@ function applyPortalEnvironmentCompatibility(req, res, next) {
   runWithPortalContext({ portalBasePath }, next);
 }
 
-function serveBrandLogo(req, res, next) {
-  const publicImgPath = process.env.PUBLICIMG_PATH;
-  if (!publicImgPath) {
-    next();
-    return;
-  }
-
-  const logoPath = path.join(publicImgPath, "Logo sin fondo 3D HD.png");
-  res.sendFile(logoPath, (err) => {
-    if (err) next(err);
-  });
-}
-
 export function createApp() {
   const app = express();
 
@@ -138,8 +154,10 @@ export function createApp() {
   const publicImgPath = process.env.PUBLICIMG_PATH;
   if (publicImgPath) {
     app.use("/img", express.static(publicImgPath));
-    app.get("/img/brand-logo.png", serveBrandLogo);
   }
+  app.get("/img/brand-logo.png", sendBrandImage);
+  app.get("/img/brand-favicon.png", sendBrandImage);
+  app.get("/favicon.ico", sendBrandImage);
   app.use("/ui", express.static(path.join(__dirname, "public", "ui")));
 
   app.use(applyHostCompatibility);

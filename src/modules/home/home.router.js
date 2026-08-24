@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import express from "express";
 import { getActivePortalBasePath, portalPath } from "./portalPath.js";
 import {
@@ -35,8 +35,8 @@ import { renderPedidosLeyAdminPage } from "../pedidos-ley/pedidosLey.admin.page.
 
 export const homeRouter = express.Router();
 
-const HOME_FAVICON_PATH = "/img/Logo%20sin%20fondo%203D%20HD.png";
-const BRAND_LOGO_PATH = "/img/brand-logo.png?v=20260822";
+const HOME_FAVICON_PATH = "/img/brand-favicon.png?v=20260824";
+const BRAND_LOGO_PATH = "/img/brand-logo.png?v=20260824";
 
 function getConstanciasBaseUrl() {
   const fallback = "https://api-constancias.desarrolloeg.com";
@@ -4670,7 +4670,7 @@ function getHomeStyles() {
 
 function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAction, sideContent, bodyContent, footer, headExtra = "", bodyScripts = "", mainClass = "" }) {
   const portalBasePath = getActivePortalBasePath();
-  const loaderLogoPath = "/img/Logo%20sin%20fondo%203D%20HD.png";
+  const loaderLogoPath = "/img/brand-logo.png?v=20260824";
   return `<!DOCTYPE html>
   <html lang="es">
   <head>
@@ -4800,7 +4800,7 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
         <section class="auth-visual">
           <div class="auth-brand">
             <span class="auth-pill">${isQaPortal ? "Portal de pruebas" : "Portal de acceso"}</span>
-            <img class="auth-logo" src="${BRAND_LOGO_PATH}" alt="Desarrollo EG" onerror="this.onerror=null;this.src='${HOME_FAVICON_PATH}?v=20260822';" />
+            <img class="auth-logo" src="${BRAND_LOGO_PATH}" alt="Desarrollo EG" onerror="this.onerror=null;this.src='${HOME_FAVICON_PATH}';" />
             <h1>${isQaPortal ? "Portal QA de Desarrollo EG" : "Portal de Desarrollo EG"}</h1>
           </div>
         </section>
