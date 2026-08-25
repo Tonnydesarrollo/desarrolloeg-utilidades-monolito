@@ -1,5 +1,6 @@
 import express from "express";
 import { getAppShellManifest } from "../../services/appShellManifest.js";
+import { refreshAppShellCaches } from "../../services/appShellRefresh.js";
 
 export const appShellRouter = express.Router();
 
@@ -262,6 +263,20 @@ function renderShellHtml(manifest) {
 
 appShellRouter.get("/manifest", (_req, res) => {
   res.json(getAppShellManifest());
+});
+
+appShellRouter.post("/cache/refresh", async (req, res) => {
+  try {
+    const scope = String(req.query.scope || req.body?.scope || "all").trim();
+    const runAsUserEmail = String(req.body?.runAsUserEmail || "").trim();
+    const result = await refreshAppShellCaches({ scope, runAsUserEmail });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "No se pudo actualizar la caché compartida.",
+    });
+  }
 });
 
 appShellRouter.get("/", (_req, res) => {

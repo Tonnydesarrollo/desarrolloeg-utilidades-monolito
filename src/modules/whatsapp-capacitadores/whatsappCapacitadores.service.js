@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import P from "pino";
 import pkg from "whatsapp-web.js";
 import { google } from "googleapis";
+import { refreshPersistentCacheEntry } from "../../services/platformCache.js";
 
 const { Client, LocalAuth } = pkg;
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
@@ -59,6 +60,34 @@ const sucursalesCache = {
   keyByTienda: new Map(),
   driveByKey: new Map(),
 };
+
+const whatsappCacheNamespacePrefix = "whatsapp.tables";
+const whatsappTableCacheTtlMs = Number(process.env.WHATSAPP_TABLE_CACHE_TTL_MS || 5 * 60 * 1000);
+
+function normalizeAppSheetRows(data) {
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data?.Rows) ? data.Rows : [];
+}
+
+function tableCacheNamespace(tableName) {
+  return `${whatsappCacheNamespacePrefix}.${String(tableName || "").trim().toLowerCase()}`;
+}
+
+async function loadCachedAppSheetRows({ table, selector, cacheKey = "rows" }) {
+  const result = await refreshPersistentCacheEntry({
+    namespace: tableCacheNamespace(table),
+    cacheKey,
+    ttlMs: whatsappTableCacheTtlMs,
+    source: `appsheet:${table}`,
+    loader: async () => {
+      const data = await appsheetFind({ table, selector });
+      return normalizeAppSheetRows(data);
+    },
+    allowStaleFallback: true,
+  });
+
+  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
+}
 
 function readEnv(names, fallback = "") {
   for (const name of names) {
@@ -454,12 +483,10 @@ async function loadEmployeesCache() {
   const ttlMs = config.authRefreshMinutes * 60 * 1000;
   if (Date.now() - employeesCache.ts < ttlMs) return employeesCache;
 
-  const data = await appsheetFind({
+  const rows = await loadCachedAppSheetRows({
     table: config.appsheetTableEmpleados,
     selector: `Filter(${config.appsheetTableEmpleados}, true)`,
   });
-
-  const rows = data.Rows || data;
   const phoneSet = new Set();
   const phoneToEmployeeKeys = new Map();
   const nameByKey = new Map();
@@ -492,12 +519,10 @@ async function loadEmpresasCache() {
   const ttlMs = 5 * 60 * 1000;
   if (Date.now() - empresasCache.ts < ttlMs && empresasCache.rowsByKey.size) return empresasCache;
 
-  const data = await appsheetFind({
+  const rows = await loadCachedAppSheetRows({
     table: "EMPRESAS",
     selector: "Filter(EMPRESAS, true)",
   });
-
-  const rows = data.Rows || data;
   const rowsByKey = new Map();
 
   for (const row of rows || []) {
@@ -519,14 +544,14 @@ async function loadSucursalesCache() {
   if (Date.now() - sucursalesCache.ts < ttlMs) return sucursalesCache;
 
   const [data, empresas] = await Promise.all([
-    appsheetFind({
+    loadCachedAppSheetRows({
       table: config.appsheetTableSucursales,
       selector: `Filter(${config.appsheetTableSucursales}, true)`,
     }),
     loadEmpresasCache(),
   ]);
 
-  const rows = data.Rows || data;
+  const rows = data;
   const searchableFields = [
     config.sucursalesRazonSocialCol,
     config.sucursalesEmpresaCol,
@@ -601,6 +626,14 @@ async function loadSucursalesCache() {
   sucursalesCache.keyByTienda = keyByTienda;
   sucursalesCache.driveByKey = driveByKey;
   return sucursalesCache;
+}
+
+async function loadCapacitacionesRows() {
+  const config = ensureRuntimeConfig();
+  return loadCachedAppSheetRows({
+    table: config.appsheetTableCapacitaciones,
+    selector: `Filter(${config.appsheetTableCapacitaciones}, true)`,
+  });
 }
 
 function extractDriveId(value) {
@@ -1789,20 +1822,18 @@ async function handleText(client, jid, text) {
       return;
     }
 
-    const clauses = keys.map((key) => `IN("${key}", [${config.capacitacionesCapacitadoresCol}])`);
-    const selector = `Filter(${config.appsheetTableCapacitaciones}, ${clauses.join(" OR ")})`;
-    const data = await appsheetFind({
-      table: config.appsheetTableCapacitaciones,
-      selector,
+    const keySet = new Set(keys.map((key) => String(key)));
+    const rows = await loadCapacitacionesRows();
+    const filteredRows = rows.filter((row) => {
+      const values = splitEnumList(row[config.capacitacionesCapacitadoresCol]).map((item) => String(item));
+      return values.some((item) => keySet.has(item));
     });
-
-    const rows = data.Rows || data;
-    if (!rows?.length) {
+    if (!filteredRows?.length) {
       await client.sendMessage(jid, "Sin capacitaciones asignadas.");
       return;
     }
 
-    const ordered = sortByDate(await resolveNames(rows));
+    const ordered = sortByDate(await resolveNames(filteredRows));
     const today = new Date();
     const finalizadas = ordered.filter((row) => new Date(row[config.capacitacionesDateCol] || 0) < today);
     const programadas = ordered.filter((row) => new Date(row[config.capacitacionesDateCol] || 0) >= today);
@@ -1823,19 +1854,15 @@ async function handleText(client, jid, text) {
   }
 
   if (normalized === "2") {
-    const selector = `Filter(${config.appsheetTableCapacitaciones}, [${config.capacitacionesDateCol}] >= TODAY())`;
-    const data = await appsheetFind({
-      table: config.appsheetTableCapacitaciones,
-      selector,
-    });
-
-    const rows = data.Rows || data;
-    if (!rows?.length) {
+    const rows = await loadCapacitacionesRows();
+    const today = new Date();
+    const filteredRows = rows.filter((row) => new Date(row[config.capacitacionesDateCol] || 0) >= today);
+    if (!filteredRows?.length) {
       await client.sendMessage(jid, "Sin capacitaciones para mostrar.");
       return;
     }
 
-    const ordered = sortByDate(await resolveNames(rows));
+    const ordered = sortByDate(await resolveNames(filteredRows));
     const grouped = new Map();
     for (const row of ordered) {
       const names = splitEnumList(row[config.capacitacionesCapacitadoresCol]);

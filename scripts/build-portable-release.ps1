@@ -51,10 +51,30 @@ Ensure-Directory $stageDir
 Assert-FileExists (Join-Path $repoRoot "docker-compose.portable.yml")
 Assert-FileExists (Join-Path $repoRoot ".env.docker")
 Assert-FileExists (Join-Path $repoRoot "scripts\apply-portable-release.ps1")
+Assert-FileExists (Join-Path $repoRoot "Dockerfile")
 
 Copy-Item -LiteralPath (Join-Path $repoRoot "docker-compose.portable.yml") -Destination (Join-Path $stageDir "docker-compose.yml") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot ".env.docker") -Destination (Join-Path $stageDir ".env.docker") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "scripts\apply-portable-release.ps1") -Destination (Join-Path $stageDir "apply-portable-release.ps1") -Force
+
+$secretsSourceDir = Join-Path $repoRoot "secrets"
+$secretsTargetDir = Join-Path $stageDir "secrets"
+if (Test-Path $secretsSourceDir) {
+  Copy-Item -LiteralPath $secretsSourceDir -Destination $secretsTargetDir -Recurse -Force
+}
+
+$monolitoImage = "desarrolloeg-utilidades-monolito:latest"
+Write-Line "Reconstruyendo imagen: $monolitoImage"
+$previousBuildKit = [Environment]::GetEnvironmentVariable("DOCKER_BUILDKIT", "Process")
+try {
+  [Environment]::SetEnvironmentVariable("DOCKER_BUILDKIT", "0", "Process")
+  & $dockerExe build -t $monolitoImage -f (Join-Path $repoRoot "Dockerfile") $repoRoot
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker build fallo con codigo $LASTEXITCODE"
+  }
+} finally {
+  [Environment]::SetEnvironmentVariable("DOCKER_BUILDKIT", $previousBuildKit, "Process")
+}
 
 $images = @("desarrolloeg-utilidades-monolito:latest")
 if ($IncludeSyncImage) {

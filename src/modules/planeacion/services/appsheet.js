@@ -1,3 +1,5 @@
+import { refreshPersistentCacheEntry } from "../../../services/platformCache.js";
+
 function getFirst(row, keys) {
   for (const key of keys) {
     const value = row?.[key];
@@ -36,6 +38,47 @@ function setIfPresent(target, key, value) {
   const text = String(value).trim();
   if (!text) return;
   target[key] = value;
+}
+
+const PLANEACION_TABLE_CACHE_TTL_MS = Number(process.env.PLANEACION_TABLE_CACHE_TTL_MS || 5 * 60 * 1000);
+const PLANEACION_CACHE_NAMESPACE_PREFIX = "planeacion.tables";
+
+function normalizeAppSheetRows(data) {
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data?.Rows) ? data.Rows : [];
+}
+
+async function loadCachedAppSheetTable(table, cacheKey = "rows") {
+  const result = await refreshPersistentCacheEntry({
+    namespace: `${PLANEACION_CACHE_NAMESPACE_PREFIX}.${String(table).trim().toLowerCase()}`,
+    cacheKey,
+    ttlMs: PLANEACION_TABLE_CACHE_TTL_MS,
+    source: `appsheet:${table}`,
+    loader: async () => {
+      const data = await appsheetFind(table);
+      return normalizeAppSheetRows(data);
+    },
+    allowStaleFallback: true,
+  });
+
+  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
+}
+
+async function refreshCachedAppSheetTable(table, cacheKey = "rows") {
+  const result = await refreshPersistentCacheEntry({
+    namespace: `${PLANEACION_CACHE_NAMESPACE_PREFIX}.${String(table).trim().toLowerCase()}`,
+    cacheKey,
+    ttlMs: PLANEACION_TABLE_CACHE_TTL_MS,
+    source: `appsheet:${table}`,
+    loader: async () => {
+      const data = await appsheetFind(table);
+      return normalizeAppSheetRows(data);
+    },
+    allowStaleFallback: false,
+    force: true,
+  });
+
+  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
 }
 
 function toNumber(value) {
@@ -283,7 +326,7 @@ async function appsheetUpsert(table, row) {
 }
 
 export async function fetchBranchStatusesFromAppSheet() {
-  const sucursales = await appsheetFind('SUCURSALES');
+  const sucursales = await fetchBranchesFromAppSheet();
   return sucursales
     .map((row) => {
       const id = getBranchKey(row);
@@ -298,10 +341,10 @@ export async function fetchBranchStatusesFromAppSheet() {
 
 export async function fetchBranchesFromAppSheet() {
   const [sucursales, municipios, estados, empresas] = await Promise.all([
-    appsheetFind('SUCURSALES'),
-    appsheetFind('MUNICIPIOS'),
-    appsheetFind('ESTADOS'),
-    appsheetFind('EMPRESAS'),
+    loadCachedAppSheetTable('SUCURSALES'),
+    loadCachedAppSheetTable('MUNICIPIOS'),
+    loadCachedAppSheetTable('ESTADOS'),
+    loadCachedAppSheetTable('EMPRESAS'),
   ]);
 
   const municipiosMap = new Map();
@@ -412,7 +455,9 @@ export async function upsertBranchToAppSheet(row) {
   const status = normalizePlaneacionStatus(getFlexibleValue(row, ['ESTATUS CAPACITACION', 'Estatus Capacitacion', 'planeacion_status']));
   if (status) payload['ESTATUS CAPACITACION'] = status;
 
-  return appsheetUpsert('SUCURSALES', payload);
+  const result = await appsheetUpsert('SUCURSALES', payload);
+  await refreshCachedAppSheetTable('SUCURSALES').catch(() => {});
+  return result;
 }
 
 export async function updateBranchLocationInAppSheet(row) {
@@ -441,7 +486,9 @@ export async function updateBranchLocationInAppSheet(row) {
   if (month !== null && month !== undefined && String(month).trim() !== '') {
     payload['MES PLANEACION'] = month;
   }
-  return appsheetEdit('SUCURSALES', payload);
+  const result = await appsheetEdit('SUCURSALES', payload);
+  await refreshCachedAppSheetTable('SUCURSALES').catch(() => {});
+  return result;
 }
 
 export async function updateBranchPlaneacionInAppSheet(row) {
@@ -469,5 +516,7 @@ export async function updateBranchPlaneacionInAppSheet(row) {
     payload['MES PLANEACION'] = String(normalizePlaneacionMonthForStorage(month));
   }
 
-  return appsheetEdit('SUCURSALES', payload);
+  const result = await appsheetEdit('SUCURSALES', payload);
+  await refreshCachedAppSheetTable('SUCURSALES').catch(() => {});
+  return result;
 }

@@ -2,6 +2,11 @@
 import { google } from "googleapis";
 import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
 import { getActivePortalBasePath, getPortalCookieSuffix, portalPath } from "./portalPath.js";
+import {
+  getPersistentCacheEntry,
+  getPersistentCacheSummary,
+  setPersistentCacheEntry,
+} from "../../services/platformCache.js";
 
 const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 20000);
 const APPSHEET_MAX_RETRIES = Number(process.env.APPSHEET_MAX_RETRIES || 3);
@@ -95,12 +100,115 @@ const DASHBOARD_CACHE = {
   entries: new Map(),
 };
 
+const PORTAL_CACHE_NAMESPACES = {
+  employees: "portal.employees",
+  sucursales: "portal.sucursales",
+  capacitaciones: "portal.capacitaciones",
+  calendarNotes: "portal.calendar-notes",
+};
+
 function getSharedCacheEntry(cache) {
   return cache.entries.get(EMPLOYEE_SHARED_CACHE_KEY) || null;
 }
 
 function setSharedCacheEntry(cache, entry = {}) {
   cache.entries.set(EMPLOYEE_SHARED_CACHE_KEY, entry);
+}
+
+function createRowsSnapshot(rows = [], keySelector = (row) => row?.rowId || row?.id || "") {
+  const normalizedRows = Array.isArray(rows) ? rows : [];
+  const lastRow = normalizedRows.length > 0 ? normalizedRows[normalizedRows.length - 1] : null;
+  const lastRowKey = String(keySelector(lastRow) || "").trim();
+  const lastRowHash = lastRow ? crypto.createHash("sha1").update(JSON.stringify(lastRow)).digest("hex") : "";
+  return {
+    rowCount: normalizedRows.length,
+    lastRowKey,
+    lastRowHash,
+  };
+}
+
+function hydrateEmployeeCacheEntry(rows = [], loadedAt = Date.now()) {
+  const nameByKey = new Map();
+  const initialsByKey = new Map();
+  const colorByKey = new Map();
+  for (const employee of rows) {
+    if (!employee?.rowId) continue;
+    nameByKey.set(employee.rowId, employee.nombre);
+    initialsByKey.set(employee.rowId, employee.initials || buildInitialsFromName(employee.nombre));
+    colorByKey.set(employee.rowId, employee.calendarColor || employee.color || "");
+  }
+  return {
+    loadedAt,
+    rows,
+    nameByKey,
+    initialsByKey,
+    colorByKey,
+  };
+}
+
+function hydrateSucursalCacheEntry(rows = [], loadedAt = Date.now()) {
+  const labelByKey = new Map();
+  const keyByLabel = new Map();
+  for (const sucursal of rows) {
+    if (!sucursal?.key) continue;
+    labelByKey.set(sucursal.key, sucursal.displayLabel || sucursal.key);
+    const visibleLabels = [sucursal.label, sucursal.label2, sucursal.name, sucursal.tienda, sucursal.displayLabel]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    for (const label of visibleLabels) {
+      keyByLabel.set(normalizeLabelToken(label), sucursal.key);
+    }
+  }
+  return {
+    loadedAt,
+    rows,
+    labelByKey,
+    keyByLabel,
+  };
+}
+
+function readCachedRowsFromPersistent(namespace, runAsUserEmail = "") {
+  const persistent = getPersistentCacheEntry(namespace, "shared", { allowStale: true });
+  const rows = Array.isArray(persistent?.payload?.rows) ? persistent.payload.rows : [];
+  if (!rows.length) {
+    return null;
+  }
+
+  if (namespace === PORTAL_CACHE_NAMESPACES.employees) {
+    const entry = hydrateEmployeeCacheEntry(rows, persistent.loadedAt || Date.now());
+    setSharedCacheEntry(EMPLOYEE_CACHE, entry);
+    if (runAsUserEmail) setCachedEntry(EMPLOYEE_CACHE, runAsUserEmail, entry);
+    return entry;
+  }
+
+  if (namespace === PORTAL_CACHE_NAMESPACES.sucursales) {
+    const entry = hydrateSucursalCacheEntry(rows, persistent.loadedAt || Date.now());
+    setSharedCacheEntry(SUCURSAL_CACHE, entry);
+    if (runAsUserEmail) setCachedEntry(SUCURSAL_CACHE, runAsUserEmail, entry);
+    return entry;
+  }
+
+  if (namespace === PORTAL_CACHE_NAMESPACES.capacitaciones) {
+    const entry = {
+      loadedAt: persistent.loadedAt || Date.now(),
+      rows,
+    };
+    setSharedCacheEntry(CAPACITACION_CACHE, entry);
+    if (runAsUserEmail) setCachedEntry(CAPACITACION_CACHE, runAsUserEmail, entry);
+    return entry;
+  }
+
+  if (namespace === PORTAL_CACHE_NAMESPACES.calendarNotes) {
+    const entry = {
+      loadedAt: persistent.loadedAt || Date.now(),
+      rows,
+    };
+    setSharedCacheEntry(CALENDAR_NOTE_CACHE, entry);
+    if (runAsUserEmail) setCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail, entry);
+    return entry;
+  }
+
+  return null;
 }
 
 function getDashboardCacheKey(viewerRole, selectedRowId) {
@@ -867,6 +975,16 @@ async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
     return cached.rows;
   }
 
+  if (!force) {
+    const persistent = readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.employees, runAsUserEmail);
+    if (persistent?.rows?.length > 0 && now - persistent.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+      EMPLOYEE_CACHE.nameByKey = persistent.nameByKey;
+      EMPLOYEE_CACHE.initialsByKey = persistent.initialsByKey;
+      EMPLOYEE_CACHE.colorByKey = persistent.colorByKey;
+      return persistent.rows;
+    }
+  }
+
   if (!force && EMPLOYEE_CACHE.pending) {
     return EMPLOYEE_CACHE.pending;
   }
@@ -935,6 +1053,14 @@ async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
       };
       setCachedEntry(EMPLOYEE_CACHE, runAsUserEmail, cacheEntry);
       setSharedCacheEntry(EMPLOYEE_CACHE, cacheEntry);
+      setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.employees, "shared", {
+        loadedAt: cacheEntry.loadedAt,
+        rows: cacheEntry.rows,
+      }, {
+        ttlMs: EMPLOYEE_CACHE_TTL_MS,
+        source: "appsheet",
+        meta: createRowsSnapshot(cacheEntry.rows, (row) => row?.rowId || row?.correo || ""),
+      });
       EMPLOYEE_CACHE.nameByKey = nameByKey;
       EMPLOYEE_CACHE.initialsByKey = initialsByKey;
       EMPLOYEE_CACHE.colorByKey = colorByKey;
@@ -957,6 +1083,14 @@ async function fetchEmployeeByEmailFromAppSheet(email, runAsUserEmail = "") {
   const cachedEmployee = findCachedEmployeeByEmail(normalizedEmail);
   if (cachedEmployee) {
     return cachedEmployee;
+  }
+
+  const persistent = readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.employees, runAsUserEmail);
+  if (persistent?.rows?.length) {
+    const persistentEmployee = persistent.rows.find((item) => item.correo === normalizedEmail);
+    if (persistentEmployee) {
+      return persistentEmployee;
+    }
   }
 
   const sharedCached = getSharedCacheEntry(EMPLOYEE_CACHE);
@@ -992,6 +1126,15 @@ async function fetchEmployeeByEmailFromAppSheet(email, runAsUserEmail = "") {
     return null;
   }
 
+  setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.employees, "shared", {
+    loadedAt: Date.now(),
+    rows: [employee, ...(getPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.employees, "shared", { allowStale: true })?.payload?.rows || []).filter((item) => item?.correo !== normalizedEmail)],
+  }, {
+    ttlMs: EMPLOYEE_CACHE_TTL_MS,
+    source: "appsheet",
+    meta: createRowsSnapshot([employee], (row) => row?.rowId || row?.correo || ""),
+  });
+
   return employee;
 }
 
@@ -1016,6 +1159,15 @@ async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
   if (!force && cached?.rows?.length > 0 && now - cached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
     SUCURSAL_CACHE.labelByKey = cached.labelByKey;
     return cached.rows;
+  }
+
+  if (!force) {
+    const persistent = readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.sucursales, runAsUserEmail);
+    if (persistent?.rows?.length > 0 && now - persistent.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+      SUCURSAL_CACHE.labelByKey = persistent.labelByKey;
+      SUCURSAL_CACHE.keyByLabel = persistent.keyByLabel;
+      return persistent.rows;
+    }
   }
 
   const data = await appsheetAction({
@@ -1047,6 +1199,14 @@ async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
   };
   setCachedEntry(SUCURSAL_CACHE, runAsUserEmail, cacheEntry);
   setSharedCacheEntry(SUCURSAL_CACHE, cacheEntry);
+  setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.sucursales, "shared", {
+    loadedAt: cacheEntry.loadedAt,
+    rows: cacheEntry.rows,
+  }, {
+    ttlMs: EMPLOYEE_CACHE_TTL_MS,
+    source: "appsheet",
+    meta: createRowsSnapshot(cacheEntry.rows, (row) => row?.key || row?.id || ""),
+  });
   SUCURSAL_CACHE.labelByKey = labelByKey;
   SUCURSAL_CACHE.keyByLabel = keyByLabel;
   return normalized;
@@ -1304,19 +1464,121 @@ export async function refreshEmployeesCache() {
   return fetchEmployeesFromAppSheet(true);
 }
 
-export async function warmPortalDashboardCaches() {
-  await Promise.allSettled([
-    fetchEmployeesFromAppSheet(true),
-    fetchSucursalesFromAppSheet(true),
-    fetchCapacitacionesFromAppSheet(true),
-    fetchCalendarNotesFromAppSheet(true),
+export async function reconcilePortalCaches({ runAsUserEmail = "" } = {}) {
+  const tasks = await Promise.allSettled([
+    (async () => {
+      const existing = getPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.employees, "shared", { allowStale: true });
+      const rows = await fetchEmployeesFromAppSheet(true, runAsUserEmail);
+      const snapshot = createRowsSnapshot(rows, (row) => row?.rowId || row?.correo || "");
+      const matched = Boolean(
+        existing?.meta &&
+        Number(existing.meta.rowCount || 0) === snapshot.rowCount &&
+        String(existing.meta.lastRowKey || "") === snapshot.lastRowKey &&
+        String(existing.meta.lastRowHash || "") === snapshot.lastRowHash
+      );
+      if (!matched) {
+        setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.employees, "shared", { loadedAt: Date.now(), rows }, {
+          ttlMs: EMPLOYEE_CACHE_TTL_MS,
+          source: "appsheet",
+          meta: snapshot,
+        });
+      }
+      return { table: "EMPLEADOS", changed: !matched, matched, rows: rows.length };
+    })(),
+    (async () => {
+      const existing = getPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.sucursales, "shared", { allowStale: true });
+      const rows = await fetchSucursalesFromAppSheet(true, runAsUserEmail);
+      const snapshot = createRowsSnapshot(rows, (row) => row?.key || row?.id || "");
+      const matched = Boolean(
+        existing?.meta &&
+        Number(existing.meta.rowCount || 0) === snapshot.rowCount &&
+        String(existing.meta.lastRowKey || "") === snapshot.lastRowKey &&
+        String(existing.meta.lastRowHash || "") === snapshot.lastRowHash
+      );
+      if (!matched) {
+        setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.sucursales, "shared", { loadedAt: Date.now(), rows }, {
+          ttlMs: EMPLOYEE_CACHE_TTL_MS,
+          source: "appsheet",
+          meta: snapshot,
+        });
+      }
+      return { table: "SUCURSALES", changed: !matched, matched, rows: rows.length };
+    })(),
+    (async () => {
+      const existing = getPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.capacitaciones, "shared", { allowStale: true });
+      const rows = await fetchCapacitacionesFromAppSheet(true, runAsUserEmail);
+      const snapshot = createRowsSnapshot(rows, (row) => row?.rowId || row?.id || "");
+      const matched = Boolean(
+        existing?.meta &&
+        Number(existing.meta.rowCount || 0) === snapshot.rowCount &&
+        String(existing.meta.lastRowKey || "") === snapshot.lastRowKey &&
+        String(existing.meta.lastRowHash || "") === snapshot.lastRowHash
+      );
+      if (!matched) {
+        setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.capacitaciones, "shared", { loadedAt: Date.now(), rows }, {
+          ttlMs: EMPLOYEE_CACHE_TTL_MS,
+          source: "appsheet",
+          meta: snapshot,
+        });
+      }
+      return { table: "CAPACITACIONES", changed: !matched, matched, rows: rows.length };
+    })(),
+    (async () => {
+      const existing = getPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.calendarNotes, "shared", { allowStale: true });
+      const rows = await fetchCalendarNotesFromAppSheet(true, runAsUserEmail);
+      const snapshot = createRowsSnapshot(rows, (row) => row?.rowId || row?.id || "");
+      const matched = Boolean(
+        existing?.meta &&
+        Number(existing.meta.rowCount || 0) === snapshot.rowCount &&
+        String(existing.meta.lastRowKey || "") === snapshot.lastRowKey &&
+        String(existing.meta.lastRowHash || "") === snapshot.lastRowHash
+      );
+      if (!matched) {
+        setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.calendarNotes, "shared", { loadedAt: Date.now(), rows }, {
+          ttlMs: EMPLOYEE_CACHE_TTL_MS,
+          source: "appsheet",
+          meta: snapshot,
+        });
+      }
+      return { table: "CALENDARIO", changed: !matched, matched, rows: rows.length };
+    })(),
     fetchPedidosLeyAdminDashboardData({ year: new Date().getFullYear(), forceRefresh: true }).catch(() => null),
   ]);
+
+  return {
+    cache: getPersistentCacheSummary(),
+    results: tasks.map((result) => {
+      if (result.status === "fulfilled") {
+        return {
+          ok: true,
+          ...(result.value && typeof result.value === "object" ? result.value : {}),
+        };
+      }
+      return {
+        ok: false,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason || "Error"),
+      };
+    }),
+  };
+}
+
+export async function warmPortalDashboardCaches() {
+  await reconcilePortalCaches();
 }
 
 export async function listEmployeesForPortal({ runAsUserEmail = "" } = {}) {
-  const employees = await fetchEmployeesFromAppSheet(false, runAsUserEmail);
-  return employees.filter((employee) => isAllowedRole(employee.role));
+  try {
+    const employees = await fetchEmployeesFromAppSheet(false, runAsUserEmail);
+    return employees.filter((employee) => isAllowedRole(employee.role));
+  } catch (error) {
+    const persistent = readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.employees, runAsUserEmail);
+    const rows = persistent?.rows || getSharedCacheEntry(EMPLOYEE_CACHE)?.rows || [];
+    if (rows.length) {
+      return rows.filter((employee) => isAllowedRole(employee.role));
+    }
+    console.warn("No se pudieron cargar los empleados del portal:", error instanceof Error ? error.message : error);
+    return [];
+  }
 }
 
 function splitStatusValue(value) {
@@ -1733,37 +1995,67 @@ async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "
     return cached.rows;
   }
 
-  const data = await appsheetAction({
-    table: config.capacitacionesTable,
-    action: "Find",
-    selector: `Filter(${config.capacitacionesTable}, true)`,
-    runAsUserEmail,
-  });
+  if (!force) {
+    const persistent = readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.capacitaciones, runAsUserEmail);
+    if (persistent?.rows?.length > 0 && now - persistent.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+      return persistent.rows;
+    }
+  }
 
-  const rows = extractAppSheetDataRows(data);
-  await Promise.all([
-    fetchEmployeesFromAppSheet(false, runAsUserEmail),
-    fetchSucursalesFromAppSheet(false, runAsUserEmail),
-  ]);
-  const employeeLookups = {
-    nameByKey: EMPLOYEE_CACHE.nameByKey,
-    initialsByKey: EMPLOYEE_CACHE.initialsByKey,
-    colorByKey: EMPLOYEE_CACHE.colorByKey,
-  };
-  const sucursalLookups = {
-    labelByKey: SUCURSAL_CACHE.labelByKey,
-  };
-  const normalized = rows.map((row) => normalizeCapacitacion(row, employeeLookups, sucursalLookups)).filter((item) => item.rowId);
+  try {
+    const data = await appsheetAction({
+      table: config.capacitacionesTable,
+      action: "Find",
+      selector: `Filter(${config.capacitacionesTable}, true)`,
+      runAsUserEmail,
+    });
 
-  setCachedEntry(CAPACITACION_CACHE, runAsUserEmail, {
-    loadedAt: now,
-    rows: normalized,
-  });
-  setSharedCacheEntry(CAPACITACION_CACHE, {
-    loadedAt: now,
-    rows: normalized,
-  });
-  return normalized;
+    const rows = extractAppSheetDataRows(data);
+    await Promise.allSettled([
+      fetchEmployeesFromAppSheet(false, runAsUserEmail),
+      fetchSucursalesFromAppSheet(false, runAsUserEmail),
+    ]);
+    const employeeLookups = {
+      nameByKey: EMPLOYEE_CACHE.nameByKey,
+      initialsByKey: EMPLOYEE_CACHE.initialsByKey,
+      colorByKey: EMPLOYEE_CACHE.colorByKey,
+    };
+    const sucursalLookups = {
+      labelByKey: SUCURSAL_CACHE.labelByKey,
+    };
+    const normalized = rows.map((row) => normalizeCapacitacion(row, employeeLookups, sucursalLookups)).filter((item) => item.rowId);
+
+    setCachedEntry(CAPACITACION_CACHE, runAsUserEmail, {
+      loadedAt: now,
+      rows: normalized,
+    });
+    setSharedCacheEntry(CAPACITACION_CACHE, {
+      loadedAt: now,
+      rows: normalized,
+    });
+    setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.capacitaciones, "shared", {
+      loadedAt: now,
+      rows: normalized,
+    }, {
+      ttlMs: EMPLOYEE_CACHE_TTL_MS,
+      source: "appsheet",
+      meta: createRowsSnapshot(normalized, (row) => row?.rowId || row?.id || ""),
+    });
+    return normalized;
+  } catch (error) {
+    const sharedCached = getSharedCacheEntry(CAPACITACION_CACHE);
+    if (sharedCached?.rows?.length) {
+      console.warn("Usando cache de CAPACITACIONES por error de AppSheet:", error instanceof Error ? error.message : error);
+      return sharedCached.rows;
+    }
+    const cached = getCachedEntry(CAPACITACION_CACHE, runAsUserEmail);
+    if (cached?.rows?.length) {
+      console.warn("Usando cache local de CAPACITACIONES por error de AppSheet:", error instanceof Error ? error.message : error);
+      return cached.rows;
+    }
+    console.warn("No se pudieron leer las capacitaciones del portal:", error instanceof Error ? error.message : error);
+    return [];
+  }
 }
 
 async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = "") {
@@ -1781,6 +2073,13 @@ async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = ""
   const cached = getCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail);
   if (!force && cached?.rows?.length > 0 && now - cached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
     return cached.rows;
+  }
+
+  if (!force) {
+    const persistent = readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.calendarNotes, runAsUserEmail);
+    if (persistent?.rows?.length > 0 && now - persistent.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
+      return persistent.rows;
+    }
   }
 
   if (!config.calendarNotesTable) {
@@ -1824,6 +2123,14 @@ async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = ""
   setSharedCacheEntry(CALENDAR_NOTE_CACHE, {
     loadedAt: now,
     rows: normalized,
+  });
+  setPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.calendarNotes, "shared", {
+    loadedAt: now,
+    rows: normalized,
+  }, {
+    ttlMs: EMPLOYEE_CACHE_TTL_MS,
+    source: "appsheet",
+    meta: createRowsSnapshot(normalized, (row) => row?.rowId || row?.id || ""),
   });
   return normalized;
 }
@@ -1899,11 +2206,15 @@ export async function getCapacitacionesDashboardData({ viewer = null, selectedEm
     return cached.data;
   }
 
-  const [rows, employees, calendarNotesRows] = await Promise.all([
+  const [rowsResult, employeesResult, calendarNotesResult] = await Promise.allSettled([
     fetchCapacitacionesFromAppSheet(false, runAsUserEmail),
     fetchEmployeesFromAppSheet(false, runAsUserEmail),
     fetchCalendarNotesFromAppSheet(false, runAsUserEmail),
   ]);
+
+  const rows = rowsResult.status === "fulfilled" ? rowsResult.value : [];
+  const employees = employeesResult.status === "fulfilled" ? employeesResult.value : (readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.employees, runAsUserEmail)?.rows || []);
+  const calendarNotesRows = calendarNotesResult.status === "fulfilled" ? calendarNotesResult.value : (readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.calendarNotes, runAsUserEmail)?.rows || []);
 
   const visible = rows.filter((row) => {
     if (viewerRole === "admin") {

@@ -32,6 +32,7 @@ import { getFaltantesLeyData } from "../faltantes-ley/faltantesLey.service.js";
 import { renderPedidosSinLiberacionPage } from "../pedidos-ley/pedidosLey.page.js";
 import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
 import { renderPedidosLeyAdminPage } from "../pedidos-ley/pedidosLey.admin.page.js";
+import { refreshAppShellCaches } from "../../services/appShellRefresh.js";
 
 export const homeRouter = express.Router();
 
@@ -4773,6 +4774,7 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
         }
       })();
     </script>
+    <script src="/ui/portal-shell.js?v=20260824" defer></script>
     ${bodyScripts || ""}
   </body>
   </html>`;
@@ -5505,7 +5507,7 @@ async function renderDashboardPage({
   const sideContent = `
     <div class="hero-side-row">
       <div class="hero-session-card hero-brand-card">
-        <button class="hero-session-media hero-logo-button" type="button" data-dashboard-reload aria-label="Recargar tablero">
+        <button class="hero-session-media hero-logo-button" type="button" data-dashboard-reload data-refresh-scope="portal" aria-label="Recargar tablero">
           <img class="hero-logo" src="${logoPath}" alt="Desarrollo EG" />
         </button>
       </div>
@@ -6389,6 +6391,30 @@ async function renderDashboardPage({
               }
             });
           }
+          const refreshAppShellCache = async (scope = "portal", { reload = true, quiet = false } = {}) => {
+            const refreshFn = window.__DESARROLLOEG_REFRESH_CACHE__;
+            if (typeof refreshFn === "function") {
+              return refreshFn({ scope, reload, quiet });
+            }
+            const response = await fetch(portalUrl("/api/app-shell/cache/refresh?scope=" + encodeURIComponent(scope)), {
+              method: "POST",
+              headers: {
+                "X-Requested-With": "fetch",
+              },
+              credentials: "same-origin",
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) {
+              const errorText = payload?.error || payload?.message || "No se pudo actualizar la cache.";
+              throw new Error(errorText);
+            }
+            if (reload) {
+              window.location.reload();
+            } else if (!quiet) {
+              window.dispatchEvent(new CustomEvent("desarrolloeg:cache-refreshed", { detail: { scope, payload } }));
+            }
+            return payload;
+          };
           document.addEventListener("submit", async (event) => {
             const form = event.target;
             if (!(form instanceof HTMLFormElement) || !form.classList.contains("js-async-diplomas")) return;
@@ -6414,6 +6440,7 @@ async function renderDashboardPage({
                 card.style.transform = "translateY(-4px)";
                 setTimeout(() => card.remove(), 220);
               }
+              await refreshAppShellCache("portal", { reload: false, quiet: true });
             } catch (error) {
               if (button) button.disabled = false;
               alert(error instanceof Error ? error.message : "No se pudo actualizar los diplomas.");
@@ -6441,6 +6468,7 @@ async function renderDashboardPage({
                 throw new Error(errorText || "HTTP " + response.status);
               }
               updateNotesState(form, String(form.querySelector('textarea[name="notas"]')?.value || "").trim());
+              await refreshAppShellCache("portal", { reload: false, quiet: true });
             } catch (error) {
               if (button) button.disabled = false;
               alert(error instanceof Error ? error.message : "No se pudieron actualizar las notas.");
@@ -6467,7 +6495,7 @@ async function renderDashboardPage({
                 const errorText = await response.text();
                 throw new Error(errorText || "HTTP " + response.status);
               }
-              window.location.reload();
+              await refreshAppShellCache("portal", { reload: true, quiet: false });
             } catch (error) {
               if (button) button.disabled = false;
               alert(error instanceof Error ? error.message : "No se pudo guardar la nota.");
@@ -6650,6 +6678,7 @@ async function renderDashboardPage({
       ${calendarBootstrap}
       <script>
         (function () {
+          const portalUrl = (path) => (window.__PORTAL_URL__ ? window.__PORTAL_URL__(path) : path);
           const reloadButtons = Array.from(document.querySelectorAll("[data-dashboard-reload]"));
           const drawer = document.querySelector("[data-dashboard-drawer]");
           const drawerPanel = document.querySelector("[data-dashboard-drawer-panel]");
@@ -6683,8 +6712,53 @@ async function renderDashboardPage({
             }, 240);
             lastActive?.focus?.();
           };
+          document.addEventListener("click", async (event) => {
+            const target = event.target instanceof Element ? event.target.closest("[data-dashboard-reload]") : null;
+            if (!target) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const button = target;
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            button.setAttribute("aria-busy", "true");
+            try {
+              const scope = button.dataset.refreshScope || "portal";
+              await refreshAppShellCache(scope, { reload: true, quiet: false });
+            } catch (error) {
+              alert(error instanceof Error ? error.message : "No se pudo actualizar la cachÃ©.");
+            } finally {
+              button.disabled = false;
+              button.removeAttribute("aria-busy");
+              button.textContent = originalLabel;
+            }
+          }, true);
           reloadButtons.forEach((button) => {
-            button.addEventListener("click", () => window.location.reload());
+            button.addEventListener("click", async () => {
+              const originalLabel = button.textContent;
+              button.disabled = true;
+              button.setAttribute("aria-busy", "true");
+              try {
+                const scope = button.dataset.refreshScope || "portal";
+                const response = await fetch(portalUrl("/api/app-shell/cache/refresh?scope=" + encodeURIComponent(scope)), {
+                  method: "POST",
+                  headers: {
+                    "X-Requested-With": "fetch",
+                  },
+                  credentials: "same-origin",
+                });
+                if (!response.ok) {
+                  const text = await response.text().catch(() => "");
+                  throw new Error(text || "No se pudo actualizar la caché.");
+                }
+                window.location.reload();
+              } catch (error) {
+                alert(error instanceof Error ? error.message : "No se pudo actualizar la caché.");
+              } finally {
+                button.disabled = false;
+                button.removeAttribute("aria-busy");
+                button.textContent = originalLabel;
+              }
+            });
           });
           openButtons.forEach((button) => button.addEventListener("click", openDrawer));
           closeButtons.forEach((button) => button.addEventListener("click", closeDrawer));
@@ -6856,6 +6930,27 @@ homeRouter.post("/api/auth/logout", async (req, res) => {
     buildClearOAuthStateCookieHeader({ secure: isRequestSecure(req) }),
   ]);
   res.json({ ok: true, redirect: "/" });
+});
+
+homeRouter.post("/dashboard/cache/refresh", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+
+  try {
+    const result = await refreshAppShellCaches({ scope: "portal", runAsUserEmail: user.correo });
+    res.json({
+      ok: true,
+      ...result,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "No se pudo reconciliar la caché.",
+    });
+  }
 });
 
 homeRouter.get("/dashboard", async (req, res) => {

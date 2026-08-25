@@ -342,6 +342,52 @@ body.portal-shell .actions button {
   min-height: 44px;
 }
 
+body.portal-shell .portal-refresh-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  box-shadow: 0 20px 40px rgba(21, 32, 43, 0.18) !important;
+}
+
+body.portal-shell .portal-refresh-fab.is-working {
+  opacity: 0.86;
+  pointer-events: none;
+}
+
+body.portal-shell .portal-refresh-fab__spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  animation: portalRefreshSpin 0.8s linear infinite;
+}
+
+@keyframes portalRefreshSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  body.portal-shell .portal-refresh-fab {
+    right: 14px;
+    bottom: 14px;
+    min-height: 48px;
+  }
+}
+
+@media print {
+  body.portal-shell .portal-refresh-fab {
+    display: none !important;
+  }
+}
+
 body.portal-shell .empty-state,
 body.portal-shell .error-state,
 body.portal-shell .notice,

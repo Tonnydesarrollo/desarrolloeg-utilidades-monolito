@@ -2,6 +2,12 @@ import fetch from "node-fetch";
 import https from "https";
 import auth from "../utils/auth.js";
 import { crearDriveClient, construirThumbnailDesdeLogoPath } from "../utils/drive.utils.js";
+import {
+  deletePersistentCacheEntry,
+  deletePersistentCacheNamespace,
+  getPersistentCacheEntry,
+  setPersistentCacheEntry,
+} from "../../../services/platformCache.js";
 
 const drive = crearDriveClient(auth);
 const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 60000);
@@ -18,6 +24,19 @@ const appsheetAgent = new https.Agent({
 const cachedTables = new Map();
 const cachedCotizacionesCompletas = new Map();
 let cotizacionesWarmupStarted = false;
+
+const TABLE_CACHE_NAMESPACES = {
+  COTIZACIONES_VARIOS_CT: "facturacion.tables.cotizaciones_varios_ct",
+  CONCEPTOS_VARIOS_CT: "facturacion.tables.conceptos_varios_ct",
+  EMPRESAS: "facturacion.tables.empresas",
+  MUNICIPIOS: "facturacion.tables.municipios",
+  ESTADOS: "facturacion.tables.estados",
+  SUCURSALES: "facturacion.tables.sucursales",
+  CATALOGO: "facturacion.tables.catalogo",
+  PROVEEDORES: "facturacion.tables.proveedores",
+};
+
+const COTIZACION_CACHE_NAMESPACE = "facturacion.cotizacion-completa";
 
 let appsheetActive = 0;
 const appsheetQueue = [];
@@ -67,6 +86,49 @@ function normalizeLookupText(value) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ");
+}
+
+function getTableCacheNamespace(nombreTabla) {
+  return TABLE_CACHE_NAMESPACES[String(nombreTabla || "").trim().toUpperCase()] || `facturacion.tables.${String(nombreTabla || "").trim().toLowerCase()}`;
+}
+
+function readPersistentRows(nombreTabla) {
+  const entry = getPersistentCacheEntry(getTableCacheNamespace(nombreTabla), "shared", { allowStale: true });
+  return Array.isArray(entry?.payload?.rows) ? entry.payload.rows : [];
+}
+
+function persistTableRows(nombreTabla, rows, ttlMs = APPSHEET_CACHE_TTL_MS) {
+  setPersistentCacheEntry(getTableCacheNamespace(nombreTabla), "shared", {
+    loadedAt: Date.now(),
+    rows: Array.isArray(rows) ? rows : [],
+  }, {
+    ttlMs,
+    source: "appsheet",
+    meta: {
+      rowCount: Array.isArray(rows) ? rows.length : 0,
+      lastRowKey: Array.isArray(rows) && rows.length > 0 ? String(rows[rows.length - 1]?.["Row ID"] || rows[rows.length - 1]?.ID || "").trim() : "",
+    },
+  });
+}
+
+function readPersistentCotizacion(cotizacionId) {
+  const wantedId = String(cotizacionId || "").trim();
+  if (!wantedId) return null;
+  const entry = getPersistentCacheEntry(COTIZACION_CACHE_NAMESPACE, wantedId, { allowStale: true });
+  return entry?.payload || null;
+}
+
+function persistPersistentCotizacion(cotizacionId, payload, ttlMs = APPSHEET_CACHE_TTL_MS) {
+  const wantedId = String(cotizacionId || "").trim();
+  if (!wantedId) return;
+  setPersistentCacheEntry(COTIZACION_CACHE_NAMESPACE, wantedId, payload, {
+    ttlMs,
+    source: "appsheet",
+    meta: {
+      rowCount: Array.isArray(payload?.conceptos) ? payload.conceptos.length : 0,
+      cotizacionId: wantedId,
+    },
+  });
 }
 
 async function fetchWithRetry(url, options) {
@@ -124,10 +186,21 @@ async function leerTablaAppSheetCacheada(nombreTabla, ttlMs = APPSHEET_CACHE_TTL
     return cached.promise;
   }
 
+  const persistentRows = readPersistentRows(nombreTabla);
+  if (persistentRows.length > 0) {
+    cachedTables.set(nombreTabla, {
+      expiraEn: now + ttlMs,
+      promise: Promise.resolve(persistentRows),
+      value: persistentRows,
+    });
+    return persistentRows;
+  }
+
   const promise = leerTablaAppSheet(nombreTabla);
   cachedTables.set(nombreTabla, { expiraEn: now + ttlMs, promise, value: cached?.value || null });
   try {
     const rows = await promise;
+    persistTableRows(nombreTabla, rows, ttlMs);
     cachedTables.set(nombreTabla, { expiraEn: now + ttlMs, promise: Promise.resolve(rows), value: rows });
     return rows;
   } catch (err) {
@@ -138,6 +211,15 @@ async function leerTablaAppSheetCacheada(nombreTabla, ttlMs = APPSHEET_CACHE_TTL
         value: cached.value,
       });
       return cached.value;
+    }
+
+    if (persistentRows.length > 0) {
+      cachedTables.set(nombreTabla, {
+        expiraEn: now + ttlMs,
+        promise: Promise.resolve(persistentRows),
+        value: persistentRows,
+      });
+      return persistentRows;
     }
 
     cachedTables.delete(nombreTabla);
@@ -165,30 +247,58 @@ async function leerTablaAppSheetFresca(nombreTabla) {
 
 export async function obtenerCotizacion(cotizacionId, forceFresh = false) {
   const wantedId = String(cotizacionId || "").trim();
+  if (!forceFresh) {
+    const persistent = readPersistentCotizacion(wantedId);
+    if (persistent) {
+      return persistent.cotizacion || persistent;
+    }
+  }
+
   const rows = forceFresh
     ? await leerTablaAppSheetFresca("COTIZACIONES_VARIOS_CT")
     : await leerTablaAppSheetCacheada("COTIZACIONES_VARIOS_CT");
   const cachedMatch = rows.find(r => String(r["Row ID"] || r.ID) === wantedId) || null;
-  if (cachedMatch) return cachedMatch;
+  if (cachedMatch) {
+    persistPersistentCotizacion(wantedId, { kind: "cotizacion", cotizacion: cachedMatch, conceptos: [] });
+    return cachedMatch;
+  }
 
   const freshRows = forceFresh
     ? rows
     : await leerTablaAppSheetFresca("COTIZACIONES_VARIOS_CT");
-  return freshRows.find(r => String(r["Row ID"] || r.ID) === wantedId) || null;
+  const found = freshRows.find(r => String(r["Row ID"] || r.ID) === wantedId) || null;
+  if (found) {
+    persistPersistentCotizacion(wantedId, { kind: "cotizacion", cotizacion: found, conceptos: [] });
+  }
+  return found;
 }
 
 export async function buscarConceptosPorCotizacion(cotizacionId, forceFresh = false) {
   const wantedId = String(cotizacionId || "").trim();
+  if (!forceFresh) {
+    const persistent = readPersistentCotizacion(wantedId);
+    if (persistent && Array.isArray(persistent.conceptos)) {
+      return persistent.conceptos;
+    }
+  }
+
   const rows = forceFresh
     ? await leerTablaAppSheetFresca("CONCEPTOS_VARIOS_CT")
     : await leerTablaAppSheetCacheada("CONCEPTOS_VARIOS_CT");
   const cachedMatches = rows.filter(r => String(r.COTIZACION) === wantedId);
-  if (cachedMatches.length > 0) return cachedMatches;
+  if (cachedMatches.length > 0) {
+    const cotizacion = readPersistentCotizacion(wantedId) || {};
+    persistPersistentCotizacion(wantedId, { ...cotizacion, kind: cotizacion.kind || "conceptos", conceptos: cachedMatches });
+    return cachedMatches;
+  }
 
   const freshRows = forceFresh
     ? rows
     : await leerTablaAppSheetFresca("CONCEPTOS_VARIOS_CT");
-  return freshRows.filter(r => String(r.COTIZACION) === wantedId);
+  const found = freshRows.filter(r => String(r.COTIZACION) === wantedId);
+  const cotizacion = readPersistentCotizacion(wantedId) || {};
+  persistPersistentCotizacion(wantedId, { ...cotizacion, kind: cotizacion.kind || "conceptos", conceptos: found });
+  return found;
 }
 
 export async function mapaEmpresas(forceFresh = false) {
@@ -232,6 +342,25 @@ async function actualizarFilaAppSheet(nombreTabla, row) {
 
   const text = await res.text();
   if (!res.ok) throw new Error(`Error AppSheet Edit: ${text}`);
+
+  const normalizedTable = String(nombreTabla || "").trim().toUpperCase();
+  const editableTableNamespaces = new Set([
+    "EMPRESAS",
+    "MUNICIPIOS",
+    "ESTADOS",
+    "SUCURSALES",
+    "CATALOGO",
+    "PROVEEDORES",
+    "COTIZACIONES_VARIOS_CT",
+    "CONCEPTOS_VARIOS_CT",
+  ]);
+
+  if (editableTableNamespaces.has(normalizedTable)) {
+    deletePersistentCacheEntry(getTableCacheNamespace(nombreTabla), "shared");
+    deletePersistentCacheNamespace(COTIZACION_CACHE_NAMESPACE);
+    cachedTables.delete(nombreTabla);
+    cachedCotizacionesCompletas.clear();
+  }
 }
 
 export async function mapaMunicipios(forceFresh = false) {
@@ -349,6 +478,10 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
   const cacheKey = String(cotizacionId || "").trim();
   const now = Date.now();
   if (!forceFresh) {
+    const persistent = readPersistentCotizacion(cacheKey);
+    if (persistent && persistent.kind === "full" && persistent.cotizacion && Array.isArray(persistent.conceptos)) {
+      return persistent;
+    }
     const cached = cachedCotizacionesCompletas.get(cacheKey);
     if (cached && cached.expiraEn > now) {
       return cached.promise;
@@ -426,6 +559,7 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
     });
 
     return {
+      kind: "full",
       empresaId: empresa.id || cotizacion["RAZON SOCIAL"] || "",
       empresa,
       cotizacion: {
@@ -451,7 +585,9 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
     cachedCotizacionesCompletas.set(cacheKey, { expiraEn: now + APPSHEET_CACHE_TTL_MS, promise });
   }
   try {
-    return await promise;
+    const result = await promise;
+    persistPersistentCotizacion(cacheKey, { ...result, kind: "full" }, APPSHEET_CACHE_TTL_MS);
+    return result;
   } catch (err) {
     if (!forceFresh) cachedCotizacionesCompletas.delete(cacheKey);
     throw err;

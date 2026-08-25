@@ -261,6 +261,7 @@ function renderRealtimeLogsHtml(files, selectedFile) {
       });
     }
   </script>
+  <script src="/ui/portal-shell.js?v=20260824" defer></script>
 </body>
 </html>`;
 }
@@ -635,8 +636,9 @@ function buildJobsLandingHtml(view) {
         </details>
       </section>
     </main>
+    <script src="/ui/portal-shell.js?v=20260824" defer></script>
   </body>
-</html>`;
+</html>`; 
 }
 function normalizeHeader(value) {
   return String(value || "")

@@ -1,5 +1,5 @@
 import os from "os";
-import { startBackgroundServices } from "./backgroundServices.js";
+import { startBackgroundServices, stopBackgroundServices } from "./backgroundServices.js";
 
 const DEFAULT_PUBLIC_HEALTH_URL =
   String(process.env.APP_ENVIRONMENT || process.env.NODE_ENV || "")
@@ -209,6 +209,30 @@ function noteLeaderMiss(probe) {
   }
 }
 
+function shouldDemoteForObservedLeader(observedInstanceId) {
+  const observed = String(observedInstanceId || "").trim();
+  const current = String(clusterState.instanceId || "").trim();
+  if (!observed || !current || observed === current) return false;
+  return observed.localeCompare(current, "en", { sensitivity: "base" }) < 0;
+}
+
+function demoteToStandby(observedInstanceId) {
+  if (clusterState.role !== "leader") return;
+  clusterState.role = "standby";
+  clusterState.lastDecision = `demoted_for_leader:${observedInstanceId}`;
+  clusterState.conflictingLeaderDetected = false;
+  clearPromotionTimer();
+  console.warn(
+    `[cluster] ${clusterState.instanceId} vuelve a standby; lider preferido detectado: ${observedInstanceId}`
+  );
+  void stopBackgroundServices().catch((error) => {
+    console.error(
+      "[cluster] no se pudieron detener servicios al volver a standby:",
+      error instanceof Error ? error.message : error
+    );
+  });
+}
+
 async function runClusterCheck() {
   const config = getClusterConfig();
   applyClusterConfig(config);
@@ -238,6 +262,9 @@ async function runClusterCheck() {
       console.warn(
         `[cluster] se detecto otro lider publico (${probe.observedInstanceId}) mientras ${clusterState.instanceId} sigue activo`
       );
+      if (shouldDemoteForObservedLeader(probe.observedInstanceId)) {
+        demoteToStandby(probe.observedInstanceId);
+      }
     }
     return;
   }

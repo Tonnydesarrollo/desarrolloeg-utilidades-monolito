@@ -26,6 +26,7 @@ services:
       WHATSAPP_CAP_CHROME_PATH: /usr/bin/chromium
       WHATSAPP_CAP_GOOGLE_SERVICE_ACCOUNT_JSON: /app/secrets/whatsapp/credentials.json
       WHATSAPP_CAP_GOOGLE_OAUTH_TOKEN_PATH: /app/runtime/whatsapp-capacitadores/token.json
+      DESARROLLOEG_SYNC_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
       CLOUDFLARED_ENABLED: ${CLOUDFLARED_ENABLED:-1}
       CLOUDFLARED_BIN_PATH: /usr/local/bin/cloudflared
       CLOUDFLARED_CONFIG_PATH: /app/cloudflared/config.yml
@@ -92,6 +93,7 @@ services:
       WHATSAPP_CAP_CHROME_PATH: /usr/bin/chromium
       WHATSAPP_CAP_GOOGLE_SERVICE_ACCOUNT_JSON: /app/secrets/whatsapp/credentials.json
       WHATSAPP_CAP_GOOGLE_OAUTH_TOKEN_PATH: /app/runtime/whatsapp-capacitadores/token.json
+      DESARROLLOEG_SYNC_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
       CLOUDFLARED_ENABLED: ${CLOUDFLARED_ENABLED:-1}
       CLOUDFLARED_BIN_PATH: /usr/local/bin/cloudflared
       CLOUDFLARED_CONFIG_PATH: /app/cloudflared/config.yml

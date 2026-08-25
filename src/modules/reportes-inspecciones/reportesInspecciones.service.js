@@ -1,7 +1,9 @@
+import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import puppeteer from "puppeteer-core";
+import { refreshPersistentCacheEntry } from "../../services/platformCache.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,6 +11,8 @@ const projectRoot = path.resolve(__dirname, "..", "..", "..");
 
 const datasetCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const APP_SHEET_CACHE_TTL_MS = Number(process.env.REPORTES_INSPECCIONES_CACHE_TTL_MS || CACHE_TTL_MS);
+const APP_SHEET_CACHE_NAMESPACE = "reportes-inspecciones.tables";
 
 function readEnv(names, fallback = "") {
   for (const name of names) {
@@ -236,29 +240,42 @@ async function fetchAppSheetTable(config, tableName, selector = "") {
     throw new Error("Faltan credenciales de AppSheet para reportes");
   }
 
-  const url = `https://${config.region}/api/v2/apps/${config.appId}/tables/${encodeURIComponent(tableName)}/Action`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ApplicationAccessKey: config.accessKey,
+  const effectiveSelector = selector || `Filter(${tableName}, true)`;
+  const cacheKey = crypto.createHash("sha1").update(`${tableName}::${effectiveSelector}`).digest("hex");
+  const result = await refreshPersistentCacheEntry({
+    namespace: `${APP_SHEET_CACHE_NAMESPACE}.${normalizeLooseKey(tableName)}`,
+    cacheKey,
+    ttlMs: APP_SHEET_CACHE_TTL_MS,
+    source: `appsheet:${tableName}`,
+    loader: async () => {
+      const url = `https://${config.region}/api/v2/apps/${config.appId}/tables/${encodeURIComponent(tableName)}/Action`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ApplicationAccessKey: config.accessKey,
+        },
+        body: JSON.stringify({
+          Action: "Find",
+          Properties: {
+            Locale: config.locale,
+            Timezone: config.timezone,
+            Selector: effectiveSelector,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AppSheet devolvio ${response.status}: ${await response.text()}`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
     },
-    body: JSON.stringify({
-      Action: "Find",
-      Properties: {
-        Locale: config.locale,
-        Timezone: config.timezone,
-        Selector: selector || `Filter(${tableName}, true)`,
-      },
-    }),
+    allowStaleFallback: true,
   });
 
-  if (!response.ok) {
-    throw new Error(`AppSheet devolvio ${response.status}: ${await response.text()}`);
-  }
-
-  const data = await response.json();
-  return Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
+  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
 }
 
 async function fetchAppSheetTableByAliases(config, aliases, selector = "") {

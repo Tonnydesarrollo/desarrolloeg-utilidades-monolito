@@ -33,7 +33,7 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
     .hero h1 { margin:0; font-size:clamp(26px, 3vw, 42px); letter-spacing:.08em; text-transform:uppercase; }
     .hero p { margin:8px 0 0; color:var(--muted); }
     .card { background:linear-gradient(180deg,var(--panel),var(--panel2)); border:1px solid var(--line); border-radius:18px; box-shadow:0 22px 70px rgba(0,0,0,.35); }
-    .toolbar { display:grid; grid-template-columns: 1fr 1.2fr 1fr 1fr auto; gap:12px; padding:16px; }
+    .toolbar { display:grid; grid-template-columns: minmax(220px, .8fr) minmax(260px, 1fr) minmax(220px, .8fr) minmax(220px, .8fr) auto; gap:12px; padding:16px; align-items:end; }
     .field label { display:block; margin-bottom:8px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
     .field input, .field select, .field textarea { width:100%; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.04); color:var(--text); padding:12px 14px; font-size:14px; outline:none; }
     .field textarea { min-height:82px; resize:vertical; }
@@ -52,7 +52,7 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
     .group-head { padding:12px 14px; background:rgba(255,255,255,.04); display:flex; justify-content:space-between; gap:10px; align-items:center; }
     .group-head strong { font-size:13px; text-transform:uppercase; letter-spacing:.08em; }
     .group-head span { color:var(--muted); font-size:12px; }
-    table { width:100%; border-collapse:collapse; min-width: 1320px; }
+    table { width:100%; border-collapse:collapse; min-width: 1080px; }
     th, td { border-top:1px solid var(--line); padding:10px 12px; vertical-align:top; font-size:13px; }
     th { position:sticky; top:0; background:rgba(7,13,24,.98); text-transform:uppercase; letter-spacing:.08em; font-size:11px; color:var(--muted); z-index:1; }
     .badge { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 10px; font-size:11px; font-weight:700; background:rgba(255,255,255,.06); border:1px solid var(--line); }
@@ -66,6 +66,10 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
     .file a { color:#9ecbff; text-decoration:none; }
     .file a:hover { text-decoration:underline; }
     .actions-cell { display:grid; gap:8px; min-width: 200px; }
+    .expand-row td { background:rgba(15,23,42,.62); padding:0; }
+    .expand-panel { padding:14px; border-top:1px solid rgba(96,165,250,.2); }
+    .expand-panel-head { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:12px; }
+    .expand-panel h3 { margin:0; font-size:13px; letter-spacing:.08em; text-transform:uppercase; }
     .toolbar-actions { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
     .modal-backdrop { position:fixed; inset:0; background:rgba(2,6,23,.72); display:none; align-items:center; justify-content:center; padding:20px; z-index:100; }
     .modal-backdrop.open { display:flex; }
@@ -137,6 +141,8 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       rows: [],
       senderStatus: { accounts: [], activeEmail: '' },
       selectedFiles: new Map(),
+      filesByPedido: new Map(),
+      expanded: new Set(),
       tab: 'pending',
       facturador: '',
       search: '',
@@ -182,6 +188,14 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       return { kind: 'pending', label: 'PENDIENTE' };
     }
 
+    function updateRowSentState(row, enviado) {
+      const value = Boolean(enviado);
+      row.enviadoBool = value;
+      row.enviado = value ? 'SI' : '';
+      row.sentLocal = value;
+      if (value) row.sentLocalAt = new Date().toISOString();
+    }
+
     function currentRows() {
       const facturador = String(state.facturador || '').trim();
       const search = String(state.search || '').trim().toLowerCase();
@@ -195,7 +209,6 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
             row.pedido,
             row.tiendaLabel,
             row.tienda?.label,
-            row.fecha,
             row.importe,
             row.descripcion,
             row.ultimoPipcEstatal,
@@ -231,9 +244,13 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       render();
     }
 
+    function getRowFiles(row) {
+      return state.filesByPedido.get(fileSelectionKey(row)) || [];
+    }
+
     function renderFiles(row) {
       const selected = new Set(getSelectedFiles(row));
-      const files = Array.isArray(row.matchedFiles) ? row.matchedFiles : [];
+      const files = getRowFiles(row);
       if (!files.length) return '<span class="badge warn">Sin archivos</span>';
       return '<div class="files">' + files.map((file, index) => {
         const id = 'f-' + row.pedido + '-' + index;
@@ -250,24 +267,30 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       const busy = state.busy.has(row.pedido);
       const status = sentState(row);
       const selectedCount = getSelectedFiles(row).length;
-      return '<tr data-pedido="' + esc(row.pedido) + '">'
+      const expanded = state.expanded.has(fileSelectionKey(row));
+      const files = getRowFiles(row);
+      const rowHtml = '<tr data-pedido="' + esc(row.pedido) + '">'
         + '<td><span class="row-title">' + esc(row.pedido) + '</span></td>'
         + '<td>' + esc(row.tiendaLabel || row.tienda?.label || row.establecimiento || '') + '</td>'
-        + '<td>' + esc(row.fecha || '') + '</td>'
         + '<td>' + esc(row.importe || '') + '</td>'
         + '<td>' + esc(row.descripcion || '') + '</td>'
         + '<td>' + esc(row.ultimoPipcEstatal || row.tienda?.ultimoPipcEstatal || '') + '</td>'
         + '<td>' + esc(row.ultimoPipcMunicipal || row.tienda?.ultimoPipcMunicipal || '') + '</td>'
-        + '<td><label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" data-toggle-enviado="' + esc(row.pedido) + '"' + (row.enviadoBool ? ' checked' : '') + '> <span class="badge ' + (row.enviadoBool ? 'ok' : 'warn') + '">' + esc(status.label) + '</span></label></td>'
-        + '<td>' + renderFiles(row) + '</td>'
         + '<td>'
         + '<div class="actions-cell">'
+        + '<button class="btn secondary" type="button" data-toggle-files="' + esc(row.pedido) + '"' + (busy ? ' disabled' : '') + '>' + (expanded ? 'Ocultar archivos' : 'Ver archivos') + '</button>'
         + '<button class="btn primary" type="button" data-send="' + esc(row.pedido) + '"' + (busy ? ' disabled' : '') + '>' + (status.kind === 'pending' ? 'Enviar' : 'Reenviar') + '</button>'
-        + '<button class="btn secondary" type="button" data-select-all="' + esc(row.pedido) + '"' + (busy ? ' disabled' : '') + '>Seleccionar todos</button>'
-        + '<div class="muted">' + esc(selectedCount) + ' seleccionados</div>'
+        + '<label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" data-toggle-enviado="' + esc(row.pedido) + '"' + (row.enviadoBool ? ' checked' : '') + '> <span class="badge ' + (row.enviadoBool ? 'ok' : 'warn') + '">' + esc(status.label) + '</span></label>'
+        + '<div class="muted">' + esc(selectedCount) + ' de ' + esc(files.length) + ' seleccionados</div>'
         + '</div>'
         + '</td>'
         + '</tr>';
+      if (!expanded) return rowHtml;
+      return rowHtml + '<tr class="expand-row"><td colspan="7"><div class="expand-panel">'
+        + '<div class="expand-panel-head"><h3>Archivos del pedido ' + esc(row.pedido) + '</h3>'
+        + '<button class="btn secondary" type="button" data-select-all="' + esc(row.pedido) + '"' + (busy ? ' disabled' : '') + '>Seleccionar todos</button></div>'
+        + renderFiles(row)
+        + '</div></td></tr>';
     }
 
     function render() {
@@ -289,7 +312,7 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
         + '<div class="group-head"><strong>' + esc(group.facturador) + '</strong><span>' + esc(group.items.length) + ' pedidos</span></div>'
         + '<div style="overflow:auto;">'
         + '<table><thead><tr>'
-        + '<th>Pedido</th><th>Tienda</th><th>Fecha</th><th>Importe</th><th>Descripcion</th><th>Ultimo PIPC Estatal</th><th>Ultimo PIPC Municipal</th><th>Enviado</th><th>Archivos</th><th>Acciones</th>'
+        + '<th>Pedido</th><th>Tienda</th><th>Importe</th><th>Descripcion</th><th>Ultimo PIPC Estatal</th><th>Ultimo PIPC Municipal</th><th>Acciones</th>'
         + '</tr></thead><tbody>'
         + group.items.map(renderRow).join('')
         + '</tbody></table></div></section>').join('');
@@ -307,8 +330,38 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
           const pedido = button.getAttribute('data-select-all');
           const row = rows.find((candidate) => String(candidate.pedido || '') === pedido);
           if (!row) return;
-          const files = Array.isArray(row.matchedFiles) ? row.matchedFiles : [];
+          const files = getRowFiles(row);
           setSelectedFiles(row, files.map((file) => file.id || file.relativePath || file.openUrl || file.downloadUrl || file.name));
+        });
+      });
+
+      els.content.querySelectorAll('[data-toggle-files]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const pedido = button.getAttribute('data-toggle-files');
+          const row = rows.find((candidate) => String(candidate.pedido || '') === pedido);
+          if (!row) return;
+          const key = fileSelectionKey(row);
+          if (state.expanded.has(key)) {
+            state.expanded.delete(key);
+            render();
+            return;
+          }
+          state.expanded.add(key);
+          render();
+          if (!state.filesByPedido.has(key)) {
+            state.busy.add(row.pedido);
+            render();
+            try {
+              await loadFilesForRow(row);
+              setStatus('Archivos cargados para el pedido ' + row.pedido + '.', 'ok');
+            } catch (error) {
+              state.expanded.delete(key);
+              setStatus(error.message || 'No se pudieron cargar los archivos', 'err');
+            } finally {
+              state.busy.delete(row.pedido);
+              render();
+            }
+          }
         });
       });
 
@@ -330,18 +383,24 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
           const pedido = input.getAttribute('data-toggle-enviado');
           const row = rows.find((candidate) => String(candidate.pedido || '') === pedido);
           if (!row) return;
+          const previousValue = Boolean(row.enviadoBool);
+          const nextValue = Boolean(input.checked);
+          input.disabled = true;
           try {
             await api('/api/pedidos-ley/toggle-enviado', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ pedido: row.pedido, enviado: input.checked }),
+              body: JSON.stringify({ pedido: row.pedido, enviado: nextValue }),
             });
-            row.enviadoBool = input.checked;
+            updateRowSentState(row, nextValue);
             setStatus('Pedido ' + row.pedido + ' actualizado.', 'ok');
-            await loadRows(false, false);
+            render();
+            refreshRowsQuietly(false);
           } catch (error) {
+            updateRowSentState(row, previousValue);
+            input.checked = previousValue;
             setStatus(error.message || 'No se pudo actualizar el envio', 'err');
-            await loadRows(false, false);
+            render();
           }
         });
       });
@@ -372,21 +431,45 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
     }
 
     async function api(url, options) {
-      const response = await fetch(url, options);
+      const requestOptions = options || {};
+      const headers = Object.assign({ Accept: 'application/json' }, requestOptions.headers || {});
+      const response = await fetch(url, Object.assign({}, requestOptions, {
+        headers,
+        credentials: 'same-origin',
+      }));
       const text = await response.text();
       let data = {};
       if (text.trim()) {
         try {
           data = JSON.parse(text);
         } catch {
-          const snippet = text.trim().slice(0, 240);
-          throw new Error('El backend no devolvio JSON valido. ' + (snippet ? 'Respuesta: ' + snippet : ''));
+          const raw = text.trim();
+          const looksHtml = /^<!doctype html/i.test(raw) || /^<html/i.test(raw);
+          if (response.status === 401 || response.status === 403 || looksHtml) {
+            throw new Error('La sesion o el backend devolvio una pagina HTML en lugar de JSON. Recarga la pantalla e intenta de nuevo.');
+          }
+          throw new Error('El backend no devolvio JSON valido.');
         }
       }
       if (!response.ok) {
         throw new Error(data.error || ('Backend fallo (' + response.status + ')'));
       }
       return data;
+    }
+
+    function refreshRowsQuietly(forceRefresh = false) {
+      loadRows(false, forceRefresh).catch((error) => {
+        console.warn('No se pudo refrescar pedidos en segundo plano:', error);
+      });
+    }
+
+    async function loadFilesForRow(row) {
+      const key = fileSelectionKey(row);
+      if (state.filesByPedido.has(key)) return getRowFiles(row);
+      const data = await api('/api/pedidos-ley/pedido/' + encodeURIComponent(row.pedido) + '/files');
+      const files = Array.isArray(data.matchedFiles) ? data.matchedFiles : [];
+      state.filesByPedido.set(key, files);
+      return files;
     }
 
     async function loadRows(showStatus = true, forceRefresh = false) {
@@ -429,10 +512,24 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
         return;
       }
 
+      if (!state.filesByPedido.has(fileSelectionKey(row))) {
+        state.busy.add(row.pedido);
+        render();
+        setStatus('Cargando archivos del pedido ' + row.pedido + '...', '');
+        try {
+          await loadFilesForRow(row);
+        } catch (error) {
+          state.busy.delete(row.pedido);
+          render();
+          setStatus(error.message || 'No se pudieron cargar los archivos', 'err');
+          return;
+        }
+      }
+
       const selected = getSelectedFiles(row);
       const files = selected.length
-        ? (Array.isArray(row.matchedFiles) ? row.matchedFiles.filter((file) => selected.includes(file.id || file.relativePath || file.openUrl || file.downloadUrl || file.name)) : [])
-        : (Array.isArray(row.matchedFiles) ? row.matchedFiles : []);
+        ? (getRowFiles(row).filter((file) => selected.includes(file.id || file.relativePath || file.openUrl || file.downloadUrl || file.name)))
+        : getRowFiles(row);
 
       if (!files.length) {
         setStatus('No hay archivos visibles disponibles para enviar.', 'err');
@@ -465,8 +562,10 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
             htmlBody: '<p>Le informamos que el trabajo correspondiente al pedido <strong>' + esc(row.pedido) + '</strong> ya esta listo.</p><p>Adjuntamos el documento final para su revision.</p>',
           }),
         });
+        updateRowSentState(row, true);
+        state.selectedFiles.delete(fileSelectionKey(row));
         setStatus('Pedido ' + row.pedido + ' enviado correctamente desde ' + (result?.result?.from || els.senderSelect.value || 'remitente activo') + '.', 'ok');
-        await loadRows(false, false);
+        refreshRowsQuietly(false);
       } catch (error) {
         setStatus(error.message || 'No se pudo enviar el pedido', 'err');
       } finally {

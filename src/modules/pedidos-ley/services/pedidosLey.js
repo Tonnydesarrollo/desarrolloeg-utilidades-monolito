@@ -31,6 +31,7 @@ let cache = {
   filesAt: 0,
   files: null,
   driveEntriesByRoot: new Map(),
+  responseByKey: new Map(),
   sucursalesAt: 0,
   sucursalesLookup: null,
 };
@@ -1144,8 +1145,20 @@ function matchFilesForStore(establecimiento, files) {
   return matches;
 }
 
-async function buildResponse(rows, { facturadorId = '', includeSent = false, forceRefresh = false } = {}) {
+async function buildResponse(rows, { facturadorId = '', includeSent = false, forceRefresh = false, includeFiles = false } = {}) {
   const normalizedFacturador = normalizeText(facturadorId);
+  const responseCacheKey = JSON.stringify({
+    facturadorId: normalizedFacturador,
+    includeSent: Boolean(includeSent),
+    includeFiles: Boolean(includeFiles),
+    rowsAt: cache.at || 0,
+    rowsCount: Array.isArray(rows) ? rows.length : 0,
+  });
+  const cachedResponse = cache.responseByKey.get(responseCacheKey);
+  if (!forceRefresh && cachedResponse && Date.now() - cachedResponse.at < CACHE_TTL_MS) {
+    return cachedResponse.data;
+  }
+
   const sentLog = readSentLog();
   const sentByPedido = new Map();
   for (const entry of sentLog) {
@@ -1153,10 +1166,6 @@ async function buildResponse(rows, { facturadorId = '', includeSent = false, for
     sentByPedido.set(String(entry.pedido).trim(), entry);
   }
 
-  const driveClient = createDriveClient();
-  if (!driveClient) {
-    throw new Error('No hay credenciales de Drive configuradas para pedidos');
-  }
   const catalogs = await fetchPedidosLeyCatalogs(forceRefresh);
   const sucursalesLookup = catalogs.sucursalesLookup;
   const filtered = (Array.isArray(rows) ? rows : [])
@@ -1165,18 +1174,24 @@ async function buildResponse(rows, { facturadorId = '', includeSent = false, for
     .filter((row) => includeSent || !isTruthySent(row.enviado))
     .filter((row) => !normalizedFacturador || normalizeText(row.facturadorId) === normalizedFacturador);
 
-  const uniqueRoots = Array.from(new Set(
-    filtered.map((row) => extractDriveId(row.tiendaDrive)).filter(Boolean)
-  ));
   const driveEntriesByRoot = new Map();
-  const limit = createConcurrencyLimiter(6);
-  await Promise.all(uniqueRoots.map((root) => limit(async () => {
-    const entries = await getDriveEntriesForRoot(root, forceRefresh);
-    driveEntriesByRoot.set(root, entries);
-  })));
+  if (includeFiles) {
+    const driveClient = createDriveClient();
+    if (!driveClient) {
+      console.warn('Pedidos ley: Drive no disponible, se mostraran los pedidos sin enriquecimiento de archivos.');
+    }
+    const uniqueRoots = Array.from(new Set(
+      filtered.map((row) => extractDriveId(row.tiendaDrive)).filter(Boolean)
+    ));
+    const limit = createConcurrencyLimiter(6);
+    await Promise.all(uniqueRoots.map((root) => limit(async () => {
+      const entries = await getDriveEntriesForRoot(root, forceRefresh);
+      driveEntriesByRoot.set(root, entries);
+    })));
+  }
 
   const enriched = filtered.map((normalizedRow) => {
-    const driveRoot = extractDriveId(normalizedRow.tiendaDrive);
+    const driveRoot = includeFiles ? extractDriveId(normalizedRow.tiendaDrive) : '';
     const driveEntries = driveRoot ? (driveEntriesByRoot.get(driveRoot) || []) : [];
     const matchedFiles = driveEntries.length
       ? matchStoreFiles(driveEntries, normalizedRow.tiendaLabel || normalizedRow.establecimiento || '', normalizedRow.tiendaDrive)
@@ -1213,7 +1228,7 @@ async function buildResponse(rows, { facturadorId = '', includeSent = false, for
     };
   });
 
-  return {
+  const response = {
     ok: true,
     view: VIEW,
     table: TABLE,
@@ -1221,6 +1236,12 @@ async function buildResponse(rows, { facturadorId = '', includeSent = false, for
     filesDir: getFilesDir(),
     rows: enriched,
   };
+
+  if (!forceRefresh) {
+    cache.responseByKey.set(responseCacheKey, { at: Date.now(), data: response });
+  }
+
+  return response;
 }
 
 export async function fetchPedidosLeySinLiberacion({ facturadorId = '', includeSent = false, forceRefresh = false } = {}) {
@@ -1250,6 +1271,28 @@ export async function fetchPedidosLeySinLiberacion({ facturadorId = '', includeS
 
   const rows = await cache.pending;
   return buildResponse(rows, { facturadorId: normalizedFacturadorId, includeSent, forceRefresh });
+}
+
+export async function fetchPedidoLeyFiles({ pedido = '', forceRefresh = false } = {}) {
+  const data = await debugPedidoLey({ pedido, forceRefresh });
+  return {
+    ok: true,
+    pedido: data.pedido,
+    row: data.row || null,
+    matchedFiles: Array.isArray(data.matchedFiles) ? data.matchedFiles : [],
+    matchedFilesCount: Number(data.matchedFilesCount || 0),
+  };
+}
+
+export async function warmPedidosLeySinLiberacionCache({ forceRefresh = false } = {}) {
+  const startedAt = Date.now();
+  const data = await fetchPedidosLeySinLiberacion({ includeSent: true, forceRefresh });
+  return {
+    ok: true,
+    rows: Array.isArray(data?.rows) ? data.rows.length : 0,
+    elapsedMs: Date.now() - startedAt,
+    forceRefresh: Boolean(forceRefresh),
+  };
 }
 
 export function getPedidosLeyAdminDefaultThresholds() {
@@ -1457,11 +1500,69 @@ export async function markPedidoLeyEnviado({ pedido, rowId, enviado } = {}) {
     ENVIADO: enviado === false ? false : true,
   };
 
-  return appsheetAction('Edit', [payload]);
+  const result = await appsheetAction('Edit', [payload]);
+  updatePedidoLeySentCache(pedidoValue, payload.ENVIADO);
+  return result;
 }
 
 export function recordPedidoLeySent(entry = {}) {
-  return appendSentLog(entry);
+  const result = appendSentLog(entry);
+  const pedido = String(entry?.pedido || '').trim();
+  if (pedido) {
+    updatePedidoLeySentCache(pedido, true, {
+      sentLocalAt: entry?.sentAt || new Date().toISOString(),
+      sentLocalTo: entry?.to || '',
+      sentLocalFrom: entry?.fromEmail || '',
+    });
+  } else {
+    cache.responseByKey.clear();
+  }
+  return result;
+}
+
+function updatePedidoLeySentCache(pedido, enviado, sentLocalData = {}) {
+  const pedidoKey = String(pedido || '').trim();
+  if (!pedidoKey) return;
+  const sentValue = enviado === false ? '' : 'SI';
+  const sentBool = enviado !== false;
+
+  if (Array.isArray(cache.rows)) {
+    for (const row of cache.rows) {
+      const rowPedido = normalizeScalarText(getRowValue(row, ['PEDIDO', 'Pedido', 'pedido']));
+      if (rowPedido !== pedidoKey) continue;
+      row.ENVIADO = sentValue;
+      row.Enviado = sentValue;
+      row.enviado = sentValue;
+    }
+  }
+
+  for (const [key, entry] of cache.responseByKey.entries()) {
+    const data = entry?.data;
+    if (!data || !Array.isArray(data.rows)) continue;
+    let parsedKey = {};
+    try {
+      parsedKey = JSON.parse(key);
+    } catch {
+      parsedKey = {};
+    }
+
+    data.rows = data.rows
+      .map((row) => {
+        if (String(row?.pedido || '').trim() !== pedidoKey) return row;
+        return {
+          ...row,
+          enviado: sentValue,
+          enviadoBool: sentBool,
+          sentLocal: sentBool || Boolean(row.sentLocal),
+          sentLocalAt: sentLocalData.sentLocalAt || row.sentLocalAt || '',
+          sentLocalTo: sentLocalData.sentLocalTo || row.sentLocalTo || '',
+          sentLocalFrom: sentLocalData.sentLocalFrom || row.sentLocalFrom || '',
+        };
+      })
+      .filter((row) => Boolean(parsedKey.includeSent) || !isTruthySent(row.enviado));
+    data.total = data.rows.length;
+    entry.at = Date.now();
+  }
 }
 
 function buildEditPayloadFromSentEntry(entry) {
@@ -1509,6 +1610,7 @@ export function clearPedidosLeyCache() {
   cache.filesAt = 0;
   cache.files = null;
   cache.driveEntriesByRoot = new Map();
+  cache.responseByKey = new Map();
   cache.sucursalesAt = 0;
   cache.sucursalesLookup = null;
   for (const entry of Object.values(lookupCache)) {
@@ -1522,6 +1624,7 @@ export function clearPedidosLeyRowsCache() {
   cache.at = 0;
   cache.rows = null;
   cache.pending = null;
+  cache.responseByKey.clear();
 }
 
 export function getPedidosLeyFilesDir() {

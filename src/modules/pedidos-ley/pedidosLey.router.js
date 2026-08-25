@@ -1,8 +1,8 @@
 import express from 'express';
 import {
   debugPedidoLey,
+  fetchPedidoLeyFiles,
   fetchPedidosLeySinLiberacion,
-  clearPedidosLeyRowsCache,
   markPedidoLeyEnviado,
   readPedidoLeyAttachment,
   recordPedidoLeySent,
@@ -30,6 +30,23 @@ async function requireAdmin(req, res) {
     return null;
   }
   return user;
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const output = [];
+  let index = 0;
+
+  async function worker() {
+    while (index < items.length) {
+      const currentIndex = index;
+      index += 1;
+      output[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker);
+  await Promise.all(workers);
+  return output;
 }
 
 pedidosLeyApiRouter.get('/config', (_req, res) => {
@@ -80,12 +97,25 @@ pedidosLeyApiRouter.get('/debug', async (req, res) => {
   }
 });
 
+pedidosLeyApiRouter.get('/pedido/:pedido/files', async (req, res) => {
+  try {
+    const user = await requireAdmin(req, res);
+    if (!user) return;
+    const pedido = String(req.params.pedido || '').trim();
+    const forceRefresh = String(req.query.refresh || '') === '1';
+    const data = await fetchPedidoLeyFiles({ pedido, forceRefresh });
+    res.json(data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error desconocido';
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
 pedidosLeyApiRouter.post('/marcar-enviado', async (req, res) => {
   try {
     const user = await requireAdmin(req, res);
     if (!user) return;
     const result = await markPedidoLeyEnviado(req.body || {});
-    clearPedidosLeyRowsCache();
     res.json({ ok: true, result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
@@ -98,7 +128,6 @@ pedidosLeyApiRouter.post('/toggle-enviado', async (req, res) => {
     const user = await requireAdmin(req, res);
     if (!user) return;
     const result = await markPedidoLeyEnviado(req.body || {});
-    clearPedidosLeyRowsCache();
     res.json({ ok: true, result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
@@ -111,7 +140,6 @@ pedidosLeyApiRouter.post('/log-enviado', async (req, res) => {
     const user = await requireAdmin(req, res);
     if (!user) return;
     const result = recordPedidoLeySent(req.body || {});
-    clearPedidosLeyRowsCache();
     res.json({ ok: true, result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
@@ -176,12 +204,11 @@ pedidosLeyApiRouter.post('/send', async (req, res) => {
     if (!user) return;
     const payload = req.body || {};
     const selectedFiles = Array.isArray(payload.files) ? payload.files : [];
-    const attachments = [];
-    for (const file of selectedFiles) {
+    const attachments = (await mapWithConcurrency(selectedFiles, 3, async (file) => {
       const key = String(file?.id || file?.path || file?.relativePath || '').trim();
-      if (!key) continue;
-      attachments.push(await readPedidoLeyAttachment(key));
-    }
+      if (!key) return null;
+      return readPedidoLeyAttachment(key);
+    })).filter(Boolean);
 
     const result = await sendPedidosLeyEmail({
       to: payload.to || '',
@@ -219,7 +246,6 @@ pedidosLeyApiRouter.post('/send', async (req, res) => {
 
     if (String(payload.pedido || '').trim()) {
       await markPedidoLeyEnviado({ pedido: String(payload.pedido || '').trim(), enviado: true });
-      clearPedidosLeyRowsCache();
     }
 
     res.json({ ok: true, result });

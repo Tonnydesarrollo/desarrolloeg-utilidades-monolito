@@ -698,34 +698,62 @@
 
     async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
       const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      const timeoutId = window.setTimeout(() => controller.abort("timeout"), timeoutMs);
 
       try {
         return await fetch(url, {
           ...options,
           signal: controller.signal,
         });
+      } catch (error) {
+        const message = String(error?.message || "");
+        const timedOut =
+          controller.signal.aborted ||
+          error?.name === "AbortError" ||
+          message.includes("aborted") ||
+          message.includes("timeout");
+        if (timedOut) {
+          const timeoutSeconds = Math.max(1, Math.round(timeoutMs / 1000));
+          const timeoutError = new Error(`La carga tardo mas de ${timeoutSeconds}s. Reintentando...`);
+          timeoutError.name = "TimeoutError";
+          throw timeoutError;
+        }
+        throw error;
       } finally {
         window.clearTimeout(timeoutId);
       }
     }
 
     async function fetchJson(url, options = {}, timeoutMs = 30000) {
-      const res = await fetchWithTimeout(url, options, timeoutMs);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Error ${res.status}`);
+      try {
+        const res = await fetchWithTimeout(url, options, timeoutMs);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Error ${res.status}`);
+        }
+        return res.json();
+      } catch (error) {
+        if (error?.name === "TimeoutError" && timeoutMs < 60000) {
+          return fetchJson(url, options, 60000);
+        }
+        throw error;
       }
-      return res.json();
     }
 
     async function fetchPdfResponse(url, options = {}, timeoutMs = 45000) {
-      const res = await fetchWithTimeout(url, options, timeoutMs);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Error ${res.status}`);
+      try {
+        const res = await fetchWithTimeout(url, options, timeoutMs);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Error ${res.status}`);
+        }
+        return res;
+      } catch (error) {
+        if (error?.name === "TimeoutError" && timeoutMs < 90000) {
+          return fetchPdfResponse(url, options, 90000);
+        }
+        throw error;
       }
-      return res;
     }
 
     function fillSignerFields(employee) {
@@ -863,7 +891,7 @@
     }
 
     async function loadRows() {
-      state.rows = await fetchJson(apiUrl("sucursales"), {}, 30000);
+      state.rows = await fetchJson(apiUrl("sucursales"), {}, 45000);
       state.filteredRows = [...state.rows];
       renderBranchOptions(state.filteredRows);
       if (state.rows.length) {
@@ -873,7 +901,7 @@
     }
 
     async function loadEmployees() {
-      state.employees = await fetchJson(apiUrl("empleados"), {}, 30000);
+      state.employees = await fetchJson(apiUrl("empleados"), {}, 45000);
       renderSignerOptions();
     }
 
@@ -932,7 +960,8 @@
         els.loadingStatus.textContent = `${loadedParts.join(" y ")} listos`;
 
         if (errors.length) {
-          els.previewStatus.textContent = errors[0];
+          const timeoutError = errors.find((message) => String(message).toLowerCase().includes("tardo mas"));
+          els.previewStatus.textContent = timeoutError || errors[0];
           els.previewStatus.classList.add("error");
         }
 
@@ -1002,5 +1031,6 @@
   </script>
   </div>
   </main>
+<script src="/ui/portal-shell.js?v=20260824" defer></script>
 </body>
 </html>
