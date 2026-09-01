@@ -11,6 +11,7 @@ node_modules/
 runtime/
 runtime-qa/
 runtime-dev/
+runtime-whatsapp-test/
 data-dev/
 release/
 secrets/
