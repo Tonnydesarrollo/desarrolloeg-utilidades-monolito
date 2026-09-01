@@ -6,7 +6,7 @@ export function getAppShellManifest() {
   return {
     brand: {
       name: "DesarrolloEG",
-      subtitle: "AppSheet como base principal + cache backend + frontend por AJAX",
+      subtitle: "BD local persistente + sync AppSheet + frontend por AJAX",
       accent: "#1D4ED8",
       secondary: "#0F4C5C",
     },
@@ -23,13 +23,13 @@ export function getAppShellManifest() {
     cacheLayers: [
       {
         id: "appsheet-core",
-        title: "AppSheet operativo",
-        description: "Tablas maestras, cambios de usuario y auditoria.",
+        title: "BD local operativa",
+        description: "Tablas maestras, cambios de usuario y auditoria local.",
       },
       {
         id: "backend-cache",
-        title: "Cache persistente backend",
-        description: "Catalogos, respuestas frecuentes y relaciones ya resueltas.",
+        title: "Sync AppSheet",
+        description: "Replica entrante por webhook y reconciliacion de tablas remotas.",
       },
       {
         id: "jobs-runtime",

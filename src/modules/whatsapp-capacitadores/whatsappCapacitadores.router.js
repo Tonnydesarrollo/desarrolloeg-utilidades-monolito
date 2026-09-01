@@ -31,7 +31,7 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
     <title>${escapeHtml(title)}</title>
     <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
     <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
-    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
     <style>
       * { box-sizing: border-box; }
       body {
@@ -222,6 +222,7 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
           <p class="lead">${escapeHtml(subtitle)}</p>
           <div class="actions">
             <a class="button primary" href="/whatsapp-capacitadores/qr">Abrir QR</a>
+            <a class="button secondary" href="/whatsapp-capacitadores/qr-link">Abrir en celular</a>
             <a class="button secondary" href="/whatsapp-capacitadores/health">Ver health</a>
           </div>
           <div class="meta">
@@ -275,7 +276,7 @@ export function buildWhatsAppCapacitadoresLandingHtml(status) {
         </aside>
       </section>
     </main>
-    <script src="/ui/portal-shell.js?v=20260824" defer></script>
+    <script src="/ui/portal-shell.js?v=20260901b" defer></script>
   </body>
 </html>`;
 }
@@ -304,6 +305,380 @@ whatsappCapacitadoresRouter.get("/qr.png", async (_req, res) => {
   return res.send(screenshot);
 });
 
+whatsappCapacitadoresRouter.get("/qr-link", (req, res) => {
+  const qrUrl = `${req.protocol}://${req.get("host")}/whatsapp-capacitadores/qr`;
+  const qrImageUrl = `${req.protocol}://${req.get("host")}/whatsapp-capacitadores/qr.png`;
+  res.type("html").send(`<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WhatsApp Capacitadores - Link QR</title>
+    <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+    <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
+    <style>
+      body {
+        margin: 0;
+        font-family: var(--portal-font-body);
+        color: var(--portal-ink);
+        background: transparent;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px 56px;
+      }
+      .card {
+        background: var(--portal-surface);
+        border: 1px solid var(--portal-line);
+        border-radius: 24px;
+        padding: 24px;
+        box-shadow: var(--portal-shadow);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-family: var(--portal-font-display);
+        text-transform: uppercase;
+        letter-spacing: -0.03em;
+        font-size: clamp(30px, 5vw, 48px);
+      }
+      p {
+        margin: 0 0 14px;
+        color: var(--portal-muted);
+        line-height: 1.7;
+        font-family: var(--portal-font-ui);
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 0 18px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 800;
+        font-family: var(--portal-font-ui);
+        border: 1px solid var(--portal-line);
+      }
+      .button.primary {
+        background: linear-gradient(135deg, var(--portal-accent-3) 0%, var(--portal-accent) 100%);
+        color: #fff;
+        border-color: transparent;
+      }
+      .button.secondary {
+        background: rgba(15, 23, 42, 0.04);
+        color: var(--portal-ink);
+      }
+      code {
+        display: block;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.05);
+        overflow-wrap: anywhere;
+        font-size: 13px;
+        margin-top: 14px;
+      }
+      .note {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(15, 76, 92, 0.06);
+        border: 1px solid rgba(15, 76, 92, 0.14);
+        color: var(--portal-ink);
+      }
+      .toast {
+        margin-top: 12px;
+        min-height: 20px;
+        font-size: 13px;
+        color: var(--portal-accent-3);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body class="portal-shell portal-whatsapp">
+    <a class="skip-link" href="#main">Saltar al contenido principal</a>
+    <main id="main" role="main">
+      <section class="card">
+        <h1>Link del QR</h1>
+        <p>Este enlace abre la pantalla del QR para que puedas verlo desde tu telefono o desde otro dispositivo.</p>
+        <p><strong>Importante:</strong> WhatsApp Web no permite iniciar sesion directamente por enlace. Para vincular la cuenta, el QR debe ser escaneado desde otro dispositivo o desde la app de WhatsApp en el telefono.</p>
+        <div class="actions">
+          <a class="button primary" href="${escapeHtml(qrUrl)}" target="_blank" rel="noreferrer">Abrir pantalla del QR</a>
+          <a class="button secondary" href="/whatsapp-capacitadores/qr-mobile" target="_blank" rel="noreferrer">Abrir vista movil</a>
+          <a class="button secondary" href="${escapeHtml(qrImageUrl)}" target="_blank" rel="noreferrer">Abrir imagen del QR</a>
+          <button class="button secondary" type="button" id="copy-qr-link">Copiar enlace</button>
+          <button class="button secondary" type="button" id="copy-qr-image">Copiar imagen</button>
+          <a class="button secondary" href="/whatsapp-capacitadores/qr">Volver</a>
+        </div>
+        <code>${escapeHtml(qrUrl)}</code>
+        <div class="note">
+          Si vas a usar el telefono con este enlace, asegurate de tener otro dispositivo para escanear el QR.
+        </div>
+        <div class="toast" id="copy-toast" aria-live="polite"></div>
+      </section>
+    </main>
+    <script src="/ui/portal-shell.js?v=20260901b" defer></script>
+    <script>
+      (function () {
+        const qrLink = ${JSON.stringify(qrUrl)};
+        const qrImage = ${JSON.stringify(qrImageUrl)};
+        const toast = document.getElementById("copy-toast");
+        const writeToast = (message) => {
+          if (!toast) return;
+          toast.textContent = message;
+          window.setTimeout(() => {
+            if (toast.textContent === message) toast.textContent = "";
+          }, 2200);
+        };
+        const copyText = async (text, label) => {
+          try {
+            await navigator.clipboard.writeText(text);
+            writeToast(label + " copiado al portapapeles");
+          } catch {
+            writeToast("No se pudo copiar. Selecciona el enlace manualmente.");
+          }
+        };
+        const bind = (id, text, label) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener("click", () => copyText(text, label));
+        };
+        bind("copy-qr-link", qrLink, "Enlace del QR");
+        bind("copy-qr-image", qrImage, "Imagen del QR");
+      })();
+    </script>
+  </body>
+</html>`);
+});
+
+whatsappCapacitadoresRouter.get("/qr-mobile", async (req, res) => {
+  const status = getWhatsAppCapacitadoresStatus();
+  const qrAvailable = Boolean(status.qrAvailable);
+  const screenshot = qrAvailable ? await getWhatsAppCapacitadoresQrScreenshot() : null;
+  const qrPageUrl = `${req.protocol}://${req.get("host")}/whatsapp-capacitadores/qr-mobile`;
+  const qrImageUrl = `${req.protocol}://${req.get("host")}/whatsapp-capacitadores/qr.png`;
+  const qrImageHtml = qrAvailable && screenshot
+    ? `<img src="data:image/png;base64,${screenshot.toString("base64")}" alt="QR de WhatsApp" />`
+    : `
+      <div class="qr-empty">
+        <div class="qr-empty-badge">Esperando QR</div>
+        <p>Cuando el bot genere un nuevo QR, se actualizara solo.</p>
+        <p class="muted">Si tarda, revisa el health del bot.</p>
+      </div>`;
+
+  res.type("html").send(`<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WhatsApp Capacitadores - QR movil</title>
+    <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+    <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
+    <style>
+      body {
+        margin: 0;
+        font-family: var(--portal-font-body);
+        color: var(--portal-ink);
+        background: transparent;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 20px 12px 48px;
+      }
+      .card {
+        background: var(--portal-surface);
+        border: 1px solid var(--portal-line);
+        border-radius: 24px;
+        padding: 18px;
+        box-shadow: var(--portal-shadow);
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+        gap: 16px;
+      }
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+      h1 {
+        margin: 0;
+        font-family: var(--portal-font-display);
+        text-transform: uppercase;
+        letter-spacing: -0.03em;
+        font-size: clamp(28px, 5vw, 48px);
+      }
+      p {
+        margin: 0;
+        color: var(--portal-muted);
+        line-height: 1.6;
+        font-family: var(--portal-font-ui);
+      }
+      .qr-image {
+        width: 100%;
+        max-height: min(76vh, 860px);
+        object-fit: contain;
+        border-radius: 18px;
+        border: 1px solid var(--portal-line);
+        background: #fff;
+      }
+      .qr-empty {
+        display: grid;
+        place-items: center;
+        min-height: 360px;
+        border-radius: 18px;
+        border: 1px dashed rgba(33, 49, 63, 0.18);
+        background: #fff;
+        text-align: center;
+        padding: 24px;
+      }
+      .qr-empty-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--portal-accent-3), var(--portal-accent));
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 12px;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        text-decoration: none;
+        font-weight: 700;
+        font: inherit;
+        cursor: pointer;
+      }
+      .button.primary {
+        background: linear-gradient(135deg, var(--portal-accent-3), var(--portal-accent));
+        color: #fff;
+      }
+      .button.secondary {
+        background: rgba(15, 23, 42, 0.04);
+        color: var(--portal-ink);
+        border-color: var(--portal-line);
+      }
+      code {
+        display: block;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.05);
+        overflow-wrap: anywhere;
+        font-size: 13px;
+      }
+      .toast {
+        min-height: 20px;
+        color: var(--portal-accent-3);
+        font-weight: 700;
+        font-size: 13px;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #111827;
+        color: #f5f5f5;
+        padding: 14px;
+        border-radius: 12px;
+        overflow: auto;
+        max-height: 76vh;
+      }
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        main {
+          padding-inline: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body class="portal-shell portal-whatsapp">
+    <a class="skip-link" href="#whatsapp-qr-main">Saltar al contenido principal</a>
+    <main id="whatsapp-qr-main" role="main" aria-label="WhatsApp Capacitadores QR movil">
+      <div class="card">
+        <div class="stack">
+          <h1>WhatsApp Capacitadores</h1>
+          <p>${qrAvailable ? "Vista movil con actualizacion automatica cada 10 segundos." : "No hay QR disponible en este momento."}</p>
+          <div class="actions">
+            <a class="button primary" href="${escapeHtml(qrPageUrl)}" target="_blank" rel="noreferrer">Abrir enlace</a>
+            <a class="button secondary" href="${escapeHtml(qrImageUrl)}" target="_blank" rel="noreferrer">Abrir PNG</a>
+            <a class="button secondary" href="/whatsapp-capacitadores/qr">Volver al QR</a>
+            <a class="button secondary" href="/whatsapp-capacitadores/health">Ver health</a>
+          </div>
+          <code id="qr-page-link">${escapeHtml(qrPageUrl)}</code>
+          <div class="toast" id="qr-mobile-toast" aria-live="polite"></div>
+        </div>
+        <div class="layout" style="margin-top: 16px;">
+          <section class="stack">
+            ${qrImageHtml}
+          </section>
+          <aside class="stack">
+            <pre>${escapeHtml(JSON.stringify(status, null, 2))}</pre>
+          </aside>
+        </div>
+      </div>
+    </main>
+    <script src="/ui/portal-shell.js?v=20260901b" defer></script>
+    <script>
+      (function () {
+        window.setTimeout(() => window.location.reload(), 10000);
+        const link = ${JSON.stringify(qrPageUrl)};
+        const toast = document.getElementById("qr-mobile-toast");
+        const linkCode = document.getElementById("qr-page-link");
+        const showToast = (message) => {
+          if (!toast) return;
+          toast.textContent = message;
+          window.setTimeout(() => {
+            if (toast.textContent === message) toast.textContent = "";
+          }, 2200);
+        };
+        const copy = async () => {
+          try {
+            await navigator.clipboard.writeText(link);
+            showToast("Enlace copiado al portapapeles");
+          } catch {
+            showToast("No se pudo copiar el enlace");
+          }
+        };
+        if (linkCode) {
+          linkCode.style.cursor = "pointer";
+          linkCode.addEventListener("click", copy);
+        }
+        document.querySelectorAll('a[href="/whatsapp-capacitadores/qr"]').forEach((el) => {
+          el.addEventListener("click", (event) => {
+            event.preventDefault();
+            copy();
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>`);
+});
+
 whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
   const status = getWhatsAppCapacitadoresStatus();
   const qrAvailable = Boolean(status.qrAvailable);
@@ -328,7 +703,7 @@ whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
       <title>${title}</title>
     <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
     <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
-    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
     <style>
       body {
         margin: 0;
@@ -459,7 +834,7 @@ whatsappCapacitadoresRouter.post("/qr/restart", async (_req, res) => {
       <pre>${escapeHtml(error instanceof Error ? error.message : String(error))}</pre>
       <p><a href="/whatsapp-capacitadores/qr">Volver al QR</a></p>
     </main>
-    <script src="/ui/portal-shell.js?v=20260824" defer></script>
+    <script src="/ui/portal-shell.js?v=20260901b" defer></script>
   </body>
 </html>`);
   }

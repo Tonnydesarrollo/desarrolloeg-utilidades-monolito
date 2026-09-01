@@ -28,7 +28,7 @@ function withEnv(overrides, fn) {
     });
 }
 
-test("facturas-native-sync queda como auth_required cuando faltan credenciales", async () => {
+test("facturas-native-sync queda como auth_required cuando faltan credenciales de ClubFactura", async () => {
   await withEnv(
     {
       FACTURAS_CLUBFACTURA_USER: "",
@@ -43,8 +43,6 @@ test("facturas-native-sync queda como auth_required cuando faltan credenciales",
       assert.deepEqual(
         configuration.missingEnv.sort(),
         [
-          "FACTURAS_APPSHEET_API_KEY",
-          "FACTURAS_APPSHEET_APP_ID",
           "FACTURAS_CLUBFACTURA_BASE",
           "FACTURAS_CLUBFACTURA_PASSWORD",
           "FACTURAS_CLUBFACTURA_USER",

@@ -20,18 +20,22 @@ import {
   getConceptosCotizacionLocalRows,
   getCotizacionCentrosTrabajoLocalRows,
   getCotizacionesLocalRows,
+  getEstatalesLocalRows,
   getEstadosLocalRows,
   getMunicipiosLocalRows,
+  getMunicipalesLocalRows,
   getProveedoresLocalRows,
   getSucursalesLocalRows,
   upsertCapacitacionesLocalRows,
   upsertEmpleadosLocalRows,
   upsertEmpresasLocalRows,
+  upsertEstatalesLocalRows,
   upsertCapacitacionCapacitadoresLocalRows,
   upsertCapacitacionSucursalesLocalRows,
   upsertProveedoresLocalRows,
   upsertEstadosLocalRows,
   upsertMunicipiosLocalRows,
+  upsertMunicipalesLocalRows,
   upsertSucursalesLocalRows,
 } from "../services/localAppsheetDb.js";
 
@@ -275,6 +279,17 @@ function enrichSucursalRows(rows, { municipios, estados, empresas }) {
       label2: row?.label2 || row?.LABEL2 || row?.Label2 || "",
       nombre: row?.nombre || row?.NOMBRE || row?.Label || row?.LABEL || "",
       tienda: row?.tienda || row?.TIENDA || row?.Tienda || row?.ID || row?.id || "",
+      id_pc: row?.id_pc || row?.ID_PC || row?.["ID PC"] || "",
+      vencimiento_estatal: row?.vencimiento_estatal || row?.["VENCIMIENTO ESTATAL"] || row?.VENCIMIENTOESTATAL || row?.["ULTIMO PIPC ESTATAL"] || "",
+      vencimiento_municipal: row?.vencimiento_municipal || row?.["VENCIMIENTO MUNICIPAL"] || row?.VENCIMIENTOMUNICIPAL || row?.["ULTIMO MUNICIPAL"] || "",
+      trabajos: row?.trabajos || row?.TRABAJOS || row?.Trabajos || "",
+      tipo: row?.tipo || row?.TIPO || row?.Tipo || "",
+      nivel_riesgo: row?.nivel_riesgo || row?.["NIVEL DE RIESGO"] || row?.["Nivel de Riesgo"] || "",
+      precio_estatal: row?.precio_estatal ?? row?.["PRECIO ESTATAL"] ?? row?.PrecioEstatal ?? null,
+      precio_municipal: row?.precio_municipal ?? row?.["PRECIO MUNICIPAL"] ?? row?.PrecioMunicipal ?? null,
+      ultimo_pipc_estatal: row?.ultimo_pipc_estatal || row?.["ULTIMO PIPC ESTATAL"] || "",
+      ultimo_municipal: row?.ultimo_municipal || row?.["ULTIMO MUNICIPAL"] || "",
+      pedido: row?.pedido || row?.PEDIDO || row?.Pedido || "",
       address: row?.address || row?.["DIRECCION GOOGLE"] || row?.["DIRECCION_GOOGLE"] || row?.DIRECCION || row?.DOMICILIO || "",
       street: row?.street || row?.STREET || row?.address || "",
       sucursales: normalizeReferenceList(row?.sucursales || row?.SUCURSALES),
@@ -303,6 +318,16 @@ const TABLES = [
     name: "SUCURSALES",
     keyField: "id",
     localUpdater: upsertSucursalesLocalRows,
+  },
+  {
+    name: "ESTATALES",
+    keyField: "row_id",
+    localUpdater: upsertEstatalesLocalRows,
+  },
+  {
+    name: "MUNICIPALES",
+    keyField: "row_id",
+    localUpdater: upsertMunicipalesLocalRows,
   },
   {
     name: "EMPLEADOS",
@@ -389,6 +414,8 @@ export async function syncAppsheetBaseToLocal() {
   const municipios = combined.get("MUNICIPIOS") || [];
   const estados = combined.get("ESTADOS") || [];
   const sucursales = enrichSucursalRows(combined.get("SUCURSALES") || [], { municipios, estados, empresas });
+  const estatales = combined.get("ESTATALES") || [];
+  const municipales = combined.get("MUNICIPALES") || [];
   const empleados = combined.get("EMPLEADOS") || [];
   const capacitaciones = combined.get("CAPACITACIONES") || [];
   const calendario = combined.get("CALENDARIO") || [];
@@ -454,6 +481,8 @@ export async function syncAppsheetBaseToLocal() {
   upsertMunicipiosLocalRows(municipios);
   upsertEstadosLocalRows(estados);
   upsertSucursalesLocalRows(sucursales);
+  upsertEstatalesLocalRows(estatales);
+  upsertMunicipalesLocalRows(municipales);
   upsertEmpleadosLocalRows(empleados);
   upsertCapacitacionesLocalRows(capacitaciones);
   upsertCalendarioLocalRows(calendario);
@@ -474,6 +503,8 @@ export async function syncAppsheetBaseToLocal() {
       municipios: getMunicipiosLocalRows().length,
       estados: getEstadosLocalRows().length,
       sucursales: getSucursalesLocalRows().length,
+      estatales: getEstatalesLocalRows().length,
+      municipales: getMunicipalesLocalRows().length,
       empleados: getEmpleadosLocalRows().length,
       capacitaciones: getCapacitacionesLocalRows().length,
       calendario: getCalendarioLocalRows().length,

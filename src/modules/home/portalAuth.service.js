@@ -3,10 +3,32 @@ import { google } from "googleapis";
 import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
 import { getActivePortalBasePath, getPortalCookieSuffix, portalPath } from "./portalPath.js";
 import {
+  createPortalNoteEntry as createLocalPortalNoteEntry,
+  deleteCalendarNoteAuthor,
+  deletePortalNoteEntry as deleteLocalPortalNoteEntry,
+  listPortalNoteEntries,
+  readLocalRow,
+  readLocalRows,
+  updatePortalNoteEntry as updateLocalPortalNoteEntry,
+  upsertCalendarNoteAuthor,
+} from "../../services/desarrolloegLocalDb.js";
+import {
+  getCapacitacionCapacitadoresLocalRows,
+  getCapacitacionSucursalesLocalRows,
+  getCapacitacionesLocalRows,
+  getEmpleadosLocalRows,
+  getEstatalesLocalRows,
+  getMunicipalesLocalRows,
+  getPedidosLeyLocalRows,
+  getSucursalesLocalRows,
+} from "../jobs/services/localAppsheetDb.js";
+import {
   getPersistentCacheEntry,
   getPersistentCacheSummary,
   setPersistentCacheEntry,
 } from "../../services/platformCache.js";
+import { resolvePortalAccessProfile } from "./portalAccessPolicy.js";
+import { readPcEstatalStatusBySucursal } from "./pcEstatal.service.js";
 
 const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 20000);
 const APPSHEET_MAX_RETRIES = Number(process.env.APPSHEET_MAX_RETRIES || 3);
@@ -106,6 +128,99 @@ const PORTAL_CACHE_NAMESPACES = {
   capacitaciones: "portal.capacitaciones",
   calendarNotes: "portal.calendar-notes",
 };
+
+const LOCAL_DB_SOURCE = "desarrolloeg-sync-db";
+const TERRITORY_SHIELD_CACHE = new Map();
+
+function clearDashboardCache() {
+  DASHBOARD_CACHE.entries.clear();
+}
+
+function mapLocalEmployeeRow(row = {}) {
+  return {
+    id: String(row.id || row.row_id || "").trim(),
+    row_id: String(row.row_id || row.id || "").trim(),
+    "Row ID": String(row.row_id || row.id || "").trim(),
+    ID: String(row.id || row.row_id || "").trim(),
+    NOMBRE: String(row.nombre || "").trim(),
+    PUESTO: String(row.puesto || "").trim(),
+    CORREO: String(row.correo || "").trim(),
+    FIRMA: String(row.firma || "").trim(),
+    TELEFONO: String(row.telefono || "").trim(),
+    "TELEFONO 2": String(row.telefono_2 || "").trim(),
+    CAPACITA: String(row.capacita || "").trim(),
+    PERMISO: String(row.permiso || "").trim(),
+    COLOR: String(row.color || "").trim(),
+    "CUMPLEAÑOS": String(row.cumpleanos || "").trim(),
+    INICIALES: String(row.iniciales || "").trim(),
+  };
+}
+
+function mapLocalSucursalRow(row = {}) {
+  const drive = String(row.drive || "").trim();
+  return {
+    id: String(row.id || "").trim(),
+    ID: String(row.id || "").trim(),
+    "Row ID": String(row.id || "").trim(),
+    LABEL: String(row.label || "").trim(),
+    LABEL2: String(row.label2 || "").trim(),
+    NOMBRE: String(row.nombre || "").trim(),
+    TIENDA: String(row.tienda || "").trim(),
+    empresa_id: String(row.empresa_id || "").trim(),
+    municipio_id: String(row.municipio_id || "").trim(),
+    estado_id: String(row.estado_id || "").trim(),
+    DIRECCION: String(row.direccion || "").trim(),
+    LAT: row.lat,
+    LNG: row.lng,
+    DRIVE: drive,
+    drive,
+    mes_planeacion: row.mes_planeacion,
+    capacitadores: String(row.capacitadores || "").trim(),
+  };
+}
+
+function mapLocalCapacitacionRow(row = {}) {
+  return {
+    id: String(row.id || "").trim(),
+    ID: String(row.id || "").trim(),
+    "Row ID": String(row.id || "").trim(),
+    "FECHA CAPACITACION": String(row.fecha_capacitacion || "").trim(),
+    "CEDE": String(row.cede_nombre || row.cede_sucursal_id || "").trim(),
+    STATUS: String(row.status || "").trim(),
+    "HORA INICIO": String(row.hora_inicio || "").trim(),
+    "HORA FIN": String(row.hora_fin || "").trim(),
+    DIPLOMAS: String(row.diplomas || "").trim(),
+    NOTAS: String(row.notas || "").trim(),
+    CAPACITADORES: String(row.capacitadores_text || "").trim(),
+    SUCURSALES: String(row.sucursales_text || "").trim(),
+  };
+}
+
+function mapLocalCalendarNoteRow(row = {}) {
+  return {
+    id: String(row.id || "").trim(),
+    ID: String(row.id || "").trim(),
+    "Row ID": String(row.id || "").trim(),
+    FECHA: String(row.fecha || "").trim(),
+    ICONO: String(row.icono || "").trim(),
+    TITULO: String(row.titulo || "").trim(),
+    NOTAS: String(row.notas || "").trim(),
+    COLOR: String(row.color || "").trim(),
+    EMPLEADOS: String(row.empleados || "").trim(),
+    AUTOR_ID: String(row.creado_por_id || "").trim(),
+    AUTOR_NOMBRE: String(row.creado_por_nombre || "").trim(),
+    AUTOR_CORREO: String(row.creado_por_correo || "").trim(),
+  };
+}
+
+function readLocalPortalRows(sql, params = [], mapper = (row) => row) {
+  return readLocalRows(sql, params).map((row) => mapper(row)).filter((row) => Boolean(row));
+}
+
+function readLocalPortalRow(sql, params = [], mapper = (row) => row) {
+  const row = readLocalRow(sql, params);
+  return row ? mapper(row) : null;
+}
 
 function getSharedCacheEntry(cache) {
   return cache.entries.get(EMPLOYEE_SHARED_CACHE_KEY) || null;
@@ -425,6 +540,11 @@ function toLocalDateKey(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function deriveCapacitacionStatusFromDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  return toLocalDateKey(new Date()) > toLocalDateKey(date) ? "FINALIZADA" : "PROGRAMADA";
 }
 
 function getReadableTextColor(backgroundColor) {
@@ -951,11 +1071,6 @@ async function appsheetAction({ table, action, rows = [], selector, runAsUserEma
 }
 
 async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
-  const config = getConfig();
-  if (!config.appId || !config.accessKey) {
-    throw new Error("Faltan credenciales de AppSheet para el portal");
-  }
-
   const now = Date.now();
   const sharedCached = getSharedCacheEntry(EMPLOYEE_CACHE);
   if (!force && sharedCached?.rows?.length > 0 && now - sharedCached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
@@ -991,50 +1106,26 @@ async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
 
   EMPLOYEE_CACHE.pending = (async () => {
     try {
-      const data = await appsheetAction({
-        table: config.table,
-        action: "Find",
-        selector: `Filter(${config.table}, true)`,
-        runAsUserEmail,
-      });
-      const rows = Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
+      const rows = readLocalPortalRows(
+        `SELECT id, row_id, nombre, puesto, correo, firma, telefono, telefono_2, capacita, permiso, color, cumpleanos, iniciales
+           FROM empleados
+          ORDER BY nombre ASC, id ASC`,
+        [],
+        mapLocalEmployeeRow,
+      );
       const currentYear = new Date().getFullYear();
-      const birthdayColumn = config.birthdayColumn || "CUMPLEAÑOS";
-      const birthdaySyncJobs = [];
       const normalized = rows.map((row) => {
         const employee = normalizeEmployee(row);
         if (!employee.rowId) return null;
 
-        const rawBirthday = String(getFlexibleValue(row, [birthdayColumn, "CUMPLEAÑOS", "Cumpleaños", "Cumpleanos", "BIRTHDAY", "Birthday", "FECHA NACIMIENTO", "Fecha Nacimiento"]) ?? "").trim();
+        const rawBirthday = String(getFlexibleValue(row, ["CUMPLEAÑOS", "Cumpleaños", "Cumpleanos", "BIRTHDAY", "Birthday", "FECHA NACIMIENTO", "Fecha Nacimiento"]) ?? "").trim();
         const normalizedBirthday = normalizeBirthdayValue(rawBirthday, currentYear);
         employee.cumpleanos = normalizedBirthday.value;
         employee.cumpleanosRaw = rawBirthday;
         employee.cumpleanosDate = normalizedBirthday.parsed;
-        if (normalizedBirthday.value && normalizedBirthday.parsed && normalizedBirthday.parsed.getFullYear() !== currentYear) {
-          birthdaySyncJobs.push(
-            appsheetAction({
-              table: config.table,
-              action: "Edit",
-              rows: [
-                {
-                  [config.keyColumn || "Row ID"]: employee.rowId,
-                  [birthdayColumn]: normalizedBirthday.value,
-                },
-              ],
-            }).catch((error) => {
-              console.warn("No se pudo actualizar CUMPLEAÑOS en EMPLEADOS:", error instanceof Error ? error.message : error);
-            })
-          );
-        }
 
         return employee;
       }).filter(Boolean);
-
-      if (birthdaySyncJobs.length > 0) {
-        void Promise.allSettled(birthdaySyncJobs).catch((error) => {
-          console.warn("No se pudieron actualizar algunos CUMPLEAÑOS en EMPLEADOS:", error instanceof Error ? error.message : error);
-        });
-      }
 
       const nameByKey = new Map();
       const initialsByKey = new Map();
@@ -1058,7 +1149,7 @@ async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
         rows: cacheEntry.rows,
       }, {
         ttlMs: EMPLOYEE_CACHE_TTL_MS,
-        source: "appsheet",
+        source: LOCAL_DB_SOURCE,
         meta: createRowsSnapshot(cacheEntry.rows, (row) => row?.rowId || row?.correo || ""),
       });
       EMPLOYEE_CACHE.nameByKey = nameByKey;
@@ -1074,7 +1165,6 @@ async function fetchEmployeesFromAppSheet(force = false, runAsUserEmail = "") {
 }
 
 async function fetchEmployeeByEmailFromAppSheet(email, runAsUserEmail = "") {
-  const config = getConfig();
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {
     return null;
@@ -1087,7 +1177,7 @@ async function fetchEmployeeByEmailFromAppSheet(email, runAsUserEmail = "") {
 
   const persistent = readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.employees, runAsUserEmail);
   if (persistent?.rows?.length) {
-    const persistentEmployee = persistent.rows.find((item) => item.correo === normalizedEmail);
+    const persistentEmployee = persistent.rows.find((item) => normalizeEmail(item.correo) === normalizedEmail);
     if (persistentEmployee) {
       return persistentEmployee;
     }
@@ -1095,7 +1185,7 @@ async function fetchEmployeeByEmailFromAppSheet(email, runAsUserEmail = "") {
 
   const sharedCached = getSharedCacheEntry(EMPLOYEE_CACHE);
   if (sharedCached?.rows?.length) {
-    const sharedEmployee = sharedCached.rows.find((item) => item.correo === normalizedEmail);
+    const sharedEmployee = sharedCached.rows.find((item) => normalizeEmail(item.correo) === normalizedEmail);
     if (sharedEmployee) {
       return sharedEmployee;
     }
@@ -1103,25 +1193,25 @@ async function fetchEmployeeByEmailFromAppSheet(email, runAsUserEmail = "") {
 
   const cached = getCachedEntry(EMPLOYEE_CACHE, runAsUserEmail);
   if (cached?.rows?.length) {
-    const cachedEmployee = cached.rows.find((item) => item.correo === normalizedEmail);
+    const cachedEmployee = cached.rows.find((item) => normalizeEmail(item.correo) === normalizedEmail);
     if (cachedEmployee) {
       return cachedEmployee;
     }
   }
 
-  const selector = `Filter(${config.table}, [${config.emailColumn}] = "${normalizedEmail.replaceAll('"', '""')}")`;
-  const data = await appsheetAction({
-    table: config.table,
-    action: "Find",
-    selector,
-    runAsUserEmail,
-  });
-  const rows = Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
-  if (!rows.length) {
+  const row = readLocalPortalRow(
+    `SELECT id, row_id, nombre, puesto, correo, firma, telefono, telefono_2, capacita, permiso, color, cumpleanos, iniciales
+       FROM empleados
+      WHERE lower(correo) = lower(?)
+      LIMIT 1`,
+    [normalizedEmail],
+    mapLocalEmployeeRow,
+  );
+  if (!row) {
     return null;
   }
 
-  const employee = normalizeEmployee(rows[0]);
+  const employee = normalizeEmployee(row);
   if (!employee.rowId) {
     return null;
   }
@@ -1131,19 +1221,215 @@ async function fetchEmployeeByEmailFromAppSheet(email, runAsUserEmail = "") {
     rows: [employee, ...(getPersistentCacheEntry(PORTAL_CACHE_NAMESPACES.employees, "shared", { allowStale: true })?.payload?.rows || []).filter((item) => item?.correo !== normalizedEmail)],
   }, {
     ttlMs: EMPLOYEE_CACHE_TTL_MS,
-    source: "appsheet",
+    source: LOCAL_DB_SOURCE,
     meta: createRowsSnapshot([employee], (row) => row?.rowId || row?.correo || ""),
   });
 
   return employee;
 }
 
-async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
-  const config = getConfig();
-  if (!config.appId || !config.accessKey) {
-    throw new Error("Faltan credenciales de AppSheet para el portal");
+function buildPersonCalendarInitials(value) {
+  const parts = String(value ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "";
+  const firstName = parts[0];
+  const firstSurname = parts.length >= 3 ? parts[parts.length - 2] : parts[1] || "";
+  return `${firstName[0] || ""}${firstSurname[0] || ""}`.toUpperCase();
+}
+
+function normalizeEmpresa(row = {}) {
+  const key = String(row.id || row.row_id || row.ID || row["Row ID"] || "").trim();
+  const razonSocial = String(row.razon_social || row["RAZON SOCIAL"] || "").trim();
+  const nombreComercial = String(row.nombre_comercial || row["NOMBRE COMERCIAL"] || razonSocial || key).trim();
+  return {
+    key,
+    razonSocial,
+    nombreComercial,
+    logo: String(row.logo_url || row.logo || row.LOGOURL || row.LOGO || "").trim(),
+    raw: row,
+  };
+}
+
+function parseOperationalDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const slash = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  if (slash) {
+    const first = Number(slash[1]);
+    const second = Number(slash[2]);
+    const year = Number(slash[3]);
+    const month = first > 12 ? second : first;
+    const day = first > 12 ? first : second;
+    return new Date(year, month - 1, day).getTime();
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+
+function deriveOperationalCapacitacionStatus(value) {
+  const timestamp = parseOperationalDate(value);
+  if (!timestamp) return "";
+  const date = new Date(timestamp);
+  const today = new Date();
+  date.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return today.getTime() > date.getTime() ? "FINALIZADA" : "PROGRAMADA";
+}
+
+function setLatestBySucursal(target, row, dateValue) {
+  const key = String(row?.sucursal_id || "").trim();
+  if (!key) return;
+  const score = parseOperationalDate(dateValue) || Number(row?.anio || 0);
+  const current = target.get(key);
+  if (!current || score >= current.score) target.set(key, { row, score });
+}
+
+function normalizeOperationalText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
+function isCompletedTrabajoStatus(value) {
+  return ["EN DRIVE", "IMPRESO", "ENTREGADO"].includes(normalizeOperationalText(value).trim());
+}
+
+function classifyPedidoType(row = {}) {
+  const description = normalizeOperationalText(`${row.descripcion || ""} ${row.descripcion_complementaria || ""}`);
+  if (/MUN(?:I|U)CIPAL/.test(description)) return "MUNICIPAL";
+  if (/\bEST(?:ATAL)?\b/.test(description)) return "ESTATAL";
+  if (description.includes("PIPC") && /CAPACITACION/.test(description)) return "ESTATAL";
+  return "";
+}
+
+function buildOperationalSucursalContext() {
+  const sucursales = getSucursalesLocalRows();
+  const sucursalById = new Map(sucursales.map((row) => [String(row.id || "").trim(), row]));
+  const latestEstatal = new Map();
+  const latestMunicipal = new Map();
+  for (const row of getEstatalesLocalRows()) {
+    if (isCompletedTrabajoStatus(row.pipc)) setLatestBySucursal(latestEstatal, row, row.fecha);
+  }
+  for (const row of getMunicipalesLocalRows()) {
+    if (isCompletedTrabajoStatus(row.plan_de_contingencia)) setLatestBySucursal(latestMunicipal, row, row.fecha);
   }
 
+  const latestPedidoEstatal = new Map();
+  const latestPedidoMunicipal = new Map();
+  const currentYear = new Date().getFullYear();
+  for (const row of getPedidosLeyLocalRows()) {
+    const key = String(row?.tienda || "").trim();
+    if (!key) continue;
+    const score = parseOperationalDate(row.fecha);
+    if (!score || new Date(score).getFullYear() !== currentYear) continue;
+    const type = classifyPedidoType(row);
+    const target = type === "ESTATAL" ? latestPedidoEstatal : type === "MUNICIPAL" ? latestPedidoMunicipal : null;
+    if (!target) continue;
+    const current = target.get(key);
+    if (!current || score >= current.score) target.set(key, { row, score });
+  }
+
+  const empleados = new Map();
+  for (const row of getEmpleadosLocalRows()) {
+    const name = String(row.nombre || "").trim();
+    for (const key of [row.row_id, row.id]) {
+      if (key) empleados.set(String(key).trim(), name || String(key).trim());
+    }
+  }
+  const capacitadoresByCapacitacion = new Map();
+  for (const bridge of getCapacitacionCapacitadoresLocalRows()) {
+    const capId = String(bridge.capacitacion_id || "").trim();
+    const empleadoId = String(bridge.empleado_id || "").trim();
+    if (!capId || !empleadoId) continue;
+    if (!capacitadoresByCapacitacion.has(capId)) capacitadoresByCapacitacion.set(capId, new Set());
+    capacitadoresByCapacitacion.get(capId).add(empleados.get(empleadoId) || empleadoId);
+  }
+  const capacitaciones = new Map(getCapacitacionesLocalRows().map((row) => [String(row.id || "").trim(), row]));
+  const latestCapacitacion = new Map();
+  for (const bridge of getCapacitacionSucursalesLocalRows()) {
+    const sucursalId = String(bridge.sucursal_id || "").trim();
+    const capId = String(bridge.capacitacion_id || "").trim();
+    const cap = capacitaciones.get(capId);
+    if (!sucursalId || !cap) continue;
+    const score = parseOperationalDate(cap.fecha_capacitacion);
+    const current = latestCapacitacion.get(sucursalId);
+    if (!current || score >= current.score) {
+      latestCapacitacion.set(sucursalId, {
+        row: cap,
+        score,
+        capacitadores: [...(capacitadoresByCapacitacion.get(capId) || [])],
+      });
+    }
+  }
+  const latestPcEstatal = readPcEstatalStatusBySucursal(new Date().getFullYear());
+  return { sucursalById, latestEstatal, latestMunicipal, latestPedidoEstatal, latestPedidoMunicipal, latestCapacitacion, latestPcEstatal };
+}
+
+function enrichSucursalesWithLocalCatalogs(rows = []) {
+  const municipios = new Map(readLocalRows("SELECT id, nombre, escudo FROM municipios").map((row) => [String(row.id), row]));
+  const estados = new Map(readLocalRows("SELECT id, nombre, escudo FROM estados").map((row) => [String(row.id), row]));
+  const empresas = new Map(readLocalRows("SELECT id, razon_social, nombre_comercial FROM empresas").map((row) => [String(row.id), row]));
+  const operational = buildOperationalSucursalContext();
+  return rows.map((sucursal) => {
+    const sucursalId = String(sucursal?.key || sucursal?.raw?.id || sucursal?.raw?.ID || "").trim();
+    const operationalRow = operational.sucursalById.get(sucursalId) || {};
+    const populatedOperationalRow = Object.fromEntries(Object.entries(operationalRow).filter(([, value]) => (
+      value !== null && value !== undefined && String(value).trim() !== ""
+    )));
+    const raw = { ...(sucursal?.raw || {}), ...populatedOperationalRow };
+    const empresaId = String(raw.empresa_id || raw.EMPRESA || raw["ID EMPRESA"] || "").trim();
+    const municipioId = String(raw.municipio_id || raw.MUNICIPIO || "").trim();
+    const estadoId = String(raw.estado_id || raw.ESTADO || "").trim();
+    const empresa = empresas.get(empresaId);
+    raw.empresa_nombre = String(empresa?.razon_social || raw.empresa_nombre || "").trim();
+    raw.empresa_nombre_comercial = String(empresa?.nombre_comercial || raw.empresa_nombre_comercial || "").trim();
+    const municipio = municipios.get(municipioId);
+    const estado = estados.get(estadoId);
+    raw.municipio_nombre = String(municipio?.nombre || raw.municipio_nombre || "").trim();
+    raw.municipio_escudo = String(municipio?.escudo || raw.municipio_escudo || "").trim();
+    raw.estado_nombre = String(estado?.nombre || raw.estado_nombre || "").trim();
+    raw.estado_escudo = String(estado?.escudo || raw.estado_escudo || "").trim();
+    const estatal = operational.latestEstatal.get(sucursalId)?.row;
+    const municipal = operational.latestMunicipal.get(sucursalId)?.row;
+    const pedidoEstatal = operational.latestPedidoEstatal.get(sucursalId)?.row;
+    const pedidoMunicipal = operational.latestPedidoMunicipal.get(sucursalId)?.row;
+    const capacitacion = operational.latestCapacitacion.get(sucursalId);
+    const pcEstatal = operational.latestPcEstatal.get(sucursalId);
+    raw.ultimo_pipc_estatal = String(estatal?.anio || estatal?.fecha || "").trim();
+    raw.estatus_pipc_estatal = String(estatal?.pipc || "").trim();
+    raw.ultimo_municipal = String(municipal?.anio || municipal?.fecha || "").trim();
+    raw.estatus_municipal = String(municipal?.plan_de_contingencia || "").trim();
+    raw.pedido_estatal = String(pedidoEstatal?.pedido || "").trim();
+    raw.fecha_pedido_estatal = String(pedidoEstatal?.fecha || "").trim();
+    raw.pedido_municipal = String(pedidoMunicipal?.pedido || "").trim();
+    raw.fecha_pedido_municipal = String(pedidoMunicipal?.fecha || "").trim();
+    if (pcEstatal) {
+      raw.pc_estatal_status = pcEstatal.status;
+      raw.pc_estatal_fecha = pcEstatal.registroFecha;
+      raw.pc_estatal_solicitud_id = pcEstatal.solicitudId;
+      raw.pc_estatal_motivo = pcEstatal.motivo;
+      raw.pc_estatal_vigencia = pcEstatal.vigenciaFecha;
+    }
+    if (capacitacion?.row) {
+      const capDate = String(capacitacion.row.fecha_capacitacion || "").trim();
+      raw.fecha_ultima_capacitacion = capDate;
+      raw.status_capacitacion = deriveOperationalCapacitacionStatus(capDate) || String(capacitacion.row.status || "").trim();
+      raw.capacitadores = capacitacion.capacitadores.join(", ") || String(raw.capacitadores || "").trim();
+    }
+    const displayLabel = String(raw.label || raw.label2 || raw.nombre || sucursal.displayLabel || sucursalId).trim();
+    return {
+      ...sucursal,
+      label: String(raw.label || sucursal.label || "").trim(),
+      label2: String(raw.label2 || sucursal.label2 || "").trim(),
+      name: String(raw.nombre || sucursal.name || "").trim(),
+      tienda: String(raw.tienda || sucursal.tienda || "").trim(),
+      displayLabel,
+      raw,
+    };
+  });
+}
+
+async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
   const now = Date.now();
   const sharedCached = getSharedCacheEntry(SUCURSAL_CACHE);
   if (!force && sharedCached?.rows?.length > 0 && now - sharedCached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
@@ -1170,14 +1456,26 @@ async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
     }
   }
 
-  const data = await appsheetAction({
-    table: config.sucursalesTable,
-    action: "Find",
-    selector: `Filter(${config.sucursalesTable}, true)`,
-    runAsUserEmail,
-  });
-
-  const rows = extractAppSheetDataRows(data);
+  const rows = readLocalPortalRows(
+    `SELECT id,
+            '' AS label,
+            '' AS label2,
+            nombre,
+            tienda,
+            empresa_id,
+            municipio_id,
+            estado_id,
+            COALESCE(direccion, '') AS direccion,
+            lat,
+            lng,
+            drive,
+            mes_planeacion,
+            capacitadores
+       FROM sucursales
+      ORDER BY tienda ASC, nombre ASC, id ASC`,
+    [],
+    mapLocalSucursalRow,
+  );
   const normalized = rows.map(normalizeSucursal).filter((sucursal) => sucursal.key);
   const labelByKey = new Map();
   const keyByLabel = new Map();
@@ -1204,7 +1502,7 @@ async function fetchSucursalesFromAppSheet(force = false, runAsUserEmail = "") {
     rows: cacheEntry.rows,
   }, {
     ttlMs: EMPLOYEE_CACHE_TTL_MS,
-    source: "appsheet",
+    source: LOCAL_DB_SOURCE,
     meta: createRowsSnapshot(cacheEntry.rows, (row) => row?.key || row?.id || ""),
   });
   SUCURSAL_CACHE.labelByKey = labelByKey;
@@ -1227,7 +1525,8 @@ function normalizeEmployee(row = {}) {
   const telefono = String(row[config.phoneColumn1] ?? row.TELEFONO ?? "").trim();
   const telefono2 = String(row[config.phoneColumn2] ?? row["TELEFONO 2"] ?? "").trim();
   const capacita = parseBoolean(row[config.capacitaColumn] ?? row.CAPACITA ?? false);
-  const role = resolveRole({ puesto, capacita });
+  const accessProfile = resolvePortalAccessProfile({ puesto, capacita });
+  const role = accessProfile.role;
 
   return {
     rowId,
@@ -1244,15 +1543,13 @@ function normalizeEmployee(row = {}) {
     capacita,
     cumpleanos: "",
     role,
+    accessProfile,
     raw: row,
   };
 }
 
 function resolveRole(employee) {
-  const puesto = normalizeText(employee?.puesto);
-  if (ADMIN_PUESTOS.has(puesto)) return "admin";
-  if (CAPACITADOR_PUESTOS.has(puesto) || employee?.capacita) return "capacitador";
-  return "sin-acceso";
+  return resolvePortalAccessProfile(employee).role;
 }
 
 function isAllowedRole(role) {
@@ -1268,6 +1565,7 @@ function buildSessionPayload(employee) {
     nombre: employee.nombre,
     puesto: employee.puesto,
     role: employee.role,
+    accessProfileKey: employee.accessProfile?.key || resolvePortalAccessProfile(employee).key,
     iat: now,
     exp: expiresAt,
   };
@@ -1375,12 +1673,13 @@ export function buildQaAccessEmployee() {
 
   const correo = QA_ACCESS_EMAIL || "qa-access@desarrolloeg.com";
   const puesto = QA_ACCESS_PUESTO || "MEJORA CONTINUA";
+  const accessProfile = resolvePortalAccessProfile({ puesto, capacita: false });
   return {
     rowId: QA_ACCESS_ROW_ID || "qa-access",
     correo,
     nombre: QA_ACCESS_NAME || "QA Admin",
     puesto,
-    role: "admin",
+    role: accessProfile.role,
     initials: buildInitialsFromName(QA_ACCESS_NAME || correo),
     color: "",
     calendarColor: "",
@@ -1390,6 +1689,7 @@ export function buildQaAccessEmployee() {
     telefono2: "",
     capacita: false,
     cumpleanos: "",
+    accessProfile,
     raw: null,
   };
 }
@@ -1447,6 +1747,10 @@ export async function loadAuthenticatedEmployee(req) {
     telefono2: "",
     capacita: payload.role === "capacitador",
     cumpleanos: "",
+    accessProfile: resolvePortalAccessProfile({
+      puesto: payload.puesto,
+      capacita: payload.role === "capacitador",
+    }),
     raw: null,
   };
 }
@@ -1581,15 +1885,91 @@ export async function listEmployeesForPortal({ runAsUserEmail = "" } = {}) {
   }
 }
 
+export async function listSucursalesForPortal({ runAsUserEmail = "" } = {}) {
+  try {
+    return enrichSucursalesWithLocalCatalogs(await fetchSucursalesFromAppSheet(false, runAsUserEmail));
+  } catch (error) {
+    const persistent = readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.sucursales, runAsUserEmail);
+    const rows = persistent?.rows || getSharedCacheEntry(SUCURSAL_CACHE)?.rows || [];
+    if (rows.length) return enrichSucursalesWithLocalCatalogs(rows);
+    console.warn("No se pudieron cargar las sucursales del portal:", error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+export async function listEmpresasForPortal() {
+  return readLocalRows(`
+    SELECT id, razon_social, nombre_comercial, logo
+    FROM empresas
+    ORDER BY COALESCE(NULLIF(nombre_comercial, ''), razon_social, id)
+  `).map(normalizeEmpresa).filter((empresa) => empresa.key);
+}
+
+export async function getEmpresaLogoForPortal(empresaId) {
+  const id = String(empresaId || "").trim();
+  if (!id) return null;
+  const row = readLocalRow("SELECT logo FROM empresas WHERE id = ? LIMIT 1", [id]);
+  const fileName = String(row?.logo_url || row?.logo || "").trim();
+  if (!fileName) return null;
+
+  const config = getConfig();
+  const sourceUrl = /^https?:\/\//i.test(fileName)
+    ? fileName
+    : `https://www.appsheet.com/template/gettablefileurl?appName=${encodeURIComponent(config.appId)}&tableName=EMPRESAS&fileName=${encodeURIComponent(fileName)}&ApplicationAccessKey=${encodeURIComponent(config.accessKey)}`;
+  const response = await fetchWithTimeout(sourceUrl, {
+    headers: { Accept: "image/*" },
+  });
+  if (!response.ok) return null;
+  return {
+    contentType: response.headers.get("content-type") || "image/png",
+    bytes: Buffer.from(await response.arrayBuffer()),
+  };
+}
+
+export async function getTerritoryShieldForPortal(kind, territoryId) {
+  const table = kind === "estado" ? "estados" : kind === "municipio" ? "municipios" : "";
+  const id = String(territoryId || "").trim();
+  if (!table || !id) return null;
+  const cacheKey = `${table}:${id}`;
+  if (TERRITORY_SHIELD_CACHE.has(cacheKey)) return TERRITORY_SHIELD_CACHE.get(cacheKey);
+  const row = readLocalRow(`SELECT nombre, escudo FROM ${table} WHERE id = ? LIMIT 1`, [id]);
+  const fileName = String(row?.escudo || "").trim();
+  if (!fileName) return null;
+  const config = getConfig();
+  const tableName = table === "estados" ? "ESTADOS" : "MUNICIPIOS";
+  const sourceUrl = /^https?:\/\//i.test(fileName)
+    ? fileName
+    : `https://www.appsheet.com/template/gettablefileurl?appName=${encodeURIComponent(config.appId)}&tableName=${tableName}&fileName=${encodeURIComponent(fileName)}&ApplicationAccessKey=${encodeURIComponent(config.accessKey)}`;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetchWithTimeout(sourceUrl, { headers: { Accept: "image/*" } });
+    if (response.ok) {
+      const shield = {
+        contentType: response.headers.get("content-type") || "image/png",
+        bytes: Buffer.from(await response.arrayBuffer()),
+      };
+      TERRITORY_SHIELD_CACHE.set(cacheKey, shield);
+      return shield;
+    }
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  const initials = String(row?.nombre || id).trim().slice(0, 2).toUpperCase().replace(/[<>&"']/g, "");
+  const fallback = {
+    contentType: "image/svg+xml",
+    bytes: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="18" fill="#eef3f8"/><path d="M48 14 78 25v22c0 19-12 30-30 36C30 77 18 66 18 47V25z" fill="#fff" stroke="#1a2a3a" stroke-width="3"/><text x="48" y="55" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="700" fill="#1a2a3a">${initials}</text></svg>`),
+  };
+  TERRITORY_SHIELD_CACHE.set(cacheKey, fallback);
+  return fallback;
+}
+
 function splitStatusValue(value) {
   const text = String(value ?? "").trim();
-  if (/^PROGRAMADA$/i.test(text)) {
+  if (/^-?\s*PROGRAMADA$/i.test(text)) {
     return { prefix: "", suffix: "PROGRAMADA" };
   }
-  if (/^FINALIZADA$/i.test(text)) {
+  if (/^-?\s*FINALIZADA$/i.test(text)) {
     return { prefix: "", suffix: "FINALIZADA" };
   }
-  const match = text.match(/^(.*)\s-\s(PROGRAMADA|FINALIZADA)$/i);
+  const match = text.match(/^(.*?)\s*-\s*(PROGRAMADA|FINALIZADA)$/i);
   if (!match) {
     return {
       prefix: text,
@@ -1605,23 +1985,17 @@ function splitStatusValue(value) {
 
 function getCapacitacionPrefix(row, employeeLookups) {
   const config = getConfig();
-  const currentStatus = String(row[config.capacitacionesStatusColumn] ?? "").trim();
-  const parsed = splitStatusValue(currentStatus);
-  if (parsed.prefix) {
-    return parsed.prefix;
-  }
-
   const assignedKeys = extractListTokens(row[config.capacitacionesCapacitadoresColumn]);
 
   if (!assignedKeys.length) {
     return "PENDIENTE";
   }
 
-  const initials = assignedKeys
-    .map((key) => employeeLookups.initialsByKey.get(key) || employeeLookups.nameByKey.get(key) || "")
-    .map((item) => buildInitialsFromName(item) || String(item).trim().toUpperCase())
-    .join("")
-    .trim();
+  const firstKey = assignedKeys[0];
+  const employeeName = employeeLookups.nameByKey.get(firstKey) || "";
+  const initials = buildPersonCalendarInitials(employeeName)
+    || employeeLookups.initialsByKey.get(firstKey)
+    || buildInitialsFromName(firstKey);
 
   return initials || "PENDIENTE";
 }
@@ -1722,6 +2096,12 @@ function normalizeCapacitacion(row, employeeLookups, sucursalLookups) {
   const cedeRaw = String(row[config.capacitacionesCedeColumn] ?? "").trim();
   const cedeResolved = resolveSucursalDisplay(cedeRaw, sucursalLookups);
   const sucursalesResolved = resolveSucursalDisplay(row[config.capacitacionesSucursalesColumn], sucursalLookups);
+  const derivedStatusSuffix = deriveCapacitacionStatusFromDate(dateObject);
+  const statusPrefix = getCapacitacionPrefix(row, employeeLookups);
+  const statusSuffix = derivedStatusSuffix || parsedStatus.suffix || "";
+  const statusLabel = statusSuffix
+    ? (statusPrefix && statusPrefix !== "PENDIENTE" ? `${statusPrefix} - ${statusSuffix}` : statusSuffix)
+    : (status ? status : "Sin estado");
 
   const uniqueAssignedKeys = [...new Set(assignedKeys)].sort((a, b) => a.localeCompare(b, "es"));
   const capacitadores = uniqueAssignedKeys.map((key) => {
@@ -1752,10 +2132,10 @@ function normalizeCapacitacion(row, employeeLookups, sucursalLookups) {
     sucursalesLabel: sucursalesResolved.display,
     sucursalesLabels: sucursalesResolved.labels,
     sucursalesTokens: sucursalesResolved.tokens,
-    status,
-    statusPrefix: parsedStatus.prefix || getCapacitacionPrefix(row, employeeLookups),
-    statusSuffix: parsedStatus.suffix || "",
-    statusLabel: parsedStatus.suffix || (status ? status : "Sin estado"),
+    status: statusLabel,
+    statusPrefix,
+    statusSuffix,
+    statusLabel,
     hasDiplomas: hasTruthyValue(diplomasValue),
     capacitadores,
     primaryCapacitadorColor: String(primaryCapacitador?.color || "").trim(),
@@ -1895,6 +2275,9 @@ function normalizeCalendarNote(row, employeeLookups, employees = []) {
     "COLOR",
     "Color",
   ])).trim() || pickCalendarColor(colorSeed, "#b45309");
+  const authorId = String(getFlexibleValue(row, ["AUTOR_ID", "autor_id"])).trim();
+  const authorName = String(getFlexibleValue(row, ["AUTOR_NOMBRE", "autor_nombre"])).trim();
+  const authorEmail = normalizeEmail(getFlexibleValue(row, ["AUTOR_CORREO", "autor_correo"]));
 
   return {
     rowId,
@@ -1903,6 +2286,10 @@ function normalizeCalendarNote(row, employeeLookups, employees = []) {
     dateLabel: parsedDate ? parsedDate.toLocaleDateString("es-MX") : dateValue,
     title: title || "Nota",
     notes,
+    author: authorName || authorEmail || "Sin autor registrado",
+    authorId,
+    authorName,
+    authorEmail,
     icon,
     employeeTokens,
     audienceAll,
@@ -1972,6 +2359,10 @@ export function buildCalendarNoteEvent(note, selectedEmployeeId, returnPath) {
       employeeNames: Array.isArray(note.employeeNames) ? note.employeeNames : [],
       employeeSummaries: Array.isArray(note.employeeSummaries) ? note.employeeSummaries : [],
       audienceAll: Boolean(note.audienceAll),
+      author: note.author || "Sin autor registrado",
+      authorId: note.authorId || "",
+      authorName: note.authorName || "",
+      authorEmail: note.authorEmail || "",
       primaryColor: note.color,
       accentColor: note.color,
     },
@@ -1979,11 +2370,6 @@ export function buildCalendarNoteEvent(note, selectedEmployeeId, returnPath) {
 }
 
 async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "") {
-  const config = getConfig();
-  if (!config.appId || !config.accessKey) {
-    throw new Error("Faltan credenciales de AppSheet para el portal");
-  }
-
   const now = Date.now();
   const sharedCached = getSharedCacheEntry(CAPACITACION_CACHE);
   if (!force && sharedCached?.rows?.length > 0 && now - sharedCached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
@@ -2003,17 +2389,35 @@ async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "
   }
 
   try {
-    const data = await appsheetAction({
-      table: config.capacitacionesTable,
-      action: "Find",
-      selector: `Filter(${config.capacitacionesTable}, true)`,
-      runAsUserEmail,
-    });
-
-    const rows = extractAppSheetDataRows(data);
+    const rows = readLocalPortalRows(
+      `SELECT c.id,
+              c.id AS row_id,
+              c.fecha_capacitacion,
+              c.cede_sucursal_id,
+              c.cede_sucursal_id AS cede_nombre,
+              c.status,
+              c.hora_inicio,
+              c.hora_fin,
+              c.diplomas,
+              c.notas,
+              COALESCE((
+                SELECT group_concat(cs.sucursal_id, ', ')
+                  FROM capacitacion_sucursales cs
+                 WHERE cs.capacitacion_id = c.id
+              ), '') AS sucursales_text,
+              COALESCE((
+                SELECT group_concat(cc.empleado_id, ', ')
+                  FROM capacitacion_capacitadores cc
+                 WHERE cc.capacitacion_id = c.id
+              ), '') AS capacitadores_text
+         FROM capacitaciones c
+        ORDER BY c.fecha_capacitacion ASC, c.id ASC`,
+      [],
+      mapLocalCapacitacionRow,
+    );
     await Promise.allSettled([
-      fetchEmployeesFromAppSheet(false, runAsUserEmail),
-      fetchSucursalesFromAppSheet(false, runAsUserEmail),
+      fetchEmployeesFromAppSheet(true, runAsUserEmail),
+      fetchSucursalesFromAppSheet(true, runAsUserEmail),
     ]);
     const employeeLookups = {
       nameByKey: EMPLOYEE_CACHE.nameByKey,
@@ -2038,9 +2442,10 @@ async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "
       rows: normalized,
     }, {
       ttlMs: EMPLOYEE_CACHE_TTL_MS,
-      source: "appsheet",
+      source: LOCAL_DB_SOURCE,
       meta: createRowsSnapshot(normalized, (row) => row?.rowId || row?.id || ""),
     });
+    clearDashboardCache();
     return normalized;
   } catch (error) {
     const sharedCached = getSharedCacheEntry(CAPACITACION_CACHE);
@@ -2059,11 +2464,6 @@ async function fetchCapacitacionesFromAppSheet(force = false, runAsUserEmail = "
 }
 
 async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = "") {
-  const config = getConfig();
-  if (!config.appId || !config.accessKey) {
-    throw new Error("Faltan credenciales de AppSheet para el portal");
-  }
-
   const now = Date.now();
   const sharedCached = getSharedCacheEntry(CALENDAR_NOTE_CACHE);
   if (!force && sharedCached?.rows?.length > 0 && now - sharedCached.loadedAt < EMPLOYEE_CACHE_TTL_MS) {
@@ -2082,39 +2482,27 @@ async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = ""
     }
   }
 
-  if (!config.calendarNotesTable) {
-    setCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail, {
-      loadedAt: now,
-      rows: [],
-    });
-    setSharedCacheEntry(CALENDAR_NOTE_CACHE, {
-      loadedAt: now,
-      rows: [],
-    });
-    return [];
-  }
-
   const employees = await fetchEmployeesFromAppSheet(false, runAsUserEmail);
-  let normalized = [];
-  try {
-    const data = await appsheetAction({
-      table: config.calendarNotesTable,
-      action: "Find",
-      selector: `Filter(${config.calendarNotesTable}, true)`,
-      runAsUserEmail,
-    });
-    const rows = extractAppSheetDataRows(data);
-    const employeeLookups = {
-      nameByKey: EMPLOYEE_CACHE.nameByKey,
-      initialsByKey: EMPLOYEE_CACHE.initialsByKey,
-    };
-    normalized = rows
-      .map((row) => normalizeCalendarNote(row, employeeLookups, employees))
-      .filter((item) => item.rowId);
-  } catch (error) {
-    console.warn("No se pudieron leer las notas del calendario:", error instanceof Error ? error.message : error);
-    normalized = [];
-  }
+  const rows = readLocalPortalRows(
+    `SELECT c.id, c.fecha, c.icono, c.titulo, c.notas, c.color,
+            ca.creado_por_id, ca.creado_por_nombre, ca.creado_por_correo,
+            group_concat(ce.empleado_id, ', ') AS empleados
+       FROM calendario c
+       LEFT JOIN calendario_empleados ce ON ce.calendario_id = c.id
+       LEFT JOIN calendario_autores ca ON ca.calendario_id = c.id
+      GROUP BY c.id, c.fecha, c.icono, c.titulo, c.notas, c.color,
+               ca.creado_por_id, ca.creado_por_nombre, ca.creado_por_correo
+      ORDER BY c.fecha ASC, c.id ASC`,
+    [],
+    mapLocalCalendarNoteRow,
+  );
+  const employeeLookups = {
+    nameByKey: EMPLOYEE_CACHE.nameByKey,
+    initialsByKey: EMPLOYEE_CACHE.initialsByKey,
+  };
+  const normalized = rows
+    .map((row) => normalizeCalendarNote(row, employeeLookups, employees))
+    .filter((item) => item.rowId);
 
   setCachedEntry(CALENDAR_NOTE_CACHE, runAsUserEmail, {
     loadedAt: now,
@@ -2129,9 +2517,10 @@ async function fetchCalendarNotesFromAppSheet(force = false, runAsUserEmail = ""
     rows: normalized,
   }, {
     ttlMs: EMPLOYEE_CACHE_TTL_MS,
-    source: "appsheet",
+    source: LOCAL_DB_SOURCE,
     meta: createRowsSnapshot(normalized, (row) => row?.rowId || row?.id || ""),
   });
+  clearDashboardCache();
   return normalized;
 }
 
@@ -2172,8 +2561,10 @@ async function saveCalendarNote(noteData, runAsUserEmail = "") {
     [config.calendarNotesColorColumn || "COLOR"]: color,
   };
 
+  const savedRowId = currentRowId || String(payload[config.calendarNotesKeyColumn || "ID"] || crypto.randomUUID()).trim();
+  payload[config.calendarNotesKeyColumn || "ID"] = savedRowId;
+
   if (currentRowId) {
-    payload[config.calendarNotesKeyColumn || "ID"] = currentRowId;
     await appsheetAction({
       table: config.calendarNotesTable,
       action: "Edit",
@@ -2181,7 +2572,6 @@ async function saveCalendarNote(noteData, runAsUserEmail = "") {
       runAsUserEmail,
     });
   } else {
-    payload[config.calendarNotesKeyColumn || "ID"] = crypto.randomUUID();
     await appsheetAction({
       table: config.calendarNotesTable,
       action: "Add",
@@ -2189,6 +2579,8 @@ async function saveCalendarNote(noteData, runAsUserEmail = "") {
       runAsUserEmail,
     });
   }
+
+  upsertCalendarNoteAuthor(savedRowId, noteData?.author, { isNew: !currentRowId });
 
   await fetchCalendarNotesFromAppSheet(true, runAsUserEmail);
   return payload;
@@ -2216,7 +2608,21 @@ export async function getCapacitacionesDashboardData({ viewer = null, selectedEm
   const employees = employeesResult.status === "fulfilled" ? employeesResult.value : (readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.employees, runAsUserEmail)?.rows || []);
   const calendarNotesRows = calendarNotesResult.status === "fulfilled" ? calendarNotesResult.value : (readCachedRowsFromPersistent(PORTAL_CACHE_NAMESPACES.calendarNotes, runAsUserEmail)?.rows || []);
 
-  const visible = rows.filter((row) => {
+  const localThreadNotes = listPortalNoteEntries({
+    entityType: "capacitacion",
+    entityIds: rows.map((row) => row.rowId),
+  });
+  const notesByCapacitacion = new Map();
+  localThreadNotes.forEach((note) => {
+    if (!notesByCapacitacion.has(note.entityId)) notesByCapacitacion.set(note.entityId, []);
+    notesByCapacitacion.get(note.entityId).push(note);
+  });
+  const enrichedRows = rows.map((row) => ({
+    ...row,
+    threadNotes: notesByCapacitacion.get(row.rowId) || [],
+  }));
+
+  const visible = enrichedRows.filter((row) => {
     if (viewerRole === "admin") {
       if (selectedRole === "capacitador" && selectedRowId) {
         return capacitacionMatchesEmployee(row.raw, selectedEmployee, {
@@ -2250,7 +2656,7 @@ export async function getCapacitacionesDashboardData({ viewer = null, selectedEm
       return aDate - bDate;
     });
 
-  const calendarCapacitaciones = rows
+  const calendarCapacitaciones = enrichedRows
     .filter((row) => row.dateRaw)
     .sort((a, b) => {
       const aDate = new Date(a.dateRaw || 0);
@@ -2442,6 +2848,8 @@ export async function deleteCalendarNote(noteData, runAsUserEmail = "") {
     runAsUserEmail,
   });
 
+  deleteCalendarNoteAuthor(rowId);
+
   await fetchCalendarNotesFromAppSheet(true, runAsUserEmail);
   return { rowId };
 }
@@ -2468,9 +2876,32 @@ export function getEmployeeSummary(employee) {
     telefono2: employee.telefono2 || "",
     cumpleanos: employee.cumpleanos || "",
     role: employee.role,
+    accessProfile: employee.accessProfile || resolvePortalAccessProfile(employee),
     capacita: employee.capacita,
     initials: employee.initials || buildInitialsFromName(employee.nombre),
   };
+}
+
+export function createPortalNoteEntry({ entityType, entityId, body, author, mentions = [] } = {}) {
+  const note = createLocalPortalNoteEntry({ entityType, entityId, body, author, mentions });
+  clearDashboardCache();
+  return note;
+}
+
+export function listPortalNotes(filters = {}) {
+  return listPortalNoteEntries(filters);
+}
+
+export function updatePortalNoteEntry(noteId, body) {
+  const note = updateLocalPortalNoteEntry(noteId, body);
+  clearDashboardCache();
+  return note;
+}
+
+export function deletePortalNoteEntry(noteId) {
+  const result = deleteLocalPortalNoteEntry(noteId);
+  clearDashboardCache();
+  return result;
 }
 
 export function getPortalMeta() {

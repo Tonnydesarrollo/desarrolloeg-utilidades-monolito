@@ -12,7 +12,7 @@ function toNumber(v) {
 function wrapDriveUrl(url) {
   if (!url) return "";
   const str = String(url);
-  if (!/drive\.google\.com/i.test(str)) return str;
+  if (!/(?:drive\.google\.com|appsheet\.com)/i.test(str)) return str;
   const encoded = encodeURIComponent(str);
   return `/cotizaciones/img-proxy?url=${encoded}`;
 }
@@ -111,7 +111,14 @@ export function construirDataHTML(json) {
   );
 
   // ðŸ¬ LOGO DEL CLIENTE
-  const logoCliente = wrapDriveUrl(json.empresa.logoUrl || "");
+  // AppSheet guarda la mayoria de los logos como rutas de archivo, no como URLs publicas.
+  const logoClienteRaw = String(json.empresa.logoUrl || json.empresa.logo || "").trim();
+  const empresaId = String(json.empresa.id || json.empresaId || "").trim();
+  const logoCliente = /^https?:\/\//i.test(logoClienteRaw)
+    ? wrapDriveUrl(logoClienteRaw)
+    : logoClienteRaw && empresaId
+      ? `/dashboard/empresas/${encodeURIComponent(empresaId)}/logo`
+      : "";
 
   const firma = json.firma ? { ...json.firma } : null;
   if (firma?.firmaUrl) {
@@ -121,7 +128,7 @@ export function construirDataHTML(json) {
   return {
     logoEmisor,
     logoCliente,
-    empresaId: json.empresaId || "",
+    empresaId,
 
     empresa: {
       nombreComercial: json.empresa.nombreComercial || "",

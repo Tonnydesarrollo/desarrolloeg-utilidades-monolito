@@ -348,3 +348,10 @@ Para mover el monolito completo a otra PC:
 5. Ejecuta `docker compose up -d --build`.
 
 Si no copias `runtime/`, los jobs reconstruyen su estado local y WhatsApp pedira QR otra vez.
+
+## Documentacion de producto
+
+- [Arquitectura del portal y tiempo real](docs/arquitectura-portal-modulos-tiempo-real.md)
+- [Auditoria UI/UX y requerimientos de negocio 2026-08-28](docs/auditoria-uiux-requerimientos-2026-08-28.md)
+
+La pagina principal autenticada es `/dashboard` y abre el calendario. El shell compartido conserva las rutas de cada modulo y filtra la navegacion con las capacidades del usuario.

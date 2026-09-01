@@ -8,6 +8,7 @@ import * as cheerio from "cheerio";
 import {
   getCasaLeyPendingSyncRows,
   markCasaLeyRowsSyncState,
+  mirrorCasaLeyTablesToSyncDb,
   persistCasaLeyLocalRows,
 } from "../../services/localAppsheetDb.js";
 import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from "../../services/localReplica.js";
@@ -355,6 +356,20 @@ function ensureKey(rows, keyColumnName) {
     if (!existing) output[keyColumnName] = computeStableKey(output, keyColumnName);
     return output;
   });
+}
+
+export function mergeCasaLeyRowsWithReplica(rows = [], replicaRows = {}, keyField = "") {
+  const merged = new Map();
+  for (const entry of Object.values(replicaRows || {})) {
+    const row = entry?.row && typeof entry.row === "object" ? entry.row : null;
+    const key = cleanText(row?.[keyField] ?? "");
+    if (row && key) merged.set(key, row);
+  }
+  for (const row of rows || []) {
+    const key = cleanText(row?.[keyField] ?? "");
+    if (key) merged.set(key, row);
+  }
+  return [...merged.values()];
 }
 
 function sanitizeRowValuesOnly(row) {
@@ -1684,18 +1699,9 @@ async function runCasaleyJob(options = {}) {
   const pagosReplicaPath = resolveReplicaFile(config, "pagos");
   const relacionadosReplicaPath = resolveReplicaFile(config, "relacionados");
   const facturasReplicaPath = resolveReplicaFile(config, "facturas");
-  const [pagosExistingRows, relacionadosExistingRows, facturasExistingRows] = !config.incrementalSync || FORCE_RESYNC
-    ? (config.shouldUpload.pagos || config.shouldUpload.relacionados || config.shouldUpload.facturas
-      ? await Promise.all([
-          config.shouldUpload.pagos ? loadAppSheetRows(config, config.tablaPagos) : [],
-          config.shouldUpload.relacionados ? loadAppSheetRows(config, config.tablaRelacionados) : [],
-          config.shouldUpload.facturas ? loadAppSheetRows(config, config.tablaFacturas) : [],
-        ])
-      : [[], [], []])
-    : [[], [], []];
-  const pagosExistingRowsForLookup = config.shouldUpload.pagos
-    ? (pagosExistingRows.length ? pagosExistingRows : await loadAppSheetRows(config, config.tablaPagos))
-    : [];
+  const pagosReplica = loadReplica(pagosReplicaPath);
+  const relacionadosReplica = loadReplica(relacionadosReplicaPath);
+  const facturasReplica = loadReplica(facturasReplicaPath);
   const relacionadosPrepared = executionPlan.relacionados && config.relacionadosKey
     ? ensureKey(prepareUploadRows(allRelacionados), config.relacionadosKey)
     : executionPlan.relacionados
@@ -1708,32 +1714,20 @@ async function runCasaleyJob(options = {}) {
   if (executionPlan.pagos) writeCsv(pagosPrepared, path.join(config.outputDir, "pagos_ALL.csv"));
   if (executionPlan.relacionados) writeCsv(relacionadosPrepared, path.join(config.outputDir, "relacionados_ALL.csv"));
   if (executionPlan.facturas) writeCsv(facturasPrepared, path.join(config.outputDir, "facturas_ALL.csv"));
-  const pagosKnownLookup = config.shouldUpload.pagos ? buildExistingRowIndex(pagosExistingRowsForLookup, config.pagosKey) : new Map();
-  const relacionadosKnownLookup = config.shouldUpload.relacionados && config.incrementalSync && !FORCE_RESYNC
-    ? buildKnownKeySet(loadReplica(relacionadosReplicaPath).rows, config.relacionadosKey)
-    : config.shouldUpload.relacionados
-      ? buildExistingRowIndex(relacionadosExistingRows, config.relacionadosKey)
-      : new Map();
-  const facturasKnownLookup = config.shouldUpload.facturas && config.incrementalSync && !FORCE_RESYNC
-    ? buildKnownKeySet(loadReplica(facturasReplicaPath).rows, config.facturasKey)
-    : config.shouldUpload.facturas
-      ? buildExistingRowIndex(facturasExistingRows, config.facturasKey)
-      : new Map();
-
   const pagosDiff = config.shouldUpload.pagos && (FORCE_RESYNC || !config.pagosKey)
     ? { changedRows: pagosSelected, unchangedRows: [], rowsWithoutKey: [] }
     : config.shouldUpload.pagos
-      ? diffRowsAgainstReplica(pagosSelected, config.pagosKey, loadReplica(pagosReplicaPath).rows)
+      ? diffRowsAgainstReplica(pagosSelected, config.pagosKey, pagosReplica.rows)
       : { changedRows: [], unchangedRows: [], rowsWithoutKey: [] };
   const relacionadosDiff = config.shouldUpload.relacionados && (FORCE_RESYNC || !config.relacionadosKey)
     ? { changedRows: relacionadosSelected, unchangedRows: [], rowsWithoutKey: [] }
     : config.shouldUpload.relacionados
-      ? diffRowsAgainstReplica(relacionadosSelected, config.relacionadosKey, loadReplica(relacionadosReplicaPath).rows)
+      ? diffRowsAgainstReplica(relacionadosSelected, config.relacionadosKey, relacionadosReplica.rows)
       : { changedRows: [], unchangedRows: [], rowsWithoutKey: [] };
   const facturasDiff = config.shouldUpload.facturas && (FORCE_RESYNC || !config.facturasKey)
     ? { changedRows: facturasSelected, unchangedRows: [], rowsWithoutKey: [] }
     : config.shouldUpload.facturas
-      ? diffRowsAgainstReplica(facturasSelected, config.facturasKey, loadReplica(facturasReplicaPath).rows)
+      ? diffRowsAgainstReplica(facturasSelected, config.facturasKey, facturasReplica.rows)
       : { changedRows: [], unchangedRows: [], rowsWithoutKey: [] };
 
   if (config.shouldUpload.pagos) writeCsv(pagosDiff.changedRows, path.join(config.outputDir, "pagos_to_upload.csv"));
@@ -1776,11 +1770,12 @@ async function runCasaleyJob(options = {}) {
   }
 
   const localPersist = persistCasaLeyLocalRows({
-    pagosRows: pagosPrepared,
-    relacionadosRows: relacionadosPrepared,
-    facturasRows: facturasPrepared,
+    pagosRows: mergeCasaLeyRowsWithReplica(pagosPrepared, pagosReplica.rows, config.pagosKey || pagosReplica.keyField || "Referencia de pago"),
+    relacionadosRows: mergeCasaLeyRowsWithReplica(relacionadosPrepared, relacionadosReplica.rows, config.relacionadosKey || relacionadosReplica.keyField || "Referencia"),
+    facturasRows: mergeCasaLeyRowsWithReplica(facturasPrepared, facturasReplica.rows, config.facturasKey || facturasReplica.keyField || "Folio Uuid"),
   });
   summary.local = localPersist;
+  summary.localReplica = mirrorCasaLeyTablesToSyncDb();
 
   if (config.shouldUpload.pagos) {
     summary.uploads.pagos = await uploadCasaLeyPendingScope(config, "pagos");

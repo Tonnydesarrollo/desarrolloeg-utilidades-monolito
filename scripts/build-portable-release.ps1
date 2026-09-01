@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$syncRepoRoot = Resolve-Path (Join-Path $repoRoot "..\appsheet_local_sync")
 if (-not $OutputDir) {
   $OutputDir = Join-Path $repoRoot "release"
 }
@@ -52,10 +53,13 @@ Assert-FileExists (Join-Path $repoRoot "docker-compose.portable.yml")
 Assert-FileExists (Join-Path $repoRoot ".env.docker")
 Assert-FileExists (Join-Path $repoRoot "scripts\apply-portable-release.ps1")
 Assert-FileExists (Join-Path $repoRoot "Dockerfile")
+Assert-FileExists (Join-Path $syncRepoRoot "data\desarrolloeg.sqlite")
 
 Copy-Item -LiteralPath (Join-Path $repoRoot "docker-compose.portable.yml") -Destination (Join-Path $stageDir "docker-compose.yml") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot ".env.docker") -Destination (Join-Path $stageDir ".env.docker") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "scripts\apply-portable-release.ps1") -Destination (Join-Path $stageDir "apply-portable-release.ps1") -Force
+Ensure-Directory (Join-Path $stageDir "seed-data")
+Copy-Item -LiteralPath (Join-Path $syncRepoRoot "data\desarrolloeg.sqlite") -Destination (Join-Path $stageDir "seed-data\desarrolloeg.sqlite") -Force
 
 $secretsSourceDir = Join-Path $repoRoot "secrets"
 $secretsTargetDir = Join-Path $stageDir "secrets"
@@ -71,6 +75,15 @@ try {
   & $dockerExe build -t $monolitoImage -f (Join-Path $repoRoot "Dockerfile") $repoRoot
   if ($LASTEXITCODE -ne 0) {
     throw "docker build fallo con codigo $LASTEXITCODE"
+  }
+
+  if ($IncludeSyncImage) {
+    $syncImage = "desarrolloeg-appsheet-local-sync:latest"
+    Write-Line "Reconstruyendo imagen: $syncImage"
+    & $dockerExe build -t $syncImage -f (Join-Path $syncRepoRoot "Dockerfile.desarrolloeg") $syncRepoRoot
+    if ($LASTEXITCODE -ne 0) {
+      throw "docker build sync fallo con codigo $LASTEXITCODE"
+    }
   }
 } finally {
   [Environment]::SetEnvironmentVariable("DOCKER_BUILDKIT", $previousBuildKit, "Process")
@@ -96,6 +109,7 @@ Contenido:
 - .env.docker
 - desarrolloeg-images.tar
 - apply-portable-release.ps1
+- seed-data/desarrolloeg.sqlite
 
 Notas:
 - cloudflared ya corre dentro de la imagen del monolito.

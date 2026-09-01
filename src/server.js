@@ -1,9 +1,34 @@
+import fs from "fs";
+import path from "path";
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { startClusterCoordinator } from "./services/clusterCoordinator.js";
 import { warmPlaneacionBranchesCache } from "./modules/planeacion/planeacion.router.js";
 import { stopBackgroundServices } from "./services/backgroundServices.js";
 import { bootstrapAppShellCaches } from "./services/appShellAuditReconciler.js";
+
+function ensureRuntimeDirectories() {
+  const runtimeRoot = path.resolve(process.env.RUNTIME_DIR || path.join(process.cwd(), "runtime"));
+  const dirs = [
+    runtimeRoot,
+    process.env.RUNTIME_LOGS_DIR || path.join(runtimeRoot, "logs"),
+    path.dirname(process.env.PLATFORM_CACHE_DB_PATH || path.join(runtimeRoot, "cache", "platform-cache.sqlite")),
+    process.env.FACTURAS_NATIVE_DUMP_DIR || path.join(runtimeRoot, "jobs", "facturas"),
+    process.env.PEDIDOS_OUTPUT_DIR || path.join(runtimeRoot, "jobs", "pedidos"),
+    process.env.CASALEY_OUTPUT_DIR || path.join(runtimeRoot, "jobs", "casaley"),
+  ];
+
+  for (const dir of dirs) {
+    if (!dir) continue;
+    try {
+      fs.mkdirSync(path.resolve(dir), { recursive: true });
+    } catch (error) {
+      console.warn("[monolito] no se pudo preparar directorio runtime:", dir, error instanceof Error ? error.message : error);
+    }
+  }
+}
+
+ensureRuntimeDirectories();
 
 const app = createApp();
 

@@ -10,6 +10,12 @@ import { classifyJobFailure, executeTrackedJob, getJobExecutionHistory, getLates
 import { getJobConfigurationState } from './services/jobRegistry.js';
 import { canRunSingletonServices, getClusterCoordinatorStatus } from '../../services/clusterCoordinator.js';
 import { enviarPedidosManual, normalizePedidoRow } from './native/pedidos/manualAppsheet.service.js';
+import {
+  deleteEstatalesLocalRows,
+  deleteMunicipalesLocalRows,
+  upsertEstatalesLocalRows,
+  upsertMunicipalesLocalRows,
+} from './services/localAppsheetDb.js';
 
 export const jobsRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -261,7 +267,7 @@ function renderRealtimeLogsHtml(files, selectedFile) {
       });
     }
   </script>
-  <script src="/ui/portal-shell.js?v=20260824" defer></script>
+  <script src="/ui/portal-shell.js?v=20260901b" defer></script>
 </body>
 </html>`;
 }
@@ -365,7 +371,7 @@ function buildJobsLandingHtml(view) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Jobs operativos | Desarrollo EG</title>
-    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
+  <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
     <style>
       * { box-sizing: border-box; }
       body.portal-shell.portal-jobs main.page { max-width: 1440px; }
@@ -636,7 +642,7 @@ function buildJobsLandingHtml(view) {
         </details>
       </section>
     </main>
-    <script src="/ui/portal-shell.js?v=20260824" defer></script>
+    <script src="/ui/portal-shell.js?v=20260901b" defer></script>
   </body>
 </html>`; 
 }
@@ -708,6 +714,57 @@ function updateManualPedidoJob(jobId, patch) {
   const next = { ...current, ...patch, updatedAt: new Date().toISOString() };
   manualPedidoJobs.set(jobId, next);
   return next;
+}
+
+function normalizeWebhookTable(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizeWebhookOperation(value) {
+  const operation = normalizeWebhookTable(value);
+  if (["DELETE", "DELETED", "ELIMINAR", "ELIMINADO"].includes(operation)) return "Delete";
+  if (["ADD", "ADDED", "INSERT", "INSERTAR", "AGREGAR", "NUEVO"].includes(operation)) return "Add";
+  return "Edit";
+}
+
+function getWebhookRows(body = {}) {
+  if (Array.isArray(body?.Rows)) return body.Rows;
+  if (Array.isArray(body?.rows)) return body.rows;
+  if (Array.isArray(body?.RowsToUpdate)) return body.RowsToUpdate;
+  if (Array.isArray(body?.rowsToUpdate)) return body.rowsToUpdate;
+  if (Array.isArray(body?.row)) return body.row;
+  if (body?.row && typeof body.row === "object") return [body.row];
+  if (body?.Row && typeof body.Row === "object") return [body.Row];
+  if (body && typeof body === "object") return [body];
+  return [];
+}
+
+function getWebhookRowKey(row = {}, fallback = "") {
+  const keys = ["row_id", "Row ID", "ROW ID", "Row Id", "id", "ID", "_RowNumber", "_ROWNUMBER"];
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+  }
+  return String(fallback || "").trim();
+}
+
+function isAuthorizedAppSheetWebhook(req) {
+  const expected = String(process.env.APPSHEET_WEBHOOK_SECRET || "").trim();
+  if (!expected) return true;
+  const provided = String(
+    req.get("x-appsheet-webhook-secret")
+    || req.get("x-webhook-secret")
+    || req.query?.secret
+    || req.body?.secret
+    || "",
+  ).trim();
+  return provided === expected;
 }
 
 jobsRouter.get('/', (_req, res) => {
@@ -910,6 +967,51 @@ jobsRouter.post('/pedidos/manual/import', upload.single('file'), async (req, res
     });
   }
 });
+
+jobsRouter.post('/appsheet/webhook', (req, res) => {
+  if (!isAuthorizedAppSheetWebhook(req)) {
+    return res.status(401).json({ ok: false, error: 'Webhook no autorizado.' });
+  }
+
+  const table = normalizeWebhookTable(req.body?.table || req.body?.tabla || req.body?.TableName || req.body?.Table || req.query?.table);
+  const operation = normalizeWebhookOperation(req.body?.operation || req.body?.operacion || req.body?.action || req.body?.Action || req.query?.operation);
+  const rows = getWebhookRows(req.body)
+    .map((row) => (row && typeof row === "object" ? row : null))
+    .filter(Boolean);
+  const explicitKey = String(req.body?.key || req.body?.Key || req.query?.key || "").trim();
+
+  try {
+    if (table === "ESTATALES") {
+      if (operation === "Delete") {
+        const keys = rows.map((row) => getWebhookRowKey(row, explicitKey)).filter(Boolean);
+        const deleted = deleteEstatalesLocalRows(keys);
+        return res.json({ ok: true, table, operation, rows: rows.length, deleted });
+      }
+      upsertEstatalesLocalRows(rows);
+      return res.json({ ok: true, table, operation, rows: rows.length });
+    }
+
+    if (table === "MUNICIPALES") {
+      if (operation === "Delete") {
+        const keys = rows.map((row) => getWebhookRowKey(row, explicitKey)).filter(Boolean);
+        const deleted = deleteMunicipalesLocalRows(keys);
+        return res.json({ ok: true, table, operation, rows: rows.length, deleted });
+      }
+      upsertMunicipalesLocalRows(rows);
+      return res.json({ ok: true, table, operation, rows: rows.length });
+    }
+
+    return res.status(400).json({ ok: false, error: 'Tabla no soportada por este webhook.', table });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      table,
+      operation,
+      error: error instanceof Error ? error.message : 'Error desconocido',
+    });
+  }
+});
+
 jobsRouter.post('/:jobId/run', async (req, res) => {
   const jobId = String(req.params.jobId || "").trim();
   const forceValue = String(req.query?.force ?? req.body?.force ?? "").trim().toLowerCase();

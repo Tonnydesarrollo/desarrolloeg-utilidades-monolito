@@ -64,7 +64,7 @@ function ensureJobsRegistered() {
       process.env.FACTURAS_SYNC_INTERVAL_SECONDS,
       parsePositiveMinutes(process.env.FACTURAS_SYNC_INTERVAL_MINUTES, 1) * 60
     ),
-    runOnStart: parseBoolean(process.env.FACTURAS_SYNC_RUN_ON_START, true),
+    runOnStart: parseBoolean(process.env.FACTURAS_SYNC_RUN_ON_START, false),
   });
 
   registerIntervalJob({

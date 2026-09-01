@@ -198,7 +198,12 @@ function shouldCachePlaneacionAsset(filePath) {
 }
 
 function sendPlaneacionHtml(res) {
-  res.sendFile(path.join(publicDir, 'index.html'));
+  const filePath = path.join(publicDir, 'index.html');
+  const html = fs.readFileSync(filePath, 'latin1')
+    .replaceAll('/ui/portal-shell.css?v=20260825', '/ui/portal-shell.css?v=20260828a')
+    .replace(/<\/body>/i, '  <script src="/ui/portal-shell.js?v=20260901b" defer></script>\n</body>');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.type('html').send(html);
 }
 
 planeacionApiRouter.get('/branches', async (_req, res) => {

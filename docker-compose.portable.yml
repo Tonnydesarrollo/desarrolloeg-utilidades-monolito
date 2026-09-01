@@ -16,6 +16,7 @@ services:
       FACTURACION_GOOGLE_CREDENTIALS_PATH: /app/secrets/facturacion/credentials.json
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
       FACTURAS_NATIVE_DUMP_DIR: /app/runtime/jobs/facturas
+      FACTURAS_SYNC_RUN_ON_START: ${FACTURAS_SYNC_RUN_ON_START:-0}
       DESARROLLOEG_LOCAL_DB_PATH: /app/runtime/jobs/pedidos-local.sqlite
       PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
       PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json
@@ -44,7 +45,7 @@ services:
     volumes:
       - ./runtime:/app/runtime
       - ./secrets:/app/secrets:ro
-      - ../appsheet_local_sync/data:/app/desarrolloeg-sync-data
+      - ${DESARROLLOEG_PORTABLE_DATA_DIR:-./data}:/app/desarrolloeg-sync-data
 
   desarrolloeg-sync:
     image: desarrolloeg-appsheet-local-sync:latest
@@ -58,7 +59,7 @@ services:
       DESARROLLOEG_RECONCILE_INTERVAL_MINUTES: ${DESARROLLOEG_RECONCILE_INTERVAL_MINUTES:-60}
       DESARROLLOEG_AUDIT_TABLE: ${DESARROLLOEG_AUDIT_TABLE:-AUDITORIA_CAMBIOS}
     volumes:
-      - ../appsheet_local_sync/data:/app/data
+      - ${DESARROLLOEG_PORTABLE_DATA_DIR:-./data}:/app/data
 
   monolito-qa:
     profiles:
@@ -83,6 +84,7 @@ services:
       FACTURACION_GOOGLE_CREDENTIALS_PATH: /app/secrets/facturacion/credentials.json
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
       FACTURAS_NATIVE_DUMP_DIR: /app/runtime/jobs/facturas
+      FACTURAS_SYNC_RUN_ON_START: ${FACTURAS_SYNC_RUN_ON_START:-0}
       DESARROLLOEG_LOCAL_DB_PATH: /app/runtime/jobs/pedidos-local.sqlite
       PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
       PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json
@@ -111,4 +113,4 @@ services:
     volumes:
       - ./runtime-qa:/app/runtime
       - ./secrets:/app/secrets:ro
-      - ../appsheet_local_sync/data:/app/desarrolloeg-sync-data
+      - ${DESARROLLOEG_PORTABLE_DATA_DIR:-./data}:/app/desarrolloeg-sync-data

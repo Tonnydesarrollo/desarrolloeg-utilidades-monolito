@@ -1,4 +1,5 @@
 import express from "express";
+import { readConstanciasContext, readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -10,6 +11,14 @@ export const constanciasV2Router = express.Router();
 
 constanciasV2Router.get("/health", (_req, res) => {
   res.json({ service: "constancias-v2", status: "ok" });
+});
+
+constanciasV2Router.get("/api/context", (_req, res) => {
+  res.json(readConstanciasContext());
+});
+
+constanciasV2Router.get("/api/tables/:tableName", (req, res) => {
+  res.json(readLocalOperationalTable(req.params.tableName));
 });
 
 constanciasV2Router.get("/capacitaciones/:capacitacionId/HTML", (req, res) => {

@@ -41,8 +41,8 @@ function buildPageState(data = {}) {
     },
     year: Number(data.year || data.requestedYear || new Date().getFullYear()),
     thresholds: {
-      estatalMin: Number(data.thresholds?.estatalMin || 32000),
-      municipalMin: Number(data.thresholds?.municipalMin || 9794.98),
+      estatalMin: Number(data.thresholds?.estatalMin || 32967.49),
+      municipalMin: Number(data.thresholds?.municipalMin || 11000),
     },
     facturadorId: String(data.facturadorId || "").trim(),
     facturadorLabel: String(data.facturadorLabel || "").trim(),
@@ -66,7 +66,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pedidos Admin | Desarrollo EG</title>
-    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727">
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a">
     <style>
     :root {
       --bg:#f5f7fb;
@@ -330,6 +330,57 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       font-size:12px;
       line-height:1.35;
     }
+    .pending-summary {
+      margin:16px 16px 0;
+      padding:18px;
+      border:1px solid rgba(15,23,42,.10);
+      border-radius:22px;
+      background:
+        radial-gradient(circle at 92% 12%, rgba(196,55,45,.12), transparent 34%),
+        linear-gradient(135deg, rgba(255,255,255,.96), rgba(242,247,251,.92));
+      box-shadow:var(--shadow);
+      display:grid;
+      grid-template-columns:minmax(220px, 1fr) repeat(2, minmax(180px, .65fr));
+      gap:12px;
+      align-items:stretch;
+    }
+    .pending-summary-copy { padding:4px 8px; align-self:center; }
+    .pending-summary-copy .eyebrow {
+      color:#c4372d;
+      font-size:10px;
+      font-weight:900;
+      letter-spacing:.1em;
+      text-transform:uppercase;
+    }
+    .pending-summary-copy strong {
+      display:block;
+      margin-top:5px;
+      font-size:22px;
+      letter-spacing:-.03em;
+    }
+    .pending-summary-copy p { margin:5px 0 0; color:var(--muted); font-size:12px; line-height:1.4; }
+    .pending-type-card {
+      appearance:none;
+      border:1px solid rgba(15,23,42,.10);
+      border-radius:17px;
+      background:rgba(255,255,255,.78);
+      color:var(--ink);
+      padding:14px 16px;
+      text-align:left;
+      cursor:pointer;
+      transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+    .pending-type-card:hover,
+    .pending-type-card:focus-visible {
+      transform:translateY(-2px);
+      border-color:rgba(196,55,45,.42);
+      box-shadow:0 12px 24px rgba(15,23,42,.09);
+      outline:none;
+    }
+    .pending-type-card[aria-pressed="true"] { border-color:#c4372d; box-shadow:0 0 0 3px rgba(196,55,45,.10); }
+    .pending-type-card span { display:block; color:var(--muted); font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .pending-type-card strong { display:block; margin-top:4px; font-size:30px; line-height:1; letter-spacing:-.04em; }
+    .pending-type-card small { display:block; margin-top:7px; color:var(--muted); font-size:11px; }
     .tabs { display:flex; flex-wrap:wrap; gap:10px; padding:16px 16px 0; }
     .tab {
       border:1px solid var(--line);
@@ -424,6 +475,56 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       padding:10px 12px;
       color:var(--ink);
     }
+    .sendbar {
+      display:grid;
+      grid-template-columns:minmax(220px, .8fr) minmax(280px, 1.2fr) auto;
+      gap:12px;
+      align-items:end;
+      margin:16px;
+      padding:14px;
+      border:1px solid rgba(15,23,42,.10);
+      border-radius:20px;
+      background:rgba(247,250,252,.86);
+    }
+    .send-status {
+      grid-column:1 / -1;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+    }
+    .send-status.ok { color:var(--ok); }
+    .send-status.err { color:var(--danger); }
+    .row-actions { display:grid; gap:8px; min-width:150px; }
+    .detail-row[hidden] { display:none !important; }
+    .detail-row td { background:rgba(239,246,255,.72); border-top:0; }
+    .files-panel {
+      display:grid;
+      gap:12px;
+      padding:14px;
+      border:1px solid rgba(15,23,42,.10);
+      border-radius:18px;
+      background:rgba(255,255,255,.88);
+    }
+    .files-head {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .files-list { display:grid; gap:8px; }
+    .file-item {
+      display:grid;
+      grid-template-columns:20px minmax(0, 1fr) auto;
+      gap:10px;
+      align-items:start;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(15,23,42,.10);
+      background:rgba(248,250,252,.9);
+    }
+    .file-item strong { display:block; }
+    .file-item small { display:block; color:var(--muted); margin-top:2px; }
     .stats { color:var(--muted); font-size:12px; font-weight:700; }
     .section-meta {
       display:flex;
@@ -454,10 +555,15 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       .filters-row { flex-direction:column; align-items:stretch; }
       .controls-toolbar { justify-content:stretch; }
       .controls-toolbar .btn { flex:1 1 auto; }
+      .sendbar { grid-template-columns:1fr; }
+      .pending-summary { grid-template-columns:1fr 1fr; }
+      .pending-summary-copy { grid-column:1 / -1; }
     }
     @media (max-width: 640px) {
       .summary-grid { grid-template-columns:1fr; }
       .overview-grid { grid-template-columns:1fr; }
+      .pending-summary { grid-template-columns:1fr; margin-left:12px; margin-right:12px; }
+      .pending-summary-copy { grid-column:auto; }
       .page { padding:18px 12px 40px; }
       .hero { padding:18px; }
       .coverage-fold { margin-left:12px; margin-right:12px; }
@@ -539,15 +645,28 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
 
     const ORDER_STATUS_TABS = [
       { id: "all", label: "Todos" },
-      { id: "sin-liberacion", label: "Sin liberación" },
+      { id: "sin-liberacion", label: "No liberados" },
+      { id: "sin-liberacion-sin-trabajo", label: "Sin trabajo" },
+      { id: "sin-liberacion-no-enviados", label: "No enviados" },
+      { id: "sin-liberacion-enviados", label: "Enviados" },
       { id: "liberados", label: "Liberados" },
-      { id: "pendientes-pago", label: "Pendientes de pago" },
+      { id: "pendientes-pago", label: "No pagados" },
+      { id: "pagados", label: "Pagados" },
     ];
     const ORDER_TYPE_TABS = [
       { id: "all", label: "Todos" },
       { id: "estatal", label: "Estatales" },
       { id: "municipal", label: "Municipales" },
     ];
+    const ORDER_STATUS_LABELS = {
+      "sin-liberacion": "No liberado",
+      "sin-liberacion-sin-trabajo": "No liberado · Sin trabajo",
+      "sin-liberacion-no-enviados": "No liberado · No enviado",
+      "sin-liberacion-enviados": "No liberado · Enviado",
+      liberados: "Liberado",
+      "pendientes-pago": "No pagado",
+      pagados: "Pagado",
+    };
     const els = {
       yearInput: document.getElementById("yearInput"),
       facturadorInput: document.getElementById("facturadorInput"),
@@ -591,6 +710,28 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       return text;
     }
 
+    function extractYear(value) {
+      const text = String(value || "").trim();
+      if (!text) return null;
+      const directYear = text.match(/\b(20\d{2})\b/);
+      if (directYear?.[1]) return Number(directYear[1]);
+      const parsed = new Date(text);
+      if (!Number.isNaN(parsed.getTime())) return parsed.getFullYear();
+      return null;
+    }
+
+    function trabajosDelYear(row, year) {
+      const targetYear = Number(year);
+      const trabajos = [];
+      if (Number.isFinite(targetYear) && extractYear(row.ultimoPipcEstatal || row.tienda?.ultimoPipcEstatal) === targetYear) {
+        trabajos.push("Estatal");
+      }
+      if (Number.isFinite(targetYear) && extractYear(row.ultimoPipcMunicipal || row.tienda?.ultimoPipcMunicipal) === targetYear) {
+        trabajos.push("Municipal");
+      }
+      return trabajos.length ? trabajos.join(" + ") : "Sin trabajo del año";
+    }
+
     function normalizeText(value) {
       return String(value == null ? "" : value)
         .normalize("NFD")
@@ -603,6 +744,84 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     function truthy(value) {
       const text = normalizeText(value);
       return ["SI", "S", "YES", "Y", "TRUE", "1", "ENVIADO", "PAGADO", "PAGO", "LIBERADO", "FACTURADO", "CHEQUE"].includes(text);
+    }
+
+    function isSent(row) {
+      return Boolean(row?.enviadoBool) || ["SI", "S", "Y", "YES", "TRUE", "1", "ENVIADO", "SENT"].includes(normalizeText(row?.enviado));
+    }
+
+    function orderStatusBucket(row) {
+      const flags = row?._flags || {};
+      const business = row?.business || {};
+      if (business.status === "sin-liberacion" && business.deliveryStatus) return business.deliveryStatus;
+      if (business.status) return business.status;
+      if (business.sinLiberacionEnviado) return "sin-liberacion-enviados";
+      if (business.sinLiberacionListo) return "sin-liberacion-no-enviados";
+      if (business.sinLiberacionSinTrabajo) return "sin-liberacion-sin-trabajo";
+      if (business.pagado) return "pagados";
+      if (business.noPagado) return "pendientes-pago";
+      if (business.liberadoPendienteFactura) return "liberados";
+      if (flags.noLiberado) return isSent(row) ? "sin-liberacion-enviados" : "sin-liberacion-no-enviados";
+      if (flags.pendientePago) return "pendientes-pago";
+      if (flags.liberadoPendLey) return "liberados";
+      if (flags.pago) return "pagados";
+      return "otros";
+    }
+
+    function statusMatches(bucket, filter) {
+      if (filter === "all") return true;
+      if (filter === "sin-liberacion") {
+        return bucket === "sin-liberacion-sin-trabajo";
+      }
+      return bucket === filter;
+    }
+
+    function rowStatusMatches(row, filter) {
+      const business = row?.business || {};
+      if (filter === "all") return true;
+      if (filter === "sin-liberacion") {
+        return business.status ? business.status === "sin-liberacion" : Boolean(row?._flags?.noLiberado);
+      }
+      const flags = {
+        "sin-liberacion-no-enviados": "sinLiberacionListo",
+        "sin-liberacion-enviados": "sinLiberacionEnviado",
+        "sin-liberacion-sin-trabajo": "sinLiberacionSinTrabajo",
+        liberados: "liberadoPendienteFactura",
+        "pendientes-pago": "noPagado",
+        pagados: "pagado",
+      };
+      return Boolean((flags[filter] && business[flags[filter]]) || business.status === filter || orderStatusBucket(row) === filter);
+    }
+
+    function cssEscape(value) {
+      if (window.CSS && typeof window.CSS.escape === "function") return window.CSS.escape(value);
+      return String(value || "").replace(/["\\\\]/g, "\\\\$&");
+    }
+
+    function fileKey(file) {
+      return String(file?.id || file?.relativePath || file?.path || file?.openUrl || file?.downloadUrl || file?.name || "").trim();
+    }
+
+    async function apiJson(url, options = {}) {
+      const response = await fetch(url, {
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "fetch",
+          ...(options.headers || {}),
+        },
+        ...options,
+      });
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        throw new Error("El backend no devolvio JSON valido.");
+      }
+      if (!response.ok || data?.ok === false) {
+        throw new Error(data?.error || "HTTP " + response.status);
+      }
+      return data;
     }
 
     function classifyByDescription(description) {
@@ -650,15 +869,14 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         year: state.year,
         estatalMin: state.estatalMin,
         municipalMin: state.municipalMin,
-        facturadorId: state.facturadorId,
       }));
     }
 
     function buildInitialState() {
       const defaults = {
         year: Number(INITIAL.year || new Date().getFullYear()),
-        estatalMin: Number(INITIAL.thresholds?.estatalMin || 32000),
-        municipalMin: Number(INITIAL.thresholds?.municipalMin || 9794.98),
+        estatalMin: Number(INITIAL.thresholds?.estatalMin || 32967.49),
+        municipalMin: Number(INITIAL.thresholds?.municipalMin || 11000),
       };
       const stored = loadStoredState();
       const url = parseUrlState();
@@ -666,9 +884,9 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         year: Number.isFinite(url.year) ? url.year : Number.isFinite(Number(stored.year)) ? Number(stored.year) : defaults.year,
         estatalMin: Number.isFinite(url.estatalMin) ? url.estatalMin : Number.isFinite(Number(stored.estatalMin)) ? Number(stored.estatalMin) : defaults.estatalMin,
         municipalMin: Number.isFinite(url.municipalMin) ? url.municipalMin : Number.isFinite(Number(stored.municipalMin)) ? Number(stored.municipalMin) : defaults.municipalMin,
-        facturadorId: String(url.facturadorId || stored.facturadorId || INITIAL.facturadorId || DEFAULT_FACTURADOR_ID).trim(),
+        facturadorId: String(url.facturadorId || INITIAL.facturadorId || "").trim(),
         section: url.section === "cobertura" ? "cobertura" : "pedidos",
-        orderStatus: ["all", "sin-liberacion", "liberados", "pendientes-pago"].includes(url.orderStatus) ? url.orderStatus : "sin-liberacion",
+        orderStatus: ["all", "sin-liberacion", "sin-liberacion-sin-trabajo", "sin-liberacion-no-enviados", "sin-liberacion-enviados", "liberados", "pendientes-pago", "pagados"].includes(url.orderStatus) ? url.orderStatus : "all",
         orderType: ["all", "estatal", "municipal"].includes(url.orderType) ? url.orderType : "all",
         search: url.search || "",
       };
@@ -686,44 +904,63 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       const branchByLabel = new Map();
       const branches = state.sucursales
         .map((row) => ({ ...row }))
-        .filter((row) => {
-          const status = normalizeText(row.status);
-          const trabajos = normalizeText(row.trabajos);
-          return normalizeText(row.empresaId) === "1"
-            && status.includes("ACTIVA")
-            && (trabajos.includes("ESTATAL") || trabajos.includes("MUNICIPAL"));
-        });
+        .filter(allowedBranch);
 
       for (const row of branches) {
-        const key = normalizeText(row.key || row.id || row.tienda || "");
-        const label = normalizeText(row.displayLabel || row.label || row.label2 || row.tienda || row.key || "");
-        if (key) branchByKey.set(key, row);
-        if (label) branchByLabel.set(label, row);
+        const keyAliases = [
+          row.key,
+          row.id,
+          row.rowId,
+          row.row_id,
+          row.tienda,
+          row.raw?.id,
+          row.raw?.ID,
+          row.raw?.["Row ID"],
+          row.raw?.row_id,
+        ];
+        const labelAliases = [
+          row.displayLabel,
+          row.label,
+          row.label2,
+          row.tienda,
+          row.raw?.LABEL,
+          row.raw?.Label,
+          row.raw?.LABEL2,
+        ];
+        for (const alias of keyAliases) {
+          const key = normalizeText(alias);
+          if (key) branchByKey.set(key, row);
+        }
+        for (const alias of labelAliases) {
+          const label = normalizeText(alias);
+          if (label) branchByLabel.set(label, row);
+        }
       }
 
       const orders = state.rows
         .map((row) => {
           const amount = Number(row.importeNumber);
-          const estatalMin = Number(state.estatalMin || 32000);
-          const municipalMin = Number(state.municipalMin || 9794.98);
+          const estatalMin = Number(state.estatalMin || 32967.49);
+          const municipalMin = Number(state.municipalMin || 11000);
           const tipo = row.tipoClasificacion
             || classifyByDescription(row.descripcion)
             || classifyByImport(amount, estatalMin, municipalMin);
           const statusText = normalizeText(row.status);
+          const business = row.business || {};
           const branch = findBranchForOrder(row, { branchByKey, branchByLabel });
           const order = {
             ...row,
             _branch: branch,
             _flags: {
               tipo,
-              liberado: statusText.includes("LIBERADO") || statusText.includes("LIBERACION") || statusText.includes("LIBERADO PENDIENTE"),
-              facturaLey: statusText.includes("LEY"),
-              pago: statusText.includes("PAGO"),
-              noLiberado: statusText.includes("SIN LIBERACION")
+              liberado: business.hasLiberacion ?? (statusText.includes("LIBERADO") || statusText.includes("LIBERACION") || statusText.includes("LIBERADO PENDIENTE")),
+              facturaLey: business.hasFacturaLey ?? statusText.includes("LEY"),
+              pago: business.pagado ?? statusText.includes("PAGO"),
+              noLiberado: business.hasLiberacion === false || statusText.includes("SIN LIBERACION")
                 || statusText.includes("NO LIBERADO")
                 || (statusText.includes("PENDIENTE") && !statusText.includes("PAGO")),
-              liberadoPendLey: statusText.includes("LIBERADO") && !statusText.includes("LEY"),
-              pendientePago: statusText.includes("PENDIENTE") && statusText.includes("PAGO"),
+              liberadoPendLey: business.liberadoPendienteFactura ?? (statusText.includes("LIBERADO") && !statusText.includes("LEY")),
+              pendientePago: business.noPagado ?? (statusText.includes("PENDIENTE") && statusText.includes("PAGO")),
               estatal: tipo === "estatal",
               municipal: tipo === "municipal",
             },
@@ -808,9 +1045,25 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     }
 
     function findBranchForOrder(order, index = model) {
-      const key = normalizeText(order.tiendaKey || order.establecimiento || "");
-      const label = normalizeText(order.tiendaLabel || order.tienda?.label || order.establecimiento || "");
-      return index.branchByKey.get(key) || index.branchByLabel.get(label) || null;
+      const keyAliases = [
+        order.tiendaKey,
+        order.establecimiento,
+        order.tienda?.id,
+        order.tienda?.key,
+        order.raw?.TIENDA,
+        order.raw?.ESTABLECIMIENTO,
+      ];
+      for (const alias of keyAliases) {
+        const branch = index.branchByKey.get(normalizeText(alias));
+        if (branch) return branch;
+      }
+
+      const labelAliases = [order.tiendaLabel, order.tienda?.label, order.establecimiento];
+      for (const alias of labelAliases) {
+        const branch = index.branchByLabel.get(normalizeText(alias));
+        if (branch) return branch;
+      }
+      return null;
     }
 
     function visibleOrderRows() {
@@ -821,9 +1074,8 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         .filter((row) => !Number.isFinite(selectedYear) || !row.fechaYear || Number(row.fechaYear) === selectedYear)
         .filter((row) => {
           const flags = row._flags;
-          if (state.orderStatus === "sin-liberacion" && !flags.noLiberado) return false;
-          if (state.orderStatus === "liberados" && !flags.liberadoPendLey) return false;
-          if (state.orderStatus === "pendientes-pago" && !flags.pendientePago) return false;
+          const bucket = orderStatusBucket(row);
+          if (!rowStatusMatches(row, state.orderStatus)) return false;
           if (state.orderType === "estatal" && !flags.estatal) return false;
           if (state.orderType === "municipal" && !flags.municipal) return false;
           if (query && !row._searchText.includes(query)) return false;
@@ -833,8 +1085,10 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     }
 
     function allowedBranch(row) {
+      const status = normalizeText(row.status || row.planeacionStatus || row.raw?.planeacion_status || "");
+      const blocked = ["INACTIVA", "INACTIVO", "BAJA", "CANCELADA", "CANCELADO"].some((word) => status.includes(word));
       return normalizeText(row.empresaId) === "1"
-        && normalizeText(row.status).includes("ACTIVA")
+        && !blocked
         && (normalizeText(row.trabajos).includes("ESTATAL") || normalizeText(row.trabajos).includes("MUNICIPAL"));
     }
 
@@ -857,7 +1111,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       const selectedFacturadorId = normalizeText(state.facturadorId);
       return rows
         .filter((row) => !selectedFacturadorId || normalizeText(row.facturadorId) === selectedFacturadorId)
-        .filter((row) => !state.year || !row.fechaYear || Number(row.fechaYear) === Number(state.year))
+        .filter((row) => !state.year || Number(row.fechaYear) === Number(state.year))
         .slice()
         .sort((a, b) => Number(b.fechaYear || 0) - Number(a.fechaYear || 0));
     }
@@ -901,34 +1155,55 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     }
 
     function renderPedidosSection(rows = visibleOrderRows()) {
+      const missingEstatal = missingCoverageEntries("estatal");
+      const missingMunicipal = missingCoverageEntries("municipal");
+      const missingTotal = missingEstatal.length + missingMunicipal.length;
       const totals = {
         total: rows.length,
-        sinLiberacion: rows.filter((row) => row._flags.noLiberado).length,
-        liberados: rows.filter((row) => row._flags.liberadoPendLey).length,
-        pendientesPago: rows.filter((row) => row._flags.pendientePago).length,
+        sinLiberacion: rows.filter((row) => row.business?.status === "sin-liberacion" || (!row.business?.status && row._flags.noLiberado)).length,
+        sinLiberacionSinTrabajo: rows.filter((row) => orderStatusBucket(row) === "sin-liberacion-sin-trabajo").length,
+        liberados: rows.filter((row) => orderStatusBucket(row) === "liberados").length,
+        pendientesPago: rows.filter((row) => orderStatusBucket(row) === "pendientes-pago").length,
+        pagados: rows.filter((row) => orderStatusBucket(row) === "pagados").length,
+        sinLiberacionNoEnviados: rows.filter((row) => orderStatusBucket(row) === "sin-liberacion-no-enviados").length,
+        sinLiberacionEnviados: rows.filter((row) => orderStatusBucket(row) === "sin-liberacion-enviados").length,
       };
       return ''
+        + '<section class="pending-summary" aria-label="Sucursales sin el pedido requerido">'
+        + '<div class="pending-summary-copy"><div class="eyebrow">Pedidos faltantes por cobertura</div><strong>' + esc(missingTotal) + ' pedidos requeridos sin registrar</strong><p>Sucursales con trabajo configurado que todavía no tienen el pedido municipal o estatal del año seleccionado.</p></div>'
+        + '<button class="pending-type-card" type="button" data-missing-kind="estatal"><span>Estatales faltantes</span><strong>' + esc(missingEstatal.length) + '</strong><small>Ver sucursales sin pedido estatal</small></button>'
+        + '<button class="pending-type-card" type="button" data-missing-kind="municipal"><span>Municipales faltantes</span><strong>' + esc(missingMunicipal.length) + '</strong><small>Ver sucursales sin pedido municipal</small></button>'
+        + '</section>'
         + '<div class="overview-grid">'
         + '<article class="summary-card"><div class="eyebrow">Pedidos visibles</div><div class="value">' + esc(totals.total) + '</div><div class="detail">Con el año, proveedor y filtros activos.</div></article>'
-        + '<article class="summary-card"><div class="eyebrow">Sin liberación</div><div class="value">' + esc(totals.sinLiberacion) + '</div><div class="detail">Coinciden por status.</div></article>'
+        + '<article class="summary-card"><div class="eyebrow">No liberados</div><div class="value">' + esc(totals.sinLiberacion) + '</div><div class="detail">Incluye sin trabajo, no enviados y enviados.</div></article>'
+        + '<article class="summary-card"><div class="eyebrow">Sin trabajo</div><div class="value">' + esc(totals.sinLiberacionSinTrabajo) + '</div><div class="detail">Sin liberación ni trabajo listo.</div></article>'
+        + '<article class="summary-card"><div class="eyebrow">No enviados</div><div class="value">' + esc(totals.sinLiberacionNoEnviados) + '</div><div class="detail">Trabajo listo; correo pendiente.</div></article>'
+        + '<article class="summary-card"><div class="eyebrow">Enviados</div><div class="value">' + esc(totals.sinLiberacionEnviados) + '</div><div class="detail">Correo enviado; liberación pendiente.</div></article>'
         + '<article class="summary-card"><div class="eyebrow">Liberados</div><div class="value">' + esc(totals.liberados) + '</div><div class="detail">Pendientes de subir a ley.</div></article>'
-        + '<article class="summary-card"><div class="eyebrow">Pendientes de pago</div><div class="value">' + esc(totals.pendientesPago) + '</div><div class="detail">Status aún abierto.</div></article>'
+        + '<article class="summary-card"><div class="eyebrow">No pagados</div><div class="value">' + esc(totals.pendientesPago) + '</div><div class="detail">En Casa Ley; cheque pendiente.</div></article>'
+        + '<article class="summary-card"><div class="eyebrow">Pagados</div><div class="value">' + esc(totals.pagados) + '</div><div class="detail">Pago relacionado localizado.</div></article>'
         + '</div>'
         + '<div class="tabs" id="orderStatusTabs"></div>'
         + '<div class="tabs" id="orderTypeTabs" style="padding-top:10px;"></div>'
+        + '<div class="sendbar">'
+        + '<div class="field"><label for="senderSelect">Remitente</label><select id="senderSelect"><option value="">Cargando remitentes...</option></select></div>'
+        + '<div class="field"><label for="toInput">Destino</label><input id="toInput" type="text" placeholder="correo@dominio.com"></div>'
+        + '<button class="btn secondary" id="configRefreshBtn" type="button">Actualizar remitente</button>'
+        + '<div class="send-status" id="sendStatus">Listo para cargar archivos bajo demanda.</div>'
+        + '</div>'
         + '<div class="stats" style="padding:12px 16px 0;">Mostrando ' + esc(rows.length) + ' de ' + esc(state.rows.length) + ' pedidos del año ' + esc(state.year) + '</div>'
         + '<div class="table-shell">'
         + '<table>'
         + '<thead>'
         + '<tr>'
         + '<th>Pedido</th>'
+        + '<th>Tipo</th>'
         + '<th>Sucursal</th>'
         + '<th>Municipio</th>'
-        + '<th>Estado</th>'
-        + '<th>Fecha</th>'
         + '<th>Importe</th>'
-        + '<th>Tipo</th>'
-        + '<th>Status</th>'
+        + '<th>Trabajos</th>'
+        + '<th>Acciones</th>'
         + '</tr>'
         + '</thead>'
         + '<tbody>'
@@ -936,18 +1211,24 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           const flags = row._flags;
           const municipioLabel = row.tienda?.municipioNombre || row.tienda?.municipioLabel || row.municipio?.nombre || row.municipio?.displayLabel || "";
           const estadoLabel = row.tienda?.estadoNombre || row.tienda?.estadoLabel || row.estado?.nombre || row.estado?.displayLabel || "";
+          const bucket = orderStatusBucket(row);
+          const canSend = Boolean(row.pedido) && Boolean(row.business?.sinLiberacionListo || row.business?.sinLiberacionEnviado);
+          const sendLabel = bucket === "sin-liberacion-enviados" ? "Reenviar" : "Enviar";
+          const sentLabel = bucket === "sin-liberacion-enviados" ? chip("Enviado", "ok") : bucket === "sin-liberacion-no-enviados" ? chip("No enviado", "warn") : "";
+          const tipoLabel = row.clasificacionLabel || (flags.estatal ? "Estatal" : flags.municipal ? "Municipal" : "Otro");
+          const trabajosYear = trabajosDelYear(row, state.year);
           return ''
-            + '<tr>'
-            + '<td><div class="stack"><strong>' + esc(row.pedido || "") + '</strong><span class="muted">' + esc(row.descripcion || "") + '</span></div></td>'
-            + '<td><div class="stack"><strong>' + esc(row._branch ? branchLabel(row._branch) : (row.tiendaLabel || row.establecimiento || "")) + '</strong><span class="muted">' + esc(row._branch ? branchKey(row._branch) : (row.tiendaKey || row.establecimiento || "")) + '</span></div></td>'
+            + '<tr data-order-row="' + esc(row.pedido || "") + '">'
+            + '<td><strong>' + esc(row.pedido || "") + '</strong></td>'
+            + '<td>' + chip(tipoLabel, row.clasificacionLabel && normalizeText(row.clasificacionLabel).includes("CULIACAN") ? "warn" : flags.estatal ? "ok" : flags.municipal ? "blue" : "") + '</td>'
+            + '<td><strong>' + esc(row._branch ? branchLabel(row._branch) : (row.tiendaLabel || row.establecimiento || "")) + '</strong></td>'
             + '<td><strong>' + esc(municipioLabel) + '</strong></td>'
-            + '<td><strong>' + esc(estadoLabel) + '</strong></td>'
-            + '<td>' + esc(formatDate(row.fecha || row["fecha(DATE)"] || "")) + '</td>'
-            + '<td><div class="stack"><strong>' + esc(money(row.importeNumber)) + '</strong><span class="muted">' + esc(row.facturadorNombre || "") + '</span></div></td>'
-            + '<td><div class="stack">' + chip(row.clasificacionLabel || (flags.estatal ? "Estatal" : flags.municipal ? "Municipal" : "Sin clasificar"), row.clasificacionLabel && normalizeText(row.clasificacionLabel).includes("CULIACAN") ? "warn" : flags.estatal ? "ok" : flags.municipal ? "blue" : "") + '<span class="muted">' + esc(row.clasificacionDetalle || "") + '</span></div></td>'
-            + '<td>' + esc(row.status || "Sin status") + '</td>'
-            + '</tr>';
-        }).join("") : '<tr><td colspan="8" class="empty">No hay pedidos con estos filtros.</td></tr>')
+            + '<td><strong>' + esc(money(row.importeNumber)) + '</strong></td>'
+            + '<td>' + chip(trabajosYear, trabajosYear === "Sin trabajo del año" ? "warn" : "ok") + '</td>'
+            + '<td><div class="row-actions">' + (canSend ? sentLabel + '<button class="btn secondary" type="button" data-toggle-files="' + esc(row.pedido || "") + '">Ver archivos</button><button class="btn primary" type="button" data-send="' + esc(row.pedido || "") + '">' + esc(sendLabel) + '</button>' : (sentLabel || chip(ORDER_STATUS_LABELS[bucket] || "Sin clasificar", bucket === "pagados" ? "ok" : bucket === "pendientes-pago" ? "warn" : ""))) + '</div></td>'
+            + '</tr>'
+            + '<tr class="detail-row" data-detail-row="' + esc(row.pedido || "") + '" hidden><td colspan="7"><div class="files-panel"><div class="files-head"><strong>Archivos del pedido ' + esc(row.pedido || "") + '</strong><span class="muted" data-files-state="' + esc(row.pedido || "") + '">Selecciona "Ver archivos" para cargar Drive solo para este pedido.</span></div><div class="files-list" data-files-list="' + esc(row.pedido || "") + '"></div></div></td></tr>';
+        }).join("") : '<tr><td colspan="7" class="empty">No hay pedidos con estos filtros.</td></tr>')
         + '</tbody>'
         + '</table>'
         + '</div>'
@@ -962,21 +1243,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     function renderCoverageSection() {
       const query = normalizeText(state.search);
       const renderCoverageBlock = (kind, title) => {
-        const entries = getCoverageEntries(kind).filter((item) => {
-          if (query) {
-            const haystack = [
-              item.branch.key,
-              item.branch.label,
-              item.branch.municipioNombre || item.branch.municipioLabel,
-              item.branch.estadoNombre || item.branch.estadoLabel,
-              item.branch.trabajos,
-              item.order?.pedido,
-              item.order?.status,
-            ].map((value) => normalizeText(value)).join(" ");
-            if (!haystack.includes(query)) return false;
-          }
-          return true;
-        });
+        const entries = getCoverageEntries(kind).filter((item) => coverageEntryMatchesSearch(item, query));
       const withOrder = entries.filter((item) => item.order);
       const withoutOrder = entries.filter((item) => !item.order);
       const culiacanRows = entries.filter((item) => item.culiacanMunicipal);
@@ -1001,7 +1268,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           + '</table>'
           + '</div>';
         return ''
-          + '<section class="panel" style="margin-top:18px;padding:18px;">'
+          + '<section class="panel" data-coverage-kind="' + esc(kind) + '" style="margin-top:18px;padding:18px;">'
           + '<div class="section-head" style="padding:0 0 12px;">'
           + '<div>'
           + '<h2>' + esc(title) + '</h2>'
@@ -1013,10 +1280,12 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           + '<article class="summary-card"><div class="eyebrow">Sin pedido</div><div class="value">' + esc(withoutOrder.length) + '</div><div class="detail">Deberían tenerlo</div></article>'
           + '<article class="summary-card"><div class="eyebrow">Culiacán municipal</div><div class="value">' + esc(culiacanRows.length) + '</div><div class="detail">Asignado a Sergio Gonzalez Castillo</div></article>'
           + '</div>'
-          + '<h3 style="margin:18px 0 0;font-size:15px;">Con pedido</h3>'
-          + tableMarkup(withOrder, 'No hay sucursales con pedido ' + title.toLowerCase() + '.')
-          + '<h3 style="margin:18px 0 0;font-size:15px;">Sin pedido</h3>'
+          + '<h3 style="margin:18px 0 0;font-size:15px;">' + esc(title) + 'es faltantes</h3>'
           + tableMarkup(withoutOrder, 'No hay sucursales pendientes en ' + title.toLowerCase() + '.', true)
+          + '<details class="advanced-filters" style="margin-top:18px;">'
+          + '<summary>Ver sucursales con pedido ' + esc(title.toLowerCase()) + '</summary>'
+          + '<div style="padding:0 16px 16px;">' + tableMarkup(withOrder, 'No hay sucursales con pedido ' + title.toLowerCase() + '.') + '</div>'
+          + '</details>'
           + '</section>';
       };
       return ''
@@ -1040,6 +1309,16 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
             render();
           });
         }
+        document.querySelectorAll("[data-missing-kind]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const kind = button.getAttribute("data-missing-kind") || "";
+            state.coverageOpen = true;
+            render();
+            requestAnimationFrame(() => {
+              document.querySelector('[data-coverage-kind="' + cssEscape(kind) + '"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          });
+        });
       }
     }
 
@@ -1063,11 +1342,210 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           state.coverageOpen = coverageFold.open;
         });
       }
+      renderSectionTabs();
+      bindSendControls();
     }
 
     function render() {
       renderHeader();
       renderContent();
+    }
+
+    const filesByPedido = new Map();
+    const selectedFilesByPedido = new Map();
+
+    function setSendStatus(message, kind = "") {
+      const node = document.getElementById("sendStatus");
+      if (!node) return;
+      node.textContent = message || "";
+      node.classList.toggle("ok", kind === "ok");
+      node.classList.toggle("err", kind === "err");
+    }
+
+    function markRowSentInView(row) {
+      if (!row) return;
+      row.enviado = "SI";
+      row.enviadoBool = true;
+      row.business = {
+        ...(row.business || {}),
+        status: "sin-liberacion",
+        deliveryStatus: "sin-liberacion-enviados",
+        sinLiberacionEnviado: true,
+        sinLiberacionListo: false,
+        sinLiberacionSinTrabajo: false,
+      };
+    }
+
+    function renderFiles(pedido, files) {
+      const list = document.querySelector('[data-files-list="' + cssEscape(pedido) + '"]');
+      const stateNode = document.querySelector('[data-files-state="' + cssEscape(pedido) + '"]');
+      if (!list) return;
+      if (!files.length) {
+        list.innerHTML = '<div class="empty">No se encontraron archivos para este pedido.</div>';
+        if (stateNode) stateNode.textContent = "Sin archivos encontrados.";
+        return;
+      }
+      selectedFilesByPedido.set(pedido, new Set(files.map(fileKey).filter(Boolean)));
+      list.innerHTML = files.map((file) => {
+        const key = fileKey(file);
+        const label = file.name || file.relativePath || key;
+        const meta = [file.mimeType, file.size ? (Math.round(Number(file.size) / 1024) + " KB") : ""].filter(Boolean).join(" · ");
+        const link = file.openUrl || file.downloadUrl || "";
+        return '<label class="file-item">'
+          + '<input type="checkbox" data-file="' + esc(pedido) + '" value="' + esc(key) + '" checked>'
+          + '<span><strong>' + esc(label) + '</strong><small>' + esc(meta || "Archivo disponible") + '</small></span>'
+          + (link ? '<a href="' + esc(link) + '" target="_blank" rel="noopener">Abrir</a>' : '<span></span>')
+          + '</label>';
+      }).join("");
+      if (stateNode) stateNode.textContent = files.length + " archivo(s) cargado(s).";
+      list.querySelectorAll("[data-file]").forEach((input) => {
+        input.addEventListener("change", () => {
+          selectedFilesByPedido.set(pedido, new Set(Array.from(list.querySelectorAll("[data-file]:checked")).map((item) => String(item.value || "").trim()).filter(Boolean)));
+        });
+      });
+    }
+
+    function coverageEntryMatchesSearch(item, query = normalizeText(state.search)) {
+      if (!query) return true;
+      const haystack = [
+        item.branch.key,
+        item.branch.label,
+        item.branch.displayLabel,
+        item.branch.municipioNombre || item.branch.municipioLabel,
+        item.branch.estadoNombre || item.branch.estadoLabel,
+        item.branch.trabajos,
+        item.order?.pedido,
+        item.order?.status,
+      ].map((value) => normalizeText(value)).join(" ");
+      return haystack.includes(query);
+    }
+
+    function missingCoverageEntries(kind) {
+      return getCoverageEntries(kind)
+        .filter((item) => coverageEntryMatchesSearch(item))
+        .filter((item) => !item.order);
+    }
+
+    async function loadFilesForPedido(pedido, { open = true } = {}) {
+      const safePedido = String(pedido || "").trim();
+      if (!safePedido) throw new Error("Falta pedido.");
+      const detail = document.querySelector('[data-detail-row="' + cssEscape(safePedido) + '"]');
+      const stateNode = document.querySelector('[data-files-state="' + cssEscape(safePedido) + '"]');
+      if (open && detail) detail.hidden = false;
+      if (filesByPedido.has(safePedido)) return filesByPedido.get(safePedido);
+      if (stateNode) stateNode.textContent = "Cargando archivos de Drive...";
+      const data = await apiJson("/api/pedidos-ley/pedido/" + encodeURIComponent(safePedido) + "/files");
+      const files = Array.isArray(data.matchedFiles) ? data.matchedFiles : [];
+      filesByPedido.set(safePedido, files);
+      renderFiles(safePedido, files);
+      return files;
+    }
+
+    async function loadSendConfig() {
+      const senderSelect = document.getElementById("senderSelect");
+      const toInput = document.getElementById("toInput");
+      if (!senderSelect && !toInput) return;
+      try {
+        const [config, senderStatus] = await Promise.all([
+          apiJson("/api/pedidos-ley/config"),
+          apiJson("/api/pedidos-ley/sender/status"),
+        ]);
+        const recipients = Array.isArray(config.defaultRecipients) ? config.defaultRecipients : ["SGIIREGION1@casaley.com.mx"];
+        if (toInput && !String(toInput.value || "").trim()) toInput.value = recipients.join(", ");
+        const accounts = Array.isArray(senderStatus.accounts) ? senderStatus.accounts : [];
+        if (senderSelect) {
+          senderSelect.innerHTML = '<option value="">-- Seleccionar remitente --</option>' + accounts.map((account) => {
+            const email = String(account.email || "").trim();
+            return '<option value="' + esc(email) + '"' + (email === senderStatus.activeEmail ? " selected" : "") + '>' + esc(email) + '</option>';
+          }).join("");
+        }
+        setSendStatus(accounts.length ? "Remitente listo." : "No hay remitentes configurados.", accounts.length ? "ok" : "err");
+      } catch (error) {
+        setSendStatus(error instanceof Error ? error.message : "No se pudo cargar remitente.", "err");
+      }
+    }
+
+    function bindSendControls() {
+      const senderSelect = document.getElementById("senderSelect");
+      const toInput = document.getElementById("toInput");
+      const refreshBtn = document.getElementById("configRefreshBtn");
+      refreshBtn?.addEventListener("click", loadSendConfig);
+      senderSelect?.addEventListener("change", async () => {
+        const email = String(senderSelect.value || "").trim();
+        if (!email) return;
+        try {
+          await apiJson("/api/pedidos-ley/sender/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          setSendStatus("Remitente activo: " + email, "ok");
+        } catch (error) {
+          setSendStatus(error instanceof Error ? error.message : "No se pudo seleccionar remitente.", "err");
+        }
+      });
+      document.querySelectorAll("[data-toggle-files]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const pedido = String(button.getAttribute("data-toggle-files") || "").trim();
+          const detail = document.querySelector('[data-detail-row="' + cssEscape(pedido) + '"]');
+          if (!detail) return;
+          const shouldOpen = detail.hidden;
+          detail.hidden = !shouldOpen;
+          button.textContent = shouldOpen ? "Ocultar archivos" : "Ver archivos";
+          if (shouldOpen) {
+            try {
+              await loadFilesForPedido(pedido);
+            } catch (error) {
+              setSendStatus(error instanceof Error ? error.message : "No se pudieron cargar archivos.", "err");
+            }
+          }
+        });
+      });
+      document.querySelectorAll("[data-send]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const pedido = String(button.getAttribute("data-send") || "").trim();
+          const row = state.rows.find((item) => String(item.pedido || "").trim() === pedido);
+          const to = String(toInput?.value || "").trim();
+          const fromEmail = String(senderSelect?.value || "").trim();
+          if (!to) {
+            setSendStatus("Agrega al menos un correo destino.", "err");
+            return;
+          }
+          try {
+            button.disabled = true;
+            setSendStatus("Cargando archivos del pedido " + pedido + "...", "");
+            const files = await loadFilesForPedido(pedido);
+            const selected = selectedFilesByPedido.get(pedido) || new Set(files.map(fileKey).filter(Boolean));
+            const selectedFiles = files.filter((file) => selected.has(fileKey(file)));
+            if (!selectedFiles.length) {
+              setSendStatus("Selecciona al menos un archivo para enviar.", "err");
+              return;
+            }
+            setSendStatus("Enviando pedido " + pedido + "...", "");
+            await apiJson("/api/pedidos-ley/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                pedido,
+                to,
+                fromEmail,
+                facturadorNombre: row?.facturadorNombre || "",
+                files: selectedFiles,
+                textBody: "Le informamos que el trabajo correspondiente al pedido " + pedido + " ya esta listo. Adjuntamos el documento final para su revision.",
+                htmlBody: "<p>Le informamos que el trabajo correspondiente al pedido <strong>" + esc(pedido) + "</strong> ya esta listo.</p><p>Adjuntamos el documento final para su revision.</p>",
+              }),
+            });
+            markRowSentInView(row);
+            render();
+            setSendStatus("Pedido " + pedido + " enviado correctamente.", "ok");
+          } catch (error) {
+            setSendStatus(error instanceof Error ? error.message : "No se pudo enviar el pedido.", "err");
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+      void loadSendConfig();
     }
 
     function reloadWithCurrentConfig() {
@@ -1137,17 +1615,18 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     els.resetBtn.addEventListener("click", () => {
       state.section = "pedidos";
       state.coverageOpen = false;
-      state.orderStatus = "sin-liberacion";
+        state.orderStatus = "all";
       state.orderType = "all";
       state.search = "";
       state.year = Number(INITIAL.year || new Date().getFullYear());
-      state.estatalMin = Number(INITIAL.thresholds?.estatalMin || 32000);
-      state.municipalMin = Number(INITIAL.thresholds?.municipalMin || 9794.98);
-      state.facturadorId = String(INITIAL.facturadorId || DEFAULT_FACTURADOR_ID).trim();
+      state.estatalMin = Number(INITIAL.thresholds?.estatalMin || 32967.49);
+      state.municipalMin = Number(INITIAL.thresholds?.municipalMin || 11000);
+      state.facturadorId = "";
       localStorage.removeItem(STORAGE_KEY);
       render();
     });
   </script>
+  <script src="/ui/portal-shell.js?v=20260901b" defer></script>
 </body>
 </html>`;
 }

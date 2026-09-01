@@ -7,7 +7,8 @@ import QRCode from "qrcode";
 import P from "pino";
 import pkg from "whatsapp-web.js";
 import { google } from "googleapis";
-import { refreshPersistentCacheEntry } from "../../services/platformCache.js";
+import { readLocalRows } from "../../services/desarrolloegLocalDb.js";
+import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 
 const { Client, LocalAuth } = pkg;
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
@@ -74,19 +75,9 @@ function tableCacheNamespace(tableName) {
 }
 
 async function loadCachedAppSheetRows({ table, selector, cacheKey = "rows" }) {
-  const result = await refreshPersistentCacheEntry({
-    namespace: tableCacheNamespace(table),
-    cacheKey,
-    ttlMs: whatsappTableCacheTtlMs,
-    source: `appsheet:${table}`,
-    loader: async () => {
-      const data = await appsheetFind({ table, selector });
-      return normalizeAppSheetRows(data);
-    },
-    allowStaleFallback: true,
-  });
-
-  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
+  void selector;
+  void cacheKey;
+  return readLocalOperationalTable(table);
 }
 
 function readEnv(names, fallback = "") {
@@ -476,6 +467,160 @@ async function appsheetFind({ table, selector }) {
   }
 
   return response.json();
+}
+
+function mapLocalEmployeeRow(row = {}) {
+  return {
+    "Row ID": String(row.row_id || row.id || "").trim(),
+    ID: String(row.id || row.row_id || "").trim(),
+    NOMBRE: String(row.nombre || "").trim(),
+    PUESTO: String(row.puesto || "").trim(),
+    CORREO: String(row.correo || "").trim(),
+    FIRMA: String(row.firma || "").trim(),
+    TELEFONO: String(row.telefono || "").trim(),
+    "TELEFONO 2": String(row.telefono_2 || "").trim(),
+    CAPACITA: String(row.capacita || "").trim(),
+    PERMISO: String(row.permiso || "").trim(),
+    COLOR: String(row.color || "").trim(),
+    "CUMPLEAÑOS": String(row.cumpleanos || "").trim(),
+    INICIALES: String(row.iniciales || "").trim(),
+  };
+}
+
+function mapLocalEmpresaRow(row = {}) {
+  return {
+    ID: String(row.id || "").trim(),
+    "Row ID": String(row.id || "").trim(),
+    RAZON_SOCIAL: String(row.razon_social || "").trim(),
+    "RAZON SOCIAL": String(row.razon_social || "").trim(),
+    NOMBRE_COMERCIAL: String(row.nombre_comercial || "").trim(),
+    "NOMBRE COMERCIAL": String(row.nombre_comercial || "").trim(),
+    NOMBRE_MOSTRADO: String(row.nombre_mostrado || row.nombre_comercial || row.razon_social || "").trim(),
+    LABEL: String(row.nombre_mostrado || row.nombre_comercial || row.razon_social || "").trim(),
+    logo: String(row.logo || "").trim(),
+  };
+}
+
+function mapLocalSucursalRow(row = {}) {
+  const empresaName = String(row.empresa_nombre || row.razon_social || row.nombre_mostrado || "").trim();
+  return {
+    ID: String(row.id || "").trim(),
+    "Row ID": String(row.id || "").trim(),
+    NOMBRE: String(row.nombre || "").trim(),
+    TIENDA: String(row.tienda || "").trim(),
+    EMPRESA: empresaName,
+    "RAZON SOCIAL": empresaName,
+    "NOMBRE COMERCIAL": String(row.nombre_comercial || empresaName || "").trim(),
+    LABEL: String(row.address || row.nombre || row.tienda || "").trim(),
+    LABEL2: String(row.tienda || row.nombre || "").trim(),
+    DIRECCION: String(row.direccion || "").trim(),
+    DRIVE: String(row.drive || "").trim(),
+  };
+}
+
+function mapLocalCapacitacionRow(row = {}) {
+  return {
+    ID: String(row.id || "").trim(),
+    "Row ID": String(row.id || "").trim(),
+    "FECHA CAPACITACION": String(row.fecha_capacitacion || "").trim(),
+    CEDE: String(row.cede_sucursal_id || "").trim(),
+    STATUS: String(row.status || "").trim(),
+    "HORA INICIO": String(row.hora_inicio || "").trim(),
+    "HORA FIN": String(row.hora_fin || "").trim(),
+    DIPLOMAS: String(row.diplomas || "").trim(),
+    NOTAS: String(row.notas || "").trim(),
+    CAPACITADORES: String(row.capacitadores_ids || "").trim(),
+    SUCURSALES: String(row.sucursales_ids || "").trim(),
+  };
+}
+
+function loadLocalWhatsAppRows(tableName) {
+  const normalizedTable = normalizeText(tableName).replace(/\s+/g, " ").trim();
+  if (!normalizedTable) return [];
+
+  if (normalizedTable === "empleados") {
+    return readLocalRows(
+      `
+        SELECT id, row_id, nombre, puesto, correo, firma, telefono, telefono_2, capacita, permiso, color, cumpleanos, iniciales
+        FROM empleados
+      `
+    ).map(mapLocalEmployeeRow);
+  }
+
+  if (normalizedTable === "empresas") {
+    return readLocalRows(
+      `
+        SELECT id, razon_social, nombre_comercial, logo,
+               COALESCE(NULLIF(TRIM(nombre_comercial), ''), razon_social) AS nombre_mostrado
+        FROM empresas
+      `
+    ).map(mapLocalEmpresaRow);
+  }
+
+  if (normalizedTable === "sucursales") {
+    return readLocalRows(
+      `
+        SELECT
+          s.id,
+          s.nombre,
+          s.tienda,
+          s.empresa_id,
+          e.razon_social AS empresa_nombre,
+          e.nombre_comercial AS nombre_comercial,
+          s.direccion,
+          s.lat,
+          s.lng,
+          s.drive,
+          TRIM(
+            COALESCE(s.nombre, '') ||
+            CASE WHEN m.nombre IS NOT NULL AND m.nombre <> '' THEN ', ' || m.nombre ELSE '' END ||
+            CASE WHEN es.nombre IS NOT NULL AND es.nombre <> '' THEN ', ' || es.nombre ELSE '' END ||
+            ', Mexico'
+          ) AS address
+        FROM sucursales s
+        LEFT JOIN empresas e ON e.id = s.empresa_id
+        LEFT JOIN municipios m ON m.id = s.municipio_id
+        LEFT JOIN estados es ON es.id = s.estado_id
+      `
+    ).map(mapLocalSucursalRow);
+  }
+
+  if (normalizedTable === "capacitaciones") {
+    return readLocalRows(
+      `
+        SELECT
+          c.id,
+          c.fecha_capacitacion,
+          c.cede_sucursal_id,
+          c.status,
+          c.hora_inicio,
+          c.hora_fin,
+          c.diplomas,
+          c.notas,
+          (
+            SELECT group_concat(x.empleado_id, ', ')
+            FROM (
+              SELECT cc.empleado_id
+              FROM capacitacion_capacitadores cc
+              WHERE cc.capacitacion_id = c.id
+              ORDER BY cc.orden, cc.empleado_id
+            ) x
+          ) AS capacitadores_ids,
+          (
+            SELECT group_concat(x.sucursal_id, ', ')
+            FROM (
+              SELECT cs.sucursal_id
+              FROM capacitacion_sucursales cs
+              WHERE cs.capacitacion_id = c.id
+              ORDER BY cs.orden, cs.sucursal_id
+            ) x
+          ) AS sucursales_ids
+        FROM capacitaciones c
+      `
+    ).map(mapLocalCapacitacionRow);
+  }
+
+  return [];
 }
 
 async function loadEmployeesCache() {

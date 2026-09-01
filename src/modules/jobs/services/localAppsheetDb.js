@@ -35,13 +35,51 @@ function uniquePaths(paths) {
   return [...new Set(paths.filter((value) => value && String(value).trim() !== "").map((value) => String(value).trim()))];
 }
 
+function text(value) {
+  return value === null || value === undefined ? "" : String(value).trim();
+}
+
+function parseLocalDateKey(value) {
+  const raw = text(value);
+  if (!raw) return "";
+  const isoLike = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoLike) return `${isoLike[1]}-${isoLike[2]}-${isoLike[3]}`;
+  const slashMatch = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (slashMatch) {
+    const first = Number(slashMatch[1]);
+    const second = Number(slashMatch[2]);
+    let year = Number(slashMatch[3]);
+    if (year < 100) year += 2000;
+    const day = first > 12 && second <= 12 ? first : second;
+    const month = first > 12 && second <= 12 ? second : first;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+}
+
+function deriveCapacitacionStatus(value) {
+  const fechaKey = parseLocalDateKey(value);
+  if (!fechaKey) return "";
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return todayKey > fechaKey ? "FINALIZADA" : "PROGRAMADA";
+}
+
 function resolveDbCandidates() {
   const configured = String(process.env.DESARROLLOEG_LOCAL_DB_PATH || "").trim();
-  const primary = configured || DEFAULT_DB_PATH;
+  const projectRuntimeDir = path.resolve(process.cwd(), "runtime", "jobs");
+  const projectDbPath = path.join(projectRuntimeDir, "pedidos-local.sqlite");
+  const primary = configured || (process.platform === "win32" ? projectDbPath : DEFAULT_DB_PATH);
   const candidates = [primary];
   const baseDir = path.dirname(primary);
   for (const fallbackName of FALLBACK_DB_NAMES) {
     candidates.push(path.join(baseDir, fallbackName));
+  }
+  candidates.push(projectDbPath, DEFAULT_DB_PATH);
+  for (const fallbackName of FALLBACK_DB_NAMES) {
+    candidates.push(path.join(projectRuntimeDir, fallbackName));
   }
   return uniquePaths(candidates);
 }
@@ -338,8 +376,20 @@ function initSchema() {
         empresa_nombre TEXT,
         lat REAL,
         lng REAL,
+        id_pc TEXT,
+        mes_planeacion INTEGER,
+        capacitadores TEXT,
         assigned_month INTEGER,
         vencimiento_estatal TEXT,
+        vencimiento_municipal TEXT,
+        trabajos TEXT,
+        tipo TEXT,
+        nivel_riesgo TEXT,
+        precio_estatal REAL,
+        precio_municipal REAL,
+        ultimo_pipc_estatal TEXT,
+        ultimo_municipal TEXT,
+        pedido TEXT,
         planeacion_status TEXT,
         planeacion_tone TEXT,
         drive TEXT,
@@ -516,6 +566,74 @@ function initSchema() {
         sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
       );
     `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS estatales (
+        row_id TEXT PRIMARY KEY,
+        fecha TEXT,
+        anio INTEGER,
+        sucursal_id TEXT,
+        pipc TEXT,
+        documentacion TEXT,
+        anexos_impresos TEXT,
+        notas TEXT,
+        data_json TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS municipales (
+        row_id TEXT PRIMARY KEY,
+        fecha TEXT,
+        anio INTEGER,
+        sucursal_id TEXT,
+        plan_de_contingencia TEXT,
+        documentacion TEXT,
+        anexos_impresos TEXT,
+        notas TEXT,
+        data_json TEXT,
+        sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+        sync_appsheet_fecha TEXT,
+        sync_appsheet_operacion TEXT,
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+      );
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS operational_rows (
+        source TEXT NOT NULL DEFAULT 'desarrolloeg',
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        data_json TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        appsheet_synced_hash TEXT,
+        appsheet_synced_at TEXT,
+        PRIMARY KEY (source, table_name, row_id)
+      );
+    `);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_operational_rows_table
+      ON operational_rows(source, table_name, updated_at);
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS appsheet_sync_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        action TEXT NOT NULL CHECK (action IN ('Add', 'Edit', 'Delete')),
+        payload_json TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (source, table_name, row_id, content_hash)
+      );
+    `);
   } catch (error) {
     markDbUnavailable(error, "No se pudo inicializar la SQLite local");
     return;
@@ -546,6 +664,7 @@ function initSchema() {
     ["pdf_extraido_error", "TEXT"],
     ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
     ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("liberaciones", [
@@ -609,8 +728,20 @@ function initSchema() {
     ["empresa_nombre", "TEXT"],
     ["lat", "REAL"],
     ["lng", "REAL"],
+    ["id_pc", "TEXT"],
+    ["mes_planeacion", "INTEGER"],
+    ["capacitadores", "TEXT"],
     ["assigned_month", "INTEGER"],
     ["vencimiento_estatal", "TEXT"],
+    ["vencimiento_municipal", "TEXT"],
+    ["trabajos", "TEXT"],
+    ["tipo", "TEXT"],
+    ["nivel_riesgo", "TEXT"],
+    ["precio_estatal", "REAL"],
+    ["precio_municipal", "REAL"],
+    ["ultimo_pipc_estatal", "TEXT"],
+    ["ultimo_municipal", "TEXT"],
+    ["pedido", "TEXT"],
     ["planeacion_status", "TEXT"],
     ["planeacion_tone", "TEXT"],
     ["drive", "TEXT"],
@@ -672,6 +803,27 @@ function initSchema() {
     ["sync_appsheet_fecha", "TEXT"],
     ["sync_appsheet_operacion", "TEXT"],
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ]);
+  const trabajoSucursalColumns = [
+    ["fecha", "TEXT"],
+    ["anio", "INTEGER"],
+    ["sucursal_id", "TEXT"],
+    ["documentacion", "TEXT"],
+    ["anexos_impresos", "TEXT"],
+    ["notas", "TEXT"],
+    ["data_json", "TEXT"],
+    ["sync_appsheet_estado", "TEXT NOT NULL DEFAULT 'PENDIENTE'"],
+    ["sync_appsheet_fecha", "TEXT"],
+    ["sync_appsheet_operacion", "TEXT"],
+    ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
+  ];
+  ensureColumns("estatales", [
+    ...trabajoSucursalColumns,
+    ["pipc", "TEXT"],
+  ]);
+  ensureColumns("municipales", [
+    ...trabajoSucursalColumns,
+    ["plan_de_contingencia", "TEXT"],
   ]);
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_capacitaciones_id ON capacitaciones(id);`);
   ensureColumns("calendario_empleados", [
@@ -830,6 +982,39 @@ function pickFirst(row, keys) {
     if (value !== undefined && value !== null && String(value).trim() !== "") return value;
   }
   return null;
+}
+
+export function closeLocalAppsheetDb() {
+  closeCachedDb();
+  schemaInitialized = false;
+  flagSchemaInitialized = false;
+  localDbUnavailable = false;
+  localDbRetryAt = 0;
+  localDbLastError = null;
+}
+
+function extractYearValue(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.getFullYear();
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const explicitYear = text.match(/\b(20\d{2}|19\d{2})\b/);
+  if (explicitYear) {
+    const year = Number(explicitYear[1]);
+    return Number.isFinite(year) ? year : null;
+  }
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) return parsed.getFullYear();
+  return null;
+}
+
+function stringifyRawRow(row) {
+  try {
+    return JSON.stringify(row || {});
+  } catch {
+    return "{}";
+  }
 }
 
 function normalizePedidoValue(value) {
@@ -1109,11 +1294,61 @@ function mapSucursalRow(row) {
     empresa_nombre: pickFirst(row, ["empresa_nombre", "EMPRESA NOMBRE"]),
     lat: normalizeValue(row?.lat ?? row?.LAT),
     lng: normalizeValue(row?.lng ?? row?.LNG),
+    id_pc: pickFirst(row, ["id_pc", "ID_PC", "ID PC"]),
     assigned_month: normalizeValue(row?.assigned_month ?? row?.ASSIGNED_MONTH),
-    vencimiento_estatal: pickFirst(row, ["vencimiento_estatal", "VENCIMIENTOESTATAL", "VencimientoEstatal"]),
+    vencimiento_estatal: pickFirst(row, ["vencimiento_estatal", "VENCIMIENTO ESTATAL", "VENCIMIENTOESTATAL", "VencimientoEstatal", "ULTIMO PIPC ESTATAL", "ultimo_pipc_estatal"]),
+    vencimiento_municipal: pickFirst(row, ["vencimiento_municipal", "VENCIMIENTO MUNICIPAL", "VENCIMIENTOMUNICIPAL", "VencimientoMunicipal", "ULTIMO MUNICIPAL", "ultimo_municipal"]),
+    trabajos: pickFirst(row, ["trabajos", "TRABAJOS", "Trabajos"]),
+    tipo: pickFirst(row, ["tipo", "TIPO", "Tipo"]),
+    nivel_riesgo: pickFirst(row, ["nivel_riesgo", "NIVEL DE RIESGO", "Nivel de Riesgo"]),
+    precio_estatal: normalizeValue(row?.precio_estatal ?? row?.["PRECIO ESTATAL"] ?? row?.PrecioEstatal),
+    precio_municipal: normalizeValue(row?.precio_municipal ?? row?.["PRECIO MUNICIPAL"] ?? row?.PrecioMunicipal),
+    ultimo_pipc_estatal: pickFirst(row, ["ultimo_pipc_estatal", "ULTIMO PIPC ESTATAL", "Ultimo PIPC Estatal"]),
+    ultimo_municipal: pickFirst(row, ["ultimo_municipal", "ULTIMO MUNICIPAL", "Ultimo Municipal"]),
+    pedido: pickFirst(row, ["pedido", "PEDIDO", "Pedido"]),
     planeacion_status: pickFirst(row, ["planeacion_status", "ESTATUS CAPACITACION", "STATUS", "status"]),
     planeacion_tone: pickFirst(row, ["planeacion_tone", "PLANEACION_TONE"]),
     drive: pickFirst(row, ["drive", "DRIVE"]),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapEstatalRow(row) {
+  const fecha = pickFirst(row, ["fecha", "FECHA", "Fecha"]);
+  const anio = pickFirst(row, ["anio", "AÑO", "ANO", "AÃ‘O", "year", "YEAR"]) ?? extractYearValue(fecha);
+  return {
+    row_id: pickFirst(row, ["row_id", "Row ID", "ROW ID", "Row Id", "_RowNumber", "_ROWNUMBER", "id", "ID"]),
+    fecha,
+    anio,
+    sucursal_id: pickFirst(row, ["sucursal_id", "SUCURSAL", "Sucursal", "sucursal", "TIENDA", "Tienda", "tienda"]),
+    pipc: pickFirst(row, ["pipc", "PIPC", "Ultimo PIPC", "ULTIMO PIPC", "ULTIMO PIPC ESTATAL"]),
+    documentacion: pickFirst(row, ["documentacion", "DOCUMENTACION", "Documentacion"]),
+    anexos_impresos: pickFirst(row, ["anexos_impresos", "ANEXOS IMPRESOS", "ANEXOS_IMPRESOS"]),
+    notas: pickFirst(row, ["notas", "NOTAS", "Notas"]),
+    data_json: stringifyRawRow(row),
+    sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
+    sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
+    sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
+    sync_origen_ultimo: pickFirst(row, ["sync_origen_ultimo", "SYNC_ORIGEN_ULTIMO"]),
+  };
+}
+
+function mapMunicipalRow(row) {
+  const fecha = pickFirst(row, ["fecha", "FECHA", "Fecha"]);
+  const anio = pickFirst(row, ["anio", "AÑO", "ANO", "AÃ‘O", "year", "YEAR"]) ?? extractYearValue(fecha);
+  return {
+    row_id: pickFirst(row, ["row_id", "Row ID", "ROW ID", "Row Id", "_RowNumber", "_ROWNUMBER", "id", "ID"]),
+    fecha,
+    anio,
+    sucursal_id: pickFirst(row, ["sucursal_id", "SUCURSAL", "Sucursal", "sucursal", "TIENDA", "Tienda", "tienda"]),
+    plan_de_contingencia: pickFirst(row, ["plan_de_contingencia", "PLAN DE CONTINGENCIA", "PLAN_DE_CONTINGENCIA", "Ultimo Municipal", "ULTIMO MUNICIPAL"]),
+    documentacion: pickFirst(row, ["documentacion", "DOCUMENTACION", "Documentacion"]),
+    anexos_impresos: pickFirst(row, ["anexos_impresos", "ANEXOS IMPRESOS", "ANEXOS_IMPRESOS"]),
+    notas: pickFirst(row, ["notas", "NOTAS", "Notas"]),
+    data_json: stringifyRawRow(row),
     sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
     sync_appsheet_fecha: pickFirst(row, ["sync_appsheet_fecha", "SYNC_APPSHEET_FECHA"]),
     sync_appsheet_operacion: pickFirst(row, ["sync_appsheet_operacion", "SYNC_APPSHEET_OPERACION"]),
@@ -1145,17 +1380,19 @@ function mapEmpleadoRow(row) {
 
 function mapCapacitacionRow(row) {
   const cedeSucursalId = pickFirst(row, ["cede_sucursal_id", "cede", "CEDE"]);
+  const fechaCapacitacion = pickFirst(row, ["fecha_capacitacion", "FECHA CAPACITACION"]);
+  const status = deriveCapacitacionStatus(fechaCapacitacion) || pickFirst(row, ["status", "STATUS", "Estatus", "ESTATUS"]);
   return {
     row_id: pickFirst(row, ["Row ID", "ROW ID", "Row Id", "row_id"]),
     id: pickFirst(row, ["id", "ID"]),
-    fecha_capacitacion: pickFirst(row, ["fecha_capacitacion", "FECHA CAPACITACION"]),
+    fecha_capacitacion: fechaCapacitacion,
     hora_inicio: pickFirst(row, ["hora_inicio", "HORA INICIO"]),
     hora_fin: pickFirst(row, ["hora_fin", "HORA FIN"]),
     cede_sucursal_id: cedeSucursalId,
     cede: cedeSucursalId,
     sucursales: pickFirst(row, ["sucursales", "SUCURSALES"]),
     capacitadores: pickFirst(row, ["capacitadores", "CAPACITADORES"]),
-    status: pickFirst(row, ["status", "STATUS", "Estatus", "ESTATUS"]),
+    status,
     diplomas: pickFirst(row, ["diplomas", "DIPLOMAS"]),
     notas: pickFirst(row, ["notas", "NOTAS"]),
     sync_appsheet_estado: pickFirst(row, ["sync_appsheet_estado", "SYNC_APPSHEET_ESTADO"]),
@@ -1851,6 +2088,94 @@ export function persistCasaLeyLocalRows({ pagosRows = [], relacionadosRows = [],
   };
 }
 
+export function replaceCasaLeyLocalRows({ pagosRows = [], relacionadosRows = [], facturasRows = [] } = {}) {
+  replaceMany("cheques_ley", pagosRows, "referencia_pago", mapChequeRow);
+  replaceMany("pagados_ley", relacionadosRows, "referencia", mapRelacionadoRow);
+  replaceMany("facturas_en_ley", facturasRows, "folio_uuid", mapFacturaLeyRow);
+  return {
+    pagos: Array.isArray(pagosRows) ? pagosRows.length : 0,
+    relacionados: Array.isArray(relacionadosRows) ? relacionadosRows.length : 0,
+    facturas: Array.isArray(facturasRows) ? facturasRows.length : 0,
+  };
+}
+
+export function mirrorCasaLeyTablesToSyncDb({ targetPath = process.env.DESARROLLOEG_SYNC_DB_PATH } = {}) {
+  const sourceDb = getDb();
+  const sourcePath = cachedDbPath ? path.resolve(cachedDbPath) : "";
+  const resolvedTargetPath = String(targetPath || "").trim();
+  if (!sourceDb || !resolvedTargetPath) {
+    return { mirrored: false, reason: "missing_database", tables: {} };
+  }
+
+  const absoluteTargetPath = path.resolve(resolvedTargetPath);
+  if (sourcePath && sourcePath === absoluteTargetPath) {
+    return { mirrored: false, reason: "same_database", tables: {} };
+  }
+
+  ensureDir(absoluteTargetPath);
+  const targetDb = new DatabaseSync(absoluteTargetPath);
+  const insertOrder = ["cheques_ley", "facturas_en_ley", "pagados_ley"];
+  const deleteOrder = [...insertOrder].reverse();
+  const summary = {};
+  try {
+    targetDb.exec("PRAGMA busy_timeout = 10000;");
+    // Pagados puede conservar relaciones historicas cuyo cheque queda fuera del rango consultado.
+    targetDb.exec("PRAGMA foreign_keys = OFF;");
+    targetDb.exec("BEGIN IMMEDIATE;");
+    const preparedTables = new Map();
+    for (const tableName of insertOrder) {
+      const targetExists = targetDb.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+      if (!targetExists) {
+        throw new Error(`La tabla destino ${tableName} no existe en la replica DesarrolloEG`);
+      }
+
+      const sourceColumns = sourceDb.prepare(`PRAGMA table_info(${quoteIdentifier(tableName)})`).all().map((column) => String(column.name));
+      const targetColumns = new Set(targetDb.prepare(`PRAGMA table_info(${quoteIdentifier(tableName)})`).all().map((column) => String(column.name)));
+      const columns = sourceColumns.filter((column) => targetColumns.has(column));
+      if (!columns.length) {
+        throw new Error(`No hay columnas compatibles para replicar ${tableName}`);
+      }
+
+      const columnSql = columns.map(quoteIdentifier).join(", ");
+      const rows = sourceDb.prepare(`SELECT ${columnSql} FROM ${quoteIdentifier(tableName)}`).all();
+      preparedTables.set(tableName, { columns, columnSql, rows });
+    }
+
+    for (const tableName of deleteOrder) {
+      targetDb.prepare(`DELETE FROM ${quoteIdentifier(tableName)}`).run();
+    }
+
+    for (const tableName of insertOrder) {
+      const { columns, columnSql, rows } = preparedTables.get(tableName);
+      if (rows.length) {
+        const placeholders = columns.map(() => "?").join(", ");
+        const insert = targetDb.prepare(`INSERT INTO ${quoteIdentifier(tableName)} (${columnSql}) VALUES (${placeholders})`);
+        for (const row of rows) {
+          insert.run(...columns.map((column) => normalizeValue(row[column])));
+        }
+      }
+      summary[tableName] = rows.length;
+    }
+    targetDb.exec("COMMIT;");
+    targetDb.exec("PRAGMA foreign_keys = ON;");
+    return { mirrored: true, sourcePath, targetPath: absoluteTargetPath, tables: summary };
+  } catch (error) {
+    try {
+      targetDb.exec("ROLLBACK;");
+    } catch {
+      // La transaccion pudo fallar antes de iniciar.
+    }
+    try {
+      targetDb.exec("PRAGMA foreign_keys = ON;");
+    } catch {
+      // La conexion se cerrara de todas formas.
+    }
+    throw error;
+  } finally {
+    targetDb.close();
+  }
+}
+
 export function getCasaLeyPendingSyncRows(scope) {
   const config = getCasaLeyTableConfig(scope);
   if (!config) return [];
@@ -1900,6 +2225,45 @@ export function upsertPedidoLeyLocalRow(row) {
   upsertMany("pedidos_ley", [row], "pedido", mapPedidoLeyRow);
 }
 
+export function markPedidoLeySentLocal(
+  pedido,
+  enviado = true,
+  {
+    syncState = "PENDIENTE",
+    syncAt = null,
+    origin = "PLATAFORMA",
+  } = {},
+) {
+  const pedidoValue = String(pedido ?? "").trim();
+  if (!pedidoValue) return 0;
+  const db = getDb();
+  if (!db) return 0;
+  initSchema();
+  if (!isRetryWindowOpen()) return 0;
+
+  const normalizedSyncState = String(syncState || "PENDIENTE").trim().toUpperCase();
+  const result = db.prepare(`
+    UPDATE pedidos_ley
+    SET enviado = ?,
+        sync_appsheet_estado = ?,
+        sync_appsheet_fecha = ?,
+        sync_appsheet_operacion = CASE
+          WHEN ? = 'SINCRONIZADO' THEN NULL
+          ELSE 'EDIT'
+        END,
+        sync_origen_ultimo = ?
+    WHERE pedido = ?
+  `).run(
+    enviado === false ? null : "SI",
+    normalizedSyncState,
+    syncAt ? normalizeCfdiSyncValue(syncAt) : null,
+    normalizedSyncState,
+    String(origin || "PLATAFORMA"),
+    pedidoValue,
+  );
+  return Number(result?.changes || 0);
+}
+
 export function upsertLiberacionLocalRow(row) {
   upsertMany("liberaciones", [row], "liberacion", mapLiberacionRow);
 }
@@ -1912,6 +2276,24 @@ export function getPedidosLeyLocalRows() {
 export function getLiberacionesLocalRows() {
   if (!isRetryWindowOpen()) return [];
   return getDb()?.prepare(`SELECT * FROM liberaciones ORDER BY rowid`).all() || [];
+}
+
+export function getCfdisLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM cfdis ORDER BY rowid`).all() || [];
+}
+
+export function getFacturasEnLeyLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM facturas_en_ley ORDER BY rowid`).all() || [];
+}
+
+export function getPagadosLeyLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM pagados_ley ORDER BY rowid`).all() || [];
 }
 
 export function markPedidoExtractionState(pedido, { extracted = true, extractedAt = new Date().toISOString(), error = null, syncState = "PENDIENTE", syncAt = null, origin = "JOB_LOCAL" } = {}) {
@@ -1958,6 +2340,14 @@ export function upsertEstadosLocalRows(rows = []) {
 
 export function upsertSucursalesLocalRows(rows = []) {
   upsertMany("sucursales", rows, "id", mapSucursalRow);
+}
+
+export function upsertEstatalesLocalRows(rows = []) {
+  upsertMany("estatales", rows, "row_id", mapEstatalRow);
+}
+
+export function upsertMunicipalesLocalRows(rows = []) {
+  upsertMany("municipales", rows, "row_id", mapMunicipalRow);
 }
 
 export function upsertEmpleadosLocalRows(rows = []) {
@@ -2024,6 +2414,22 @@ export function replaceCotizacionCentrosTrabajoLocalRows(rows = []) {
   replaceMany("cotizacion_centros_trabajo", rows, "id", mapCotizacionCentroTrabajoBridgeRow);
 }
 
+export function replaceEstatalesLocalRows(rows = []) {
+  replaceMany("estatales", rows, "row_id", mapEstatalRow);
+}
+
+export function replaceMunicipalesLocalRows(rows = []) {
+  replaceMany("municipales", rows, "row_id", mapMunicipalRow);
+}
+
+export function deleteEstatalesLocalRows(keys = []) {
+  return deleteByKeys("estatales", "row_id", keys);
+}
+
+export function deleteMunicipalesLocalRows(keys = []) {
+  return deleteByKeys("municipales", "row_id", keys);
+}
+
 export function getCapacitacionSucursalesLocalRows() {
   initSchema();
   if (!isRetryWindowOpen()) return [];
@@ -2058,6 +2464,18 @@ export function getSucursalesLocalRows() {
   initSchema();
   if (!isRetryWindowOpen()) return [];
   return getDb()?.prepare(`SELECT * FROM sucursales ORDER BY id`).all() || [];
+}
+
+export function getEstatalesLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM estatales ORDER BY anio DESC, fecha DESC, row_id`).all() || [];
+}
+
+export function getMunicipalesLocalRows() {
+  initSchema();
+  if (!isRetryWindowOpen()) return [];
+  return getDb()?.prepare(`SELECT * FROM municipales ORDER BY anio DESC, fecha DESC, row_id`).all() || [];
 }
 
 export function getEmpleadosLocalRows() {

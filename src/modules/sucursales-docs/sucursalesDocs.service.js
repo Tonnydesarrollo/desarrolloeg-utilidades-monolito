@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import puppeteer from "puppeteer-core";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { refreshPersistentCacheEntry } from "../../services/platformCache.js";
+import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -543,50 +543,8 @@ async function resolveProteccionCivilLogoDataUri(config) {
 }
 
 async function fetchTable(config, tableName) {
-  if (!config.appsheetAppId) {
-    throw new Error("No hay App ID configurado para AppSheet.");
-  }
-  if (!config.appsheetAccessKey) {
-    throw new Error("No hay Access Key configurada para AppSheet.");
-  }
-
-  const selector = `Filter(${tableName}, true)`;
-  const result = await refreshPersistentCacheEntry({
-    namespace: `${SUCURSALES_DOCS_CACHE_NAMESPACE}.${normalizeTokenKey(tableName)}`,
-    cacheKey: "rows",
-    ttlMs: SUCURSALES_DOCS_CACHE_TTL_MS,
-    source: `appsheet:${tableName}`,
-    loader: async () => {
-      const url = `https://${config.appsheetRegion}/api/v2/apps/${config.appsheetAppId}/tables/${encodeURIComponent(tableName)}/Action`;
-      const payload = {
-        Action: "Find",
-        Properties: {
-          Locale: config.appsheetLocale,
-          Timezone: config.appsheetTimezone,
-          Selector: selector,
-        },
-      };
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ApplicationAccessKey: config.appsheetAccessKey,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`AppSheet devolvio ${response.status}: ${await response.text()}`);
-      }
-
-      const data = await response.json();
-      return Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
-    },
-    allowStaleFallback: true,
-  });
-
-  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
+  void config;
+  return readLocalOperationalTable(tableName);
 }
 
 async function fetchSucursales(config) {

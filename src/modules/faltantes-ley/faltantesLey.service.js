@@ -1,4 +1,4 @@
-import { refreshPersistentCacheEntry } from "../../services/platformCache.js";
+import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 import XLSX from "xlsx";
 
 const cache = {
@@ -210,47 +210,8 @@ function makeMap(rows, keys) {
 }
 
 async function fetchTable(config, tableName) {
-  if (!config.appsheetAppId) {
-    throw new Error("No hay APPSHEET_APP_ID configurado.");
-  }
-  if (!config.appsheetAccessKey) {
-    throw new Error("No hay APPSHEET_API_KEY configurado.");
-  }
-
-  const result = await refreshPersistentCacheEntry({
-    namespace: `faltantes-ley.tables.${String(tableName).trim().toLowerCase()}`,
-    cacheKey: "rows",
-    ttlMs: Number(process.env.FALTANTES_LEY_CACHE_TTL_MS || 5 * 60 * 1000),
-    source: `appsheet:${tableName}`,
-    loader: async () => {
-      const url = `https://${config.appsheetRegion}/api/v2/apps/${config.appsheetAppId}/tables/${encodeURIComponent(tableName)}/Action`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ApplicationAccessKey: config.appsheetAccessKey,
-        },
-        body: JSON.stringify({
-          Action: "Find",
-          Properties: {
-            Locale: config.appsheetLocale,
-            Timezone: config.appsheetTimezone,
-          },
-          Rows: [],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`AppSheet devolvio ${response.status}: ${await response.text()}`);
-      }
-
-      const data = await response.json();
-      return Array.isArray(data) ? data : Array.isArray(data?.Rows) ? data.Rows : [];
-    },
-    allowStaleFallback: true,
-  });
-
-  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
+  void config;
+  return readLocalOperationalTable(tableName);
 }
 
 function cleanPiece(value) {

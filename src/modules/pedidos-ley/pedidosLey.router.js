@@ -244,11 +244,17 @@ pedidosLeyApiRouter.post('/send', async (req, res) => {
       // Bitacora best-effort.
     }
 
+    let syncWarning = '';
     if (String(payload.pedido || '').trim()) {
-      await markPedidoLeyEnviado({ pedido: String(payload.pedido || '').trim(), enviado: true });
+      try {
+        await markPedidoLeyEnviado({ pedido: String(payload.pedido || '').trim(), enviado: true });
+      } catch (error) {
+        syncWarning = error instanceof Error ? error.message : 'No se pudo sincronizar el estado con AppSheet';
+        console.warn('[pedidos-ley] El correo se envio, pero la sincronizacion remota quedo pendiente:', syncWarning);
+      }
     }
 
-    res.json({ ok: true, result });
+    res.json({ ok: true, result, syncWarning });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
     res.status(500).json({ ok: false, error: message });

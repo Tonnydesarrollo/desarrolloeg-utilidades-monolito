@@ -2,6 +2,21 @@ import fs from 'fs';
 import path from 'path';
 import mime from 'mime-types';
 import { google } from 'googleapis';
+import {
+  getCatalogoLocalRows,
+  getCfdisLocalRows,
+  getEstatalesLocalRows,
+  getEstadosLocalRows,
+  getFacturasEnLeyLocalRows,
+  getLiberacionesLocalRows,
+  getMunicipiosLocalRows,
+  getMunicipalesLocalRows,
+  getPagadosLeyLocalRows,
+  getPedidosLeyLocalRows,
+  getProveedoresLocalRows,
+  getSucursalesLocalRows,
+  markPedidoLeySentLocal,
+} from "../../jobs/services/localAppsheetDb.js";
 
 const APP_ID = (process.env.FINANZAS_APPSHEET_APP_ID || process.env.PEDIDOS_APPSHEET_APP_ID || process.env.APPSHEET_APP_ID || '').trim();
 const API_KEY = (process.env.FINANZAS_APPSHEET_API_KEY || process.env.PEDIDOS_APPSHEET_API_KEY || process.env.APPSHEET_API_KEY || '').trim();
@@ -15,9 +30,9 @@ const SENT_LOG_FILE = process.env.PEDIDOS_LEY_SENT_LOG_FILE || path.resolve(proc
 const DRIVE_CREDENTIALS_PATH = process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS || process.env.FACTURACION_GOOGLE_CREDENTIALS_PATH || '';
 const DRIVE_TOKEN_PATH = process.env.PEDIDOS_GOOGLE_TOKEN_PATH || process.env.FACTURACION_GOOGLE_TOKEN_PATH || '';
 const CACHE_TTL_MS = Math.max(10_000, Number(process.env.PEDIDOS_LEY_CACHE_TTL_MS || 15 * 60_000));
-const DEFAULT_STATE_THRESHOLD = 32000;
-const DEFAULT_MUNICIPAL_THRESHOLD = 9794.98;
-const DEFAULT_ADMIN_FACTURADOR_ID = 'xwDqa6Mt6a42iqKHzJG9L6';
+const DEFAULT_STATE_THRESHOLD = 32967.49;
+const DEFAULT_MUNICIPAL_THRESHOLD = 11000;
+const DEFAULT_ADMIN_FACTURADOR_ID = '';
 const CULIACAN_MUNICIPAL_FACTURADOR_ID = 'EiHiUQ9YHf4mA-C7L_ziyc';
 const FACTURADOR_OPTIONS = new Map([
   ['EiHiUQ9YHf4mA-C7L_ziyc', 'SERGIO GONZALEZ CASTILLO'],
@@ -41,6 +56,7 @@ const lookupCache = {
   municipios: { at: 0, lookup: null },
   estados: { at: 0, lookup: null },
   sucursales: { at: 0, lookup: null },
+  trabajos: { at: 0, lookup: null },
 };
 
 const dashboardCache = new Map();
@@ -53,7 +69,11 @@ function sleep(ms) {
 }
 
 function ensureDir(dirPath) {
-  fs.mkdirSync(dirPath, { recursive: true });
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+  } catch (error) {
+    console.warn('[pedidos-ley] no se pudo preparar directorio:', dirPath, error?.message || error);
+  }
 }
 
 function normalizeText(value) {
@@ -297,8 +317,284 @@ function normalizeEstadoRow(row = {}) {
   return { key, nombre, escudo, displayLabel, raw: row };
 }
 
+function normalizeRelationKey(value) {
+  return normalizeText(value).replace(/[^A-Z0-9]/g, '');
+}
+
+export function extractAssignmentRelationKeys(value) {
+  const pending = Array.isArray(value) ? [...value] : [value];
+  const keys = new Set();
+  while (pending.length) {
+    const current = pending.shift();
+    if (current == null) continue;
+    if (Array.isArray(current)) {
+      pending.push(...current);
+      continue;
+    }
+    if (typeof current === 'object') {
+      pending.push(...Object.values(current));
+      continue;
+    }
+    const text = String(current || '').trim();
+    if (!text) continue;
+    if ((text.startsWith('[') && text.endsWith(']')) || (text.startsWith('{') && text.endsWith('}'))) {
+      try {
+        pending.push(JSON.parse(text));
+        continue;
+      } catch {
+        // AppSheet may serialize EnumList values without valid JSON.
+      }
+    }
+    text.split(/[,;|\n\r]+/)
+      .map((part) => normalizeRelationKey(part))
+      .filter(Boolean)
+      .forEach((key) => keys.add(key));
+  }
+  return keys;
+}
+
+function getPedidoThresholdDefaults(year = new Date().getFullYear()) {
+  const normalizedYear = Number.parseInt(String(year || ''), 10);
+  const municipalByYear = Number.parseFloat(process.env[`PEDIDOS_LEY_MUNICIPAL_THRESHOLD_${normalizedYear}`]);
+  const municipalGeneral = Number.parseFloat(process.env.PEDIDOS_LEY_MUNICIPAL_THRESHOLD);
+  const estatalGeneral = Number.parseFloat(process.env.PEDIDOS_LEY_STATE_THRESHOLD);
+  return {
+    estatalMin: Number.isFinite(estatalGeneral) ? estatalGeneral : DEFAULT_STATE_THRESHOLD,
+    municipalMin: Number.isFinite(municipalByYear)
+      ? municipalByYear
+      : Number.isFinite(municipalGeneral)
+        ? municipalGeneral
+        : DEFAULT_MUNICIPAL_THRESHOLD,
+  };
+}
+
+const PEDIDO_BUSINESS_STATUS = Object.freeze({
+  SIN_LIBERACION: 'sin-liberacion',
+  LIBERADO: 'liberados',
+  NO_PAGADO: 'pendientes-pago',
+  PAGADO: 'pagados',
+});
+
+const PEDIDO_DELIVERY_STATUS = Object.freeze({
+  SIN_TRABAJO: 'sin-liberacion-sin-trabajo',
+  NO_ENVIADO: 'sin-liberacion-no-enviados',
+  ENVIADO: 'sin-liberacion-enviados',
+});
+
+export function hasPedidoDirectPaymentEvidence({ pago = '', cheque = '', status = '' } = {}) {
+  const hasRelation = [pago, cheque].some((value) => {
+    const normalized = normalizeText(normalizeScalarText(value));
+    return normalized && !['FALSE', 'NO', '0', '[]', '{}', 'NULL'].includes(normalized);
+  });
+  return hasRelation || normalizeText(status) === 'PAGADO';
+}
+
+function isUuidRelationKey(value) {
+  const text = String(value || '').trim();
+  return /^[0-9A-F]{32}$/i.test(text)
+    || /^[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/i.test(text);
+}
+
+export function classifyPedidoBusinessStatus({
+  hasLiberacion = false,
+  hasFacturaLey = false,
+  pagado = false,
+} = {}) {
+  if (pagado) return PEDIDO_BUSINESS_STATUS.PAGADO;
+  if (hasFacturaLey) return PEDIDO_BUSINESS_STATUS.NO_PAGADO;
+  if (hasLiberacion) return PEDIDO_BUSINESS_STATUS.LIBERADO;
+  return PEDIDO_BUSINESS_STATUS.SIN_LIBERACION;
+}
+
+export function classifyPedidoDeliveryStatus({ enviado = false, tieneTrabajoActual = false } = {}) {
+  if (enviado) return PEDIDO_DELIVERY_STATUS.ENVIADO;
+  if (tieneTrabajoActual) return PEDIDO_DELIVERY_STATUS.NO_ENVIADO;
+  return PEDIDO_DELIVERY_STATUS.SIN_TRABAJO;
+}
+
+function isCompletedTrabajo(trabajo, targetYear) {
+  if (!trabajo || Number(trabajo.anio) !== Number(targetYear)) return false;
+  const status = normalizeText(trabajo.estado);
+  return ['EN DRIVE', 'IMPRESO', 'ENTREGADO'].some((allowed) => status.includes(allowed));
+}
+
+function buildPedidoBusinessContext() {
+  const liberacionByPedido = new Map();
+  for (const row of getLiberacionesLocalRows()) {
+    const pedidoKey = normalizeRelationKey(row.num_pedido);
+    if (pedidoKey) liberacionByPedido.set(pedidoKey, row);
+  }
+
+  const cfdisByPedido = new Map();
+  for (const row of getCfdisLocalRows()) {
+    const pedidoKey = normalizeRelationKey(row.pedido);
+    if (!pedidoKey) continue;
+    const rows = cfdisByPedido.get(pedidoKey) || [];
+    rows.push(row);
+    cfdisByPedido.set(pedidoKey, rows);
+  }
+
+  const facturaUuid = new Set(
+    getFacturasEnLeyLocalRows().map((row) => normalizeRelationKey(row.folio_uuid)).filter(Boolean)
+  );
+  // Ignore legacy malformed rows whose columns were shifted by an old local sync.
+  const pagados = getPagadosLeyLocalRows().filter((row) => {
+    const uuidKey = normalizeRelationKey(row.uuid);
+    const assignments = extractAssignmentRelationKeys(row.asignacion);
+    return isUuidRelationKey(uuidKey) || assignments.size > 0;
+  });
+  const pagadoUuid = new Set(
+    pagados.map((row) => normalizeRelationKey(row.uuid)).filter(isUuidRelationKey)
+  );
+  const asignacionesPagadas = new Set(
+    pagados.flatMap((row) => [...extractAssignmentRelationKeys(row.asignacion)])
+  );
+  return { liberacionByPedido, cfdisByPedido, facturaUuid, pagadoUuid, asignacionesPagadas };
+}
+
+function enrichPedidoBusiness(row, context, targetYear) {
+  const pedidoKey = normalizeRelationKey(row.pedido);
+  const liberacionRow = context.liberacionByPedido.get(pedidoKey) || null;
+  const liberacion = normalizeScalarText(liberacionRow?.liberacion || row.liberacion || row.relatedLiberaciones);
+  const liberacionKey = normalizeRelationKey(liberacion);
+  const cfdis = context.cfdisByPedido.get(pedidoKey) || [];
+  const uuidRawCandidates = [...new Set([
+    normalizeScalarText(row.uuid),
+    ...cfdis.map((candidate) => normalizeScalarText(candidate.uuid)),
+  ].filter(Boolean))];
+  const uuidCandidates = [...new Set(
+    uuidRawCandidates.map((candidate) => normalizeRelationKey(candidate)).filter(isUuidRelationKey)
+  )];
+  const uuidKey = uuidCandidates.find((candidate) => context.facturaUuid.has(candidate))
+    || uuidCandidates.find((candidate) => context.pagadoUuid.has(candidate))
+    || uuidCandidates[0]
+    || '';
+  const uuid = uuidRawCandidates.find((candidate) => normalizeRelationKey(candidate) === uuidKey) || uuidKey;
+  // LIBERACIONES is authoritative; calculated AppSheet fields may contain stale IDs or serialized empty lists.
+  const hasLiberacion = Boolean(liberacionRow);
+  const hasFacturaLey = uuidCandidates.some((candidate) => context.facturaUuid.has(candidate));
+  const paidByUuid = uuidCandidates.some((candidate) => context.pagadoUuid.has(candidate));
+  const paidByLiberacion = Boolean(liberacionKey && context.asignacionesPagadas.has(liberacionKey));
+  const paidByDirectRelation = hasPedidoDirectPaymentEvidence(row);
+  // Los campos calculados PAGO/STATUS de PEDIDOS_LEY pueden quedar rezagados.
+  // Un pago solo existe si PAGADOS_LEY lo relaciona por UUID o liberacion.
+  const pagado = paidByUuid || paidByLiberacion;
+  const estatalActual = isCompletedTrabajo(row.trabajoEstatal, targetYear);
+  const municipalActual = isCompletedTrabajo(row.trabajoMunicipal, targetYear);
+  const tieneTrabajoActual = row.tipoClasificacion === 'estatal'
+    ? estatalActual
+    : row.tipoClasificacion === 'municipal'
+      ? municipalActual
+      : estatalActual || municipalActual;
+  const enviado = Boolean(row.enviadoBool);
+  const status = classifyPedidoBusinessStatus({
+    hasLiberacion,
+    hasFacturaLey,
+    pagado,
+  });
+  const deliveryStatus = status === PEDIDO_BUSINESS_STATUS.SIN_LIBERACION
+    ? classifyPedidoDeliveryStatus({ enviado, tieneTrabajoActual })
+    : null;
+  const business = {
+    status,
+    deliveryStatus,
+    hasLiberacion,
+    hasFacturaLey,
+    paidByUuid,
+    paidByLiberacion,
+    paidByDirectRelation,
+    pagado: status === PEDIDO_BUSINESS_STATUS.PAGADO,
+    noPagado: status === PEDIDO_BUSINESS_STATUS.NO_PAGADO,
+    liberadoPendienteFactura: status === PEDIDO_BUSINESS_STATUS.LIBERADO,
+    sinLiberacionEnviado: deliveryStatus === PEDIDO_DELIVERY_STATUS.ENVIADO,
+    sinLiberacionListo: deliveryStatus === PEDIDO_DELIVERY_STATUS.NO_ENVIADO,
+    sinLiberacionSinTrabajo: deliveryStatus === PEDIDO_DELIVERY_STATUS.SIN_TRABAJO,
+    tieneTrabajoActual,
+    estatalActual,
+    municipalActual,
+    uuidCandidates,
+  };
+  return {
+    ...row,
+    liberacion,
+    liberacionBool: hasLiberacion,
+    uuid,
+    facturaEnLeyBool: hasFacturaLey,
+    pagoBool: pagado,
+    business,
+  };
+}
+
+function normalizeProveedorOption(row = {}) {
+  const id = normalizeScalarText(getRowValue(row, ['id', 'ID', 'Id', 'Row ID', 'ROW ID', 'row_id']));
+  const nombre = getFirstMeaningfulText(row, [
+    'nombre',
+    'NOMBRE',
+    'Nombre',
+    'RAZON SOCIAL',
+    'Razon Social',
+    'razon_social',
+    'PROVEEDOR',
+    'Proveedor',
+  ]);
+  const label = nombre || id;
+  return {
+    id,
+    nombre: label,
+    label,
+    value: id,
+  };
+}
+
+function buildFacturadorOptions(rows = []) {
+  const byId = new Map();
+  const countsById = new Map();
+  const proveedoresById = new Map();
+
+  const addOption = (option = {}) => {
+    const id = normalizeScalarText(option.id || option.value);
+    const label = normalizeScalarText(option.label || option.nombre || id);
+    if (!id || !label) return;
+    byId.set(id, {
+      id,
+      value: id,
+      nombre: label,
+      label,
+      count: countsById.get(id) || 0,
+    });
+  };
+
+  for (const row of getProveedoresLocalRows()) {
+    const option = normalizeProveedorOption(row);
+    if (option.id) proveedoresById.set(option.id, option);
+  }
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const id = normalizeScalarText(row.facturadorId);
+    if (!id) continue;
+    countsById.set(id, (countsById.get(id) || 0) + 1);
+  }
+
+  for (const id of countsById.keys()) {
+    addOption(proveedoresById.get(id) || { id, label: FACTURADOR_OPTIONS.get(id) || id });
+  }
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    addOption({ id: row.facturadorId, label: row.facturadorNombre || row.facturadorId });
+  }
+
+  for (const option of byId.values()) {
+    option.count = countsById.get(option.id) || 0;
+  }
+
+  return [...byId.values()].sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.label.localeCompare(b.label, 'es');
+  });
+}
+
 function normalizeSucursalRow(row = {}, catalogs = {}) {
-  const key = normalizeScalarText(getRowValue(row, ['id', 'ID', 'Id', 'Row ID', 'ROW ID']));
+  const key = normalizeScalarText(getRowValue(row, ['id', 'ID', 'Id', 'Row ID', 'ROW ID', 'row_id']));
   const label = normalizeScalarText(
     getRowValue(row, [
       'Label',
@@ -336,24 +632,24 @@ function normalizeSucursalRow(row = {}, catalogs = {}) {
     ])
   );
   const tienda = normalizeScalarText(getRowValue(row, ['TIENDA', 'Tienda', 'tienda']));
-  const empresaIdRaw = getRowValue(row, ['ID EMPRESA', 'EMPRESA', 'Empresa', 'empresa']);
-  const municipioIdRaw = getRowValue(row, ['MUNICIPIO', 'Municipio', 'municipio']);
-  const estadoIdRaw = getRowValue(row, ['ESTADO', 'Estado', 'estado']);
+  const empresaIdRaw = getRowValue(row, ['ID EMPRESA', 'EMPRESA', 'Empresa', 'empresa', 'empresa_id', 'empresaId']);
+  const municipioIdRaw = getRowValue(row, ['MUNICIPIO', 'Municipio', 'municipio', 'municipio_id', 'municipioId']);
+  const estadoIdRaw = getRowValue(row, ['ESTADO', 'Estado', 'estado', 'estado_id', 'estadoId']);
   const municipioRow = resolveLookupRow(municipioIdRaw, catalogs.municipiosLookup);
   const estadoRow = resolveLookupRow(estadoIdRaw, catalogs.estadosLookup);
   const direccion = normalizeScalarText(getRowValue(row, ['DIRECCION', 'Direccion', 'direccion']));
   const direccionGoogle = normalizeScalarText(getRowValue(row, ['DIRECCION GOOGLE', 'Direccion Google', 'direccionGoogle', 'DIRECCION_GOOGLE']));
-  const status = normalizeScalarText(getRowValue(row, ['STATUS', 'Status', 'status']));
-  const vencimientoMunicipal = normalizeScalarText(getRowValue(row, ['VENCIMIENTO MUNICIPAL', 'Vencimiento Municipal', 'vencimiento municipal']));
+  const status = normalizeScalarText(getRowValue(row, ['STATUS', 'Status', 'status', 'planeacion_status', 'sync_appsheet_estado']));
+  const vencimientoMunicipal = normalizeScalarText(getRowValue(row, ['VENCIMIENTO MUNICIPAL', 'Vencimiento Municipal', 'vencimiento municipal', 'vencimiento_municipal']));
   const trabajos = normalizeScalarText(getRowValue(row, ['TRABAJOS', 'Trabajos', 'trabajos']));
   const tipo = normalizeScalarText(getRowValue(row, ['TIPO', 'Tipo', 'tipo']));
-  const nivelRiesgo = normalizeScalarText(getRowValue(row, ['NIVEL DE RIESGO', 'Nivel de Riesgo', 'nivel de riesgo']));
-  const precioEstatal = parseMoneyValue(getRowValue(row, ['PRECIO ESTATAL', 'Precio Estatal', 'precio estatal']));
-  const precioMunicipal = parseMoneyValue(getRowValue(row, ['PRECIO MUNICIPAL', 'Precio Municipal', 'precio municipal']));
+  const nivelRiesgo = normalizeScalarText(getRowValue(row, ['NIVEL DE RIESGO', 'Nivel de Riesgo', 'nivel de riesgo', 'nivel_riesgo']));
+  const precioEstatal = parseMoneyValue(getRowValue(row, ['PRECIO ESTATAL', 'Precio Estatal', 'precio estatal', 'precio_estatal']));
+  const precioMunicipal = parseMoneyValue(getRowValue(row, ['PRECIO MUNICIPAL', 'Precio Municipal', 'precio municipal', 'precio_municipal']));
   const idPc = normalizeScalarText(getRowValue(row, ['ID_PC', 'ID PC', 'Id Pc', 'id_pc']));
   const logo = normalizeScalarText(getRowValue(row, ['LOGO', 'Logo']));
-  const ultimoPipcEstatal = normalizeScalarText(getRowValue(row, ['ULTIMO PIPC ESTATAL', 'Ultimo PIPC Estatal', 'ultimo pipc estatal']));
-  const ultimoPipcMunicipal = normalizeScalarText(getRowValue(row, ['ULTIMO MUNICIPAL', 'Ultimo Municipal', 'ultimo municipal']));
+  const ultimoPipcEstatal = normalizeScalarText(getRowValue(row, ['ULTIMO PIPC ESTATAL', 'Ultimo PIPC Estatal', 'ultimo pipc estatal', 'ultimo_pipc_estatal', 'vencimiento_estatal']));
+  const ultimoPipcMunicipal = normalizeScalarText(getRowValue(row, ['ULTIMO MUNICIPAL', 'Ultimo Municipal', 'ultimo municipal', 'ultimo_municipal']));
   const pedido = normalizeScalarText(getRowValue(row, ['PEDIDO', 'Pedido', 'pedido']));
   const latLng = normalizeScalarText(getRowValue(row, ['lat/lng', 'LAT/LNG', 'LAT LNG', 'latlng', 'LATLNG']));
   const mesPlaneacion = normalizeScalarText(getRowValue(row, ['MES PLANEACION', 'Mes Planeacion', 'mes planeacion']));
@@ -366,7 +662,7 @@ function normalizeSucursalRow(row = {}, catalogs = {}) {
     tienda,
     displayLabel,
     empresaId: normalizeScalarText(empresaIdRaw),
-    empresaLabel: normalizeScalarText(empresaIdRaw),
+    empresaLabel: normalizeScalarText(getRowValue(row, ['empresa_nombre', 'ID EMPRESA.Label', 'EMPRESA.Label'])) || normalizeScalarText(empresaIdRaw),
     municipioId: normalizeScalarText(municipioIdRaw),
     municipioLabel: municipioRow?.displayLabel || municipioRow?.nombre || normalizeScalarText(municipioIdRaw),
     municipioNombre: municipioRow?.nombre || municipioRow?.displayLabel || normalizeScalarText(municipioIdRaw),
@@ -490,12 +786,110 @@ function extractYear(value) {
     return Number.isFinite(year) ? year : null;
   }
 
+  const dayFirst = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dayFirst) {
+    const year = Number(dayFirst[3]);
+    return Number.isFinite(year) ? year : null;
+  }
+
   const numeric = new Date(text);
   if (!Number.isNaN(numeric.getTime())) {
     return numeric.getFullYear();
   }
 
   return null;
+}
+
+function parseTrabajoTimestamp(value) {
+  const text = String(value || '').trim();
+  if (!text) return 0;
+  const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (iso) {
+    const date = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+  const dayFirst = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dayFirst) {
+    const date = new Date(Number(dayFirst[3]), Number(dayFirst[2]) - 1, Number(dayFirst[1]));
+    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+
+function normalizeTrabajoRow(row = {}, kind = 'estatal') {
+  const fecha = normalizeScalarText(getRowValue(row, ['fecha', 'FECHA', 'Fecha']));
+  const anio = Number(getRowValue(row, ['anio', 'AÑO', 'ANO', 'year', 'YEAR']) || extractYear(fecha));
+  const sucursalId = normalizeScalarText(getRowValue(row, ['sucursal_id', 'SUCURSAL', 'Sucursal', 'sucursal', 'TIENDA', 'Tienda', 'tienda']));
+  const estado = normalizeScalarText(
+    kind === 'municipal'
+      ? getRowValue(row, ['plan_de_contingencia', 'PLAN DE CONTINGENCIA', 'PLAN_DE_CONTINGENCIA'])
+      : getRowValue(row, ['pipc', 'PIPC'])
+  );
+  return {
+    kind,
+    key: normalizeScalarText(getRowValue(row, ['row_id', 'Row ID', 'ROW ID', 'id', 'ID'])),
+    sucursalId,
+    fecha,
+    anio: Number.isFinite(anio) ? anio : extractYear(fecha),
+    estado,
+    timestamp: parseTrabajoTimestamp(fecha),
+    raw: row,
+  };
+}
+
+function shouldUseTrabajoRow(row = {}) {
+  const status = normalizeText(row.estado || row.status || '');
+  if (!status) return true;
+  return !/(CANCEL|ELIMIN|INACTIV|BORRAD)/.test(status);
+}
+
+function upsertLatestTrabajo(map, candidate, trabajo) {
+  const key = normalizeText(candidate);
+  if (!key || !trabajo || !shouldUseTrabajoRow(trabajo)) return;
+  const current = map.get(key);
+  const nextScore = trabajo.timestamp || (Number(trabajo.anio) || 0);
+  const currentScore = current?.timestamp || (Number(current?.anio) || 0);
+  if (!current || nextScore >= currentScore) {
+    map.set(key, trabajo);
+  }
+}
+
+function buildTrabajosLookup(estatalesRows = [], municipalesRows = []) {
+  const estatalBySucursal = new Map();
+  const municipalBySucursal = new Map();
+  for (const row of estatalesRows) {
+    const trabajo = normalizeTrabajoRow(row, 'estatal');
+    upsertLatestTrabajo(estatalBySucursal, trabajo.sucursalId, trabajo);
+  }
+  for (const row of municipalesRows) {
+    const trabajo = normalizeTrabajoRow(row, 'municipal');
+    upsertLatestTrabajo(municipalBySucursal, trabajo.sucursalId, trabajo);
+  }
+  return { estatalBySucursal, municipalBySucursal };
+}
+
+function resolveTrabajosForPedido(tiendaValue, tiendaKey, sucursal = null, trabajosLookup = null) {
+  if (!trabajosLookup) return { estatal: null, municipal: null };
+  const candidates = [
+    ...collectSucursalCandidates(tiendaValue),
+    ...collectSucursalCandidates(tiendaKey),
+    ...collectSucursalCandidates(sucursal?.key),
+    ...collectSucursalCandidates(sucursal?.tienda),
+    ...collectSucursalCandidates(sucursal?.label),
+    ...collectSucursalCandidates(sucursal?.label2),
+    ...collectSucursalCandidates(sucursal?.displayLabel),
+  ];
+
+  let estatal = null;
+  let municipal = null;
+  for (const candidate of candidates) {
+    const key = normalizeText(candidate);
+    if (!estatal) estatal = trabajosLookup.estatalBySucursal?.get(key) || null;
+    if (!municipal) municipal = trabajosLookup.municipalBySucursal?.get(key) || null;
+    if (estatal && municipal) break;
+  }
+  return { estatal, municipal };
 }
 
 function extractDriveId(value) {
@@ -610,6 +1004,7 @@ function normalizeRow(row = {}, catalogs = {}, thresholds = {}) {
     || getRowValue(row, ['ESTABLECIMIENTO', 'Establecimiento', 'establecimiento'])
   );
   const lookupByKey = resolveSucursalForPedido(tiendaValue, tiendaKey, sucursalesLookup);
+  const trabajosBySucursal = resolveTrabajosForPedido(tiendaValue, tiendaKey, lookupByKey, catalogs.trabajosLookup);
   const tiendaObject = tiendaValue && typeof tiendaValue === 'object' ? tiendaValue : null;
   const companyIdRaw = lookupByKey?.empresaId || getRowValue(row, ['ID EMPRESA', 'EMPRESA', 'Empresa', 'empresa']);
   const municipalityIdRaw = lookupByKey?.municipioId || getRowValue(row, ['MUNICIPIO', 'Municipio', 'municipio']);
@@ -631,8 +1026,16 @@ function normalizeRow(row = {}, catalogs = {}, thresholds = {}) {
     || getRowValue(row, ['sucursales[drive]', 'SUCURSALES[DRIVE]', 'sucursales[Drive]', 'tienda[drive]', 'TIENDA[DRIVE]'])
     || tiendaObject?.drive
   );
-  const ultimoPipcEstatal = normalizeScalarText(getRowValue(row, ['ultimo pipc estatal', 'ULTIMO PIPC ESTATAL', 'ultimoPipcEstatal', 'ultimo_pipc_estatal']));
-  const ultimoPipcMunicipal = normalizeScalarText(getRowValue(row, ['ultimo municipal', 'ULTIMO MUNICIPAL', 'ultimoPipcMunicipal', 'ultimo_pipc_municipal']));
+  const ultimoPipcEstatal = normalizeScalarText(getRowValue(row, ['ultimo pipc estatal', 'ULTIMO PIPC ESTATAL', 'ultimoPipcEstatal', 'ultimo_pipc_estatal', 'vencimiento_estatal']))
+    || trabajosBySucursal.estatal?.fecha
+    || lookupByKey?.ultimoPipcEstatal
+    || lookupByKey?.vencimientoEstatal
+    || "";
+  const ultimoPipcMunicipal = normalizeScalarText(getRowValue(row, ['ultimo municipal', 'ULTIMO MUNICIPAL', 'ultimoPipcMunicipal', 'ultimo_pipc_municipal', 'vencimiento_municipal']))
+    || trabajosBySucursal.municipal?.fecha
+    || lookupByKey?.ultimoPipcMunicipal
+    || lookupByKey?.vencimientoMunicipal
+    || "";
   const importe = normalizeScalarText(getRowValue(row, ['IMPORTE', 'Importe']));
   const importeNumber = parseMoneyValue(importe);
   const descripcion = normalizeScalarText(getRowValue(row, ['DESCRIPCION', 'Descripcion', 'DESCRIPTION']));
@@ -707,6 +1110,8 @@ function normalizeRow(row = {}, catalogs = {}, thresholds = {}) {
     uuid,
     ultimoPipcEstatal,
     ultimoPipcMunicipal,
+    trabajoEstatal: trabajosBySucursal.estatal || null,
+    trabajoMunicipal: trabajosBySucursal.municipal || null,
     enviado: normalizeScalarText(getRowValue(row, ['ENVIADO', 'Enviado'])),
     enviadoBool: normalizeTruthValue(getRowValue(row, ['ENVIADO', 'Enviado'])),
     tipoClasificacion,
@@ -769,6 +1174,53 @@ async function appsheetAction(action, rows = [], selector = '', tableName = TABL
 }
 
 async function appsheetFindRows(selector = '', tableName = TABLE) {
+  const normalizedTable = String(tableName || '').trim().toUpperCase();
+  const normalizedSelector = String(selector || '').trim();
+
+  if (normalizedTable === TABLE.toUpperCase()) {
+    const rows = getPedidosLeyLocalRows();
+
+    const pedidoMatch = normalizedSelector.match(/\[\s*PEDIDO\s*\]\s*=\s*"([^"]+)"/i)
+      || normalizedSelector.match(/\[\s*PEDIDO\s*\]\s*=\s*'([^']+)'/i);
+    if (pedidoMatch?.[1]) {
+      const targetPedido = normalizeText(pedidoMatch[1]);
+      return rows.filter((row) => normalizeText(row.pedido || row.PEDIDO || row.Pedido) === targetPedido);
+    }
+
+    if (/SIN LIBERACION/i.test(normalizedSelector)) {
+      const yearMatch = normalizedSelector.match(/(\d{4})/);
+      const minYear = yearMatch ? Number(yearMatch[1]) : 2025;
+      return rows.filter((row) => {
+        const year = extractYear(row.fecha);
+        return normalizeText(row.status) === 'SIN LIBERACION' && year >= minYear;
+      });
+    }
+
+    const yearMatch = normalizedSelector.match(/(\d{4})/);
+    if (yearMatch) {
+      const targetYear = Number(yearMatch[1]);
+      return rows.filter((row) => extractYear(row.fecha) === targetYear);
+    }
+
+    return rows;
+  }
+
+  if (normalizedTable === SUCURSALES_TABLE.toUpperCase()) {
+    return getSucursalesLocalRows();
+  }
+
+  if (normalizedTable === MUNICIPIO_TABLE.toUpperCase()) {
+    return getMunicipiosLocalRows();
+  }
+
+  if (normalizedTable === ESTADO_TABLE.toUpperCase()) {
+    return getEstadosLocalRows();
+  }
+
+  if (normalizedTable === 'CATALOGO') {
+    return getCatalogoLocalRows();
+  }
+
   const result = await appsheetAction('Find', [], selector, tableName);
   return extractAppSheetRows(result);
 }
@@ -875,10 +1327,18 @@ async function fetchPedidosLeyCatalogs(forceRefresh = false) {
     estadosLookup,
   });
 
+  const now = Date.now();
+  let trabajosLookup = lookupCache.trabajos.lookup;
+  if (forceRefresh || !trabajosLookup || now - lookupCache.trabajos.at >= CACHE_TTL_MS) {
+    trabajosLookup = buildTrabajosLookup(getEstatalesLocalRows(), getMunicipalesLocalRows());
+    lookupCache.trabajos = { at: now, lookup: trabajosLookup };
+  }
+
   return {
     municipiosLookup,
     estadosLookup,
     sucursalesLookup,
+    trabajosLookup,
   };
 }
 
@@ -976,7 +1436,6 @@ async function listDriveChildren(drive, folderId, pageToken = '') {
     pageToken: pageToken || undefined,
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
-    corpora: 'allDrives',
   });
 
   return {
@@ -1080,6 +1539,7 @@ function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
   const keywords = [
     ['PIPC'],
     ['PLAN DE CONTINGENCIAS', 'PLANES DE CONTINGENCIA', 'PLAN DE CONTINGENCIA', 'PLAN DE CONTINUIDAD'],
+    ['DICTAMEN'],
   ];
   const source = Array.isArray(entries) ? entries : [];
   const matches = source.filter((entry) => {
@@ -1107,9 +1567,10 @@ function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
         || pathText.includes('PLAN DE CONTINUIDAD')
         ? 3
         : 0;
+      const dictamen = text.includes('DICTAMEN') || pathText.includes('DICTAMEN') ? 2 : 0;
       const storeHint = storeText && (text.includes(storeText) || pathText.includes(storeText)) ? 1 : 0;
       const driveHint = driveText && (text.includes(driveText) || pathText.includes(driveText)) ? 1 : 0;
-      return pipc + contingency + storeHint + driveHint;
+      return pipc + contingency + dictamen + storeHint + driveHint;
     };
     const diff = score(b) - score(a);
     if (diff !== 0) return diff;
@@ -1142,6 +1603,73 @@ function matchFilesForStore(establecimiento, files) {
     if (scoreA !== scoreB) return scoreB - scoreA;
     return a.name.localeCompare(b.name, 'es');
   });
+  return matches;
+}
+
+function collectLocalFileMatchTerms(row = {}) {
+  const terms = { numeric: [], text: [] };
+  const add = (value, kind = 'text') => {
+    const text = String(value || '').trim();
+    if (!text) return;
+    const normalized = normalizeLooseName(text);
+    if (!normalized) return;
+    const bucket = kind === 'numeric' ? terms.numeric : terms.text;
+    if (bucket.includes(normalized)) return;
+    bucket.push(normalized);
+  };
+
+  const label = String(row.tiendaLabel || row.tienda?.label || '').trim();
+  const leadingStore = label.match(/^\s*(\d{3,5})\b/);
+  if (leadingStore?.[1]) add(leadingStore[1], 'numeric');
+
+  const labelWithoutStore = label.replace(/^\s*\d{3,5}\s+/, '').trim();
+  add(labelWithoutStore);
+
+  return terms;
+}
+
+function matchLocalFilesForPedido(row = {}, files = []) {
+  const terms = collectLocalFileMatchTerms(row);
+  if (!terms.numeric.length && !terms.text.length) return [];
+
+  const matches = [];
+  const seen = new Set();
+  for (const file of Array.isArray(files) ? files : []) {
+    const text = normalizeLooseName(`${file.name || ''} ${file.relativePath || ''}`);
+    if (!text) continue;
+    const matchedNumeric = terms.numeric.find((term) => new RegExp(`(^|[^0-9])${term}([^0-9]|$)`).test(text));
+    const matchedText = !matchedNumeric && !terms.numeric.length
+      ? terms.text.find((term) => term.length >= 5 && text.includes(term))
+      : '';
+    const matchedTerm = matchedNumeric || matchedText;
+    if (!matchedTerm) continue;
+    const key = file.absolutePath || file.relativePath || file.name;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    matches.push({
+      ...file,
+      _matchTerm: matchedTerm,
+    });
+  }
+
+  matches.sort((a, b) => {
+    const score = (file) => {
+      const text = normalizeLooseName(`${file.name || ''} ${file.relativePath || ''}`);
+      const pipc = text.includes('PIPC') ? 4 : 0;
+      const contingency = text.includes('PLAN DE CONTINGENCIAS')
+        || text.includes('PLANES DE CONTINGENCIA')
+        || text.includes('PLAN DE CONTINGENCIA')
+        || text.includes('PLAN DE CONTINUIDAD')
+        ? 3
+        : 0;
+      const termWeight = terms.numeric.includes(file._matchTerm) ? 3 : 1;
+      return pipc + contingency + termWeight;
+    };
+    const diff = score(b) - score(a);
+    if (diff !== 0) return diff;
+    return a.name.localeCompare(b.name, 'es');
+  });
+
   return matches;
 }
 
@@ -1295,25 +1823,23 @@ export async function warmPedidosLeySinLiberacionCache({ forceRefresh = false } 
   };
 }
 
-export function getPedidosLeyAdminDefaultThresholds() {
-  return {
-    estatalMin: DEFAULT_STATE_THRESHOLD,
-    municipalMin: DEFAULT_MUNICIPAL_THRESHOLD,
-  };
+export function getPedidosLeyAdminDefaultThresholds(year = new Date().getFullYear()) {
+  return getPedidoThresholdDefaults(year);
 }
 
 export async function fetchPedidosLeyAdminDashboardData({
   year = new Date().getFullYear(),
   forceRefresh = false,
-  facturadorId = DEFAULT_ADMIN_FACTURADOR_ID,
+  facturadorId = '',
   thresholds = {},
 } = {}) {
   const normalizedYear = Number.parseInt(String(year || '').trim(), 10);
   const targetYear = Number.isFinite(normalizedYear) ? normalizedYear : new Date().getFullYear();
   const normalizedFacturadorId = String(facturadorId || '').trim();
+  const defaults = getPedidoThresholdDefaults(targetYear);
   const normalizedThresholds = {
-    estatalMin: Number.isFinite(Number.parseFloat(thresholds.estatalMin)) ? Number.parseFloat(thresholds.estatalMin) : DEFAULT_STATE_THRESHOLD,
-    municipalMin: Number.isFinite(Number.parseFloat(thresholds.municipalMin)) ? Number.parseFloat(thresholds.municipalMin) : DEFAULT_MUNICIPAL_THRESHOLD,
+    estatalMin: Number.isFinite(Number.parseFloat(thresholds.estatalMin)) ? Number.parseFloat(thresholds.estatalMin) : defaults.estatalMin,
+    municipalMin: Number.isFinite(Number.parseFloat(thresholds.municipalMin)) ? Number.parseFloat(thresholds.municipalMin) : defaults.municipalMin,
   };
   const cacheKey = JSON.stringify({
     year: targetYear,
@@ -1338,21 +1864,31 @@ export async function fetchPedidosLeyAdminDashboardData({
     if (rows.length > 0) break;
   }
   const catalogs = await catalogsPromise;
-  const normalizedRows = (Array.isArray(rows) ? rows : [])
+  const businessContext = buildPedidoBusinessContext();
+  const allNormalizedRows = (Array.isArray(rows) ? rows : [])
     .map((row) => normalizeRow(row, catalogs, normalizedThresholds))
-    .filter((row) => row.pedido)
-    .filter((row) => !normalizedFacturadorId || normalizeText(row.facturadorId) === normalizeText(normalizedFacturadorId));
+    .map((row) => enrichPedidoBusiness(row, businessContext, targetYear))
+    .filter((row) => row.pedido);
+  const facturadores = buildFacturadorOptions(allNormalizedRows);
+  const requestedFacturadorHasRows = !normalizedFacturadorId
+    || facturadores.some((option) => normalizeText(option.id) === normalizeText(normalizedFacturadorId) && Number(option.count || 0) > 0);
+  const effectiveFacturadorId = requestedFacturadorHasRows ? normalizedFacturadorId : '';
+  const normalizedRows = allNormalizedRows
+    .filter((row) => !effectiveFacturadorId || normalizeText(row.facturadorId) === normalizeText(effectiveFacturadorId));
 
   const data = {
     ok: true,
     year: loadedYear,
     requestedYear: targetYear,
-    facturadorId: normalizedFacturadorId,
-    facturadorLabel: FACTURADOR_OPTIONS.get(normalizedFacturadorId) || normalizedFacturadorId,
+    facturadorId: effectiveFacturadorId,
+    facturadorLabel: FACTURADOR_OPTIONS.get(effectiveFacturadorId) || effectiveFacturadorId,
     thresholds: normalizedThresholds,
     table: TABLE,
     rows: normalizedRows,
-    catalogs,
+    catalogs: {
+      ...catalogs,
+      facturadores,
+    },
   };
   dashboardCache.set(cacheKey, {
     at: Date.now(),
@@ -1393,6 +1929,18 @@ export async function debugPedidoLey({ pedido = '', forceRefresh = false } = {})
   if (driveRoot) {
     driveEntries = await getDriveEntriesForRoot(driveRoot, forceRefresh);
     matchedFiles = matchStoreFiles(driveEntries, normalizedRow.tiendaLabel || normalizedRow.establecimiento || '', normalizedRow.tiendaDrive || lookupByKey?.drive || '');
+  }
+  if (!matchedFiles.length) {
+    matchedFiles = matchLocalFilesForPedido(normalizedRow, getCachedFiles(forceRefresh)).map((file) => ({
+      name: file.name,
+      relativePath: file.relativePath,
+      size: file.size,
+      mimeType: file.mimeType,
+      mtimeMs: file.mtimeMs,
+      openUrl: `/api/pedidos-ley/files?path=${encodeURIComponent(file.relativePath)}`,
+      downloadUrl: `/api/pedidos-ley/files?path=${encodeURIComponent(file.relativePath)}`,
+      pathLabel: file.relativePath,
+    }));
   }
 
   return {
@@ -1500,9 +2048,22 @@ export async function markPedidoLeyEnviado({ pedido, rowId, enviado } = {}) {
     ENVIADO: enviado === false ? false : true,
   };
 
-  const result = await appsheetAction('Edit', [payload]);
+  const localChanges = markPedidoLeySentLocal(pedidoValue, payload.ENVIADO, {
+    syncState: 'PENDIENTE',
+    origin: 'PLATAFORMA',
+  });
+  if (!localChanges) {
+    throw new Error(`No se encontro el pedido ${pedidoValue} en la base local`);
+  }
   updatePedidoLeySentCache(pedidoValue, payload.ENVIADO);
-  return result;
+
+  const result = await appsheetAction('Edit', [payload]);
+  markPedidoLeySentLocal(pedidoValue, payload.ENVIADO, {
+    syncState: 'SINCRONIZADO',
+    syncAt: new Date().toISOString(),
+    origin: 'PLATAFORMA',
+  });
+  return { localChanges, appsheet: result };
 }
 
 export function recordPedidoLeySent(entry = {}) {
@@ -1598,9 +2159,26 @@ export async function reconcilePedidoLeyEnviados(sentEntries = []) {
     return { ok: true, updated: 0, payloads: [] };
   }
 
+  let localUpdated = 0;
+  for (const payload of payloads) {
+    localUpdated += markPedidoLeySentLocal(payload.PEDIDO, true, {
+      syncState: 'PENDIENTE',
+      origin: 'BITACORA_ENVIO',
+    });
+    updatePedidoLeySentCache(payload.PEDIDO, true);
+  }
+
   const result = await appsheetAction('Edit', payloads);
+  const syncedAt = new Date().toISOString();
+  for (const payload of payloads) {
+    markPedidoLeySentLocal(payload.PEDIDO, true, {
+      syncState: 'SINCRONIZADO',
+      syncAt: syncedAt,
+      origin: 'BITACORA_ENVIO',
+    });
+  }
   clearPedidosLeyRowsCache();
-  return { ok: true, updated: payloads.length, result };
+  return { ok: true, updated: payloads.length, localUpdated, result };
 }
 
 export function clearPedidosLeyCache() {

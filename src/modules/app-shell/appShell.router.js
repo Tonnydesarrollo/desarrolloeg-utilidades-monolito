@@ -1,8 +1,76 @@
 import express from "express";
 import { getAppShellManifest } from "../../services/appShellManifest.js";
+import { getAppShellAuditState } from "../../services/appShellAuditReconciler.js";
 import { refreshAppShellCaches } from "../../services/appShellRefresh.js";
 
 export const appShellRouter = express.Router();
+
+const appShellEventClients = new Set();
+let appShellEventRevision = 0;
+const appShellRevisionByScope = new Map();
+let appShellEventUpdatedAt = null;
+
+function sseSend(res, event, payload) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function shouldNotifyClient(clientScope, payload) {
+  const scope = String(payload?.scope || "all").trim().toLowerCase();
+  const refreshedScopes = Array.isArray(payload?.refreshedScopes)
+    ? payload.refreshedScopes.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+    : [];
+
+  if (clientScope === "all" || scope === "all") return true;
+  if (scope === clientScope) return true;
+  return refreshedScopes.includes(clientScope);
+}
+
+function getAffectedScopes(payload) {
+  const scope = String(payload?.scope || "all").trim().toLowerCase() || "all";
+  const scopes = new Set([scope, "all"]);
+  if (scope === "all") {
+    scopes.add("portal");
+    scopes.add("facturacion");
+  }
+  for (const value of Array.isArray(payload?.refreshedScopes) ? payload.refreshedScopes : []) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized) scopes.add(normalized);
+  }
+  return scopes;
+}
+
+function getAppShellLiveState(scope = "all") {
+  const normalizedScope = String(scope || "all").trim().toLowerCase() || "all";
+  return {
+    ...getAppShellAuditState(normalizedScope),
+    revision: Number(appShellRevisionByScope.get(normalizedScope) || 0),
+    eventUpdatedAt: appShellEventUpdatedAt,
+  };
+}
+
+function broadcastAppShellEvent(payload) {
+  const sentAt = new Date().toISOString();
+  appShellEventRevision += 1;
+  appShellEventUpdatedAt = sentAt;
+  for (const scope of getAffectedScopes(payload)) {
+    appShellRevisionByScope.set(scope, appShellEventRevision);
+  }
+  const eventPayload = {
+    ...payload,
+    revision: appShellEventRevision,
+    sentAt,
+  };
+  for (const client of appShellEventClients) {
+    if (!shouldNotifyClient(client.scope, eventPayload)) continue;
+    try {
+      sseSend(client.res, "app-shell-cache", eventPayload);
+    } catch {
+      appShellEventClients.delete(client);
+    }
+  }
+  return eventPayload;
+}
 
 function escapeHtml(value = "") {
   return String(value)
@@ -11,6 +79,54 @@ function escapeHtml(value = "") {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function normalizeWebhookTable(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function scopeForWebhookTable(tableName = "") {
+  const table = normalizeWebhookTable(tableName);
+  if (["EMPLEADOS", "CAPACITACIONES", "CALENDARIO"].includes(table)) return "portal";
+  if ([
+    "EMPRESAS",
+    "SUCURSALES",
+    "MUNICIPIOS",
+    "ESTADOS",
+    "STATUS SISTEMA PC",
+  ].includes(table)) return "all";
+  if ([
+    "CATALOGO",
+    "PROVEEDORES",
+    "COTIZACIONES_VARIOS_CT",
+    "CONCEPTOS_VARIOS_CT",
+    "ESTATALES",
+    "MUNICIPALES",
+  ].includes(table)) return "facturacion";
+  return "all";
+}
+
+function isAuthorizedWebhook(req) {
+  const expected = String(
+    process.env.APPSHEET_WEBHOOK_SECRET
+    || process.env.DESARROLLOEG_SYNC_WEBHOOK_SECRET
+    || "",
+  ).trim();
+  if (!expected) return true;
+  const provided = String(
+    req.get("x-appsheet-webhook-secret")
+    || req.get("x-webhook-secret")
+    || req.query.secret
+    || req.body?.secret
+    || "",
+  ).trim();
+  return provided === expected;
 }
 
 function renderModuleCard(module) {
@@ -270,11 +386,109 @@ appShellRouter.post("/cache/refresh", async (req, res) => {
     const scope = String(req.query.scope || req.body?.scope || "all").trim();
     const runAsUserEmail = String(req.body?.runAsUserEmail || "").trim();
     const result = await refreshAppShellCaches({ scope, runAsUserEmail });
+    const state = getAppShellAuditState(scope);
+    broadcastAppShellEvent({
+      ok: true,
+      triggeredBy: "manual-refresh",
+      scope,
+      cursor: state.cursor,
+      updatedAt: state.updatedAt,
+      refreshedScopes: result?.results?.flatMap((entry) => entry?.refreshedScopes || entry?.scope || []) || [],
+      refresh: result,
+    });
     res.json(result);
   } catch (error) {
     res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : "No se pudo actualizar la caché compartida.",
+    });
+  }
+});
+
+appShellRouter.get("/cache/state", (req, res) => {
+  const scope = String(req.query.scope || "all").trim();
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+  });
+  res.json(getAppShellLiveState(scope));
+});
+
+appShellRouter.get("/events", (req, res) => {
+  const scope = String(req.query.scope || "all").trim().toLowerCase() || "all";
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+
+  const client = {
+    scope,
+    res,
+  };
+  appShellEventClients.add(client);
+  sseSend(res, "init", {
+    ...getAppShellLiveState(scope),
+    event: "init",
+    sentAt: new Date().toISOString(),
+  });
+
+  const heartbeat = setInterval(() => {
+    try {
+      sseSend(res, "heartbeat", {
+        ok: true,
+        scope,
+        sentAt: new Date().toISOString(),
+      });
+    } catch {
+      clearInterval(heartbeat);
+      appShellEventClients.delete(client);
+    }
+  }, 25000);
+  heartbeat.unref?.();
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    appShellEventClients.delete(client);
+  });
+});
+
+appShellRouter.post("/webhook", async (req, res) => {
+  if (!isAuthorizedWebhook(req)) {
+    return res.status(401).json({ ok: false, error: "Webhook no autorizado." });
+  }
+
+  try {
+    const table = String(req.body?.table || req.body?.tabla || req.body?.TableName || req.body?.Table || "").trim();
+    const scope = scopeForWebhookTable(table);
+    const runAsUserEmail = String(req.body?.runAsUserEmail || "").trim();
+    const result = await refreshAppShellCaches({ scope, runAsUserEmail, mode: "auto" });
+    const state = getAppShellAuditState(scope);
+    broadcastAppShellEvent({
+      ok: true,
+      triggeredBy: "webhook",
+      table: normalizeWebhookTable(table),
+      scope,
+      cursor: state.cursor,
+      updatedAt: state.updatedAt,
+      refreshedScopes: result?.results?.flatMap((entry) => entry?.refreshedScopes || entry?.scope || []) || [],
+      refresh: result,
+    });
+    res.json({
+      ok: true,
+      triggeredBy: "webhook",
+      table: normalizeWebhookTable(table),
+      scope,
+      state: getAppShellLiveState(scope),
+      refresh: result,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "No se pudo procesar el webhook de cache.",
     });
   }
 });

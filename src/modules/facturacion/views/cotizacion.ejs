@@ -407,7 +407,7 @@ if (data && data.centros) {
         gap:10px;
         position:fixed;
         inset:12px auto 12px 12px;
-        z-index:120;
+        z-index:1510;
         max-height:calc(100dvh - 24px);
         overflow:auto;
         padding:14px;
@@ -425,6 +425,10 @@ if (data && data.centros) {
         opacity:1;
         pointer-events:auto;
         background:rgba(255,255,255,0.98);
+      }
+      .cotizacion-sidebar[hidden],
+      .cotizacion-drawer-backdrop[hidden]{
+        display:none !important;
       }
       .cotizacion-sidebar__top{
         display:flex;
@@ -461,7 +465,7 @@ if (data && data.centros) {
         position:fixed;
         left:12px;
         top:12px;
-        z-index:130;
+        z-index:1520;
         min-height:44px;
         padding:0 14px;
         border-radius:999px;
@@ -471,7 +475,7 @@ if (data && data.centros) {
         position:fixed;
         left:12px;
         top:64px;
-        z-index:129;
+        z-index:1490;
         min-height:44px;
         padding:0 14px;
         border-radius:999px;
@@ -480,7 +484,7 @@ if (data && data.centros) {
       .cotizacion-drawer-backdrop{
         position:fixed;
         inset:0;
-        z-index:115;
+        z-index:1500;
         background:rgba(8,20,46,0.28);
         backdrop-filter:blur(6px);
         opacity:0;
@@ -490,6 +494,10 @@ if (data && data.centros) {
       .cotizacion-drawer-backdrop.is-open{
         opacity:1;
         pointer-events:auto;
+      }
+      body.cotizacion-drawer-open .cotizacion-options-fab{
+        opacity:0;
+        pointer-events:none;
       }
       .cotizacion-document{
         flex:1;
@@ -614,7 +622,7 @@ button:hover{background:#b3202a;color:#fff}
       }
       .tienda-cell{font-weight:600;font-size:0.76rem}
       .sucursal-cell{font-weight:600;font-size:0.78rem}
-      .sucursal-domicilio{font-size:0.62rem;color:#666;margin-top:2px;}
+      .sucursal-domicilio{display:none;font-size:0.62rem;color:#666;margin-top:4px;font-weight:500;line-height:1.35;}
       .tipo-linea{font-size:0.64rem;color:#666;margin-top:4px}
       td.monto{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right;font-size:0.76rem;font-weight:500;}
 
@@ -756,13 +764,11 @@ button:hover{background:#b3202a;color:#fff}
         .header{flex-direction:column; text-align: center;}
         .header-left, .header-center, .header-right{text-align:center; margin-bottom: 8px;}
         .cotizacion-sidebar{
-          width:100%;
-          flex:1 1 auto;
-          position:static;
-          top:auto;
-          max-height:none;
-          overflow:visible;
-          padding-right:0;
+          width:calc(100vw - 16px);
+          inset:8px auto 8px 8px;
+          max-height:calc(100dvh - 16px);
+          overflow:auto;
+          padding:14px;
         }
         .cotizacion-document{
           width:100%;
@@ -787,7 +793,7 @@ button:hover{background:#b3202a;color:#fff}
 }
 
     </style>
-    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260831b" />
   </head>
 
   <body class="portal-shell portal-cotizaciones portal-facturacion">
@@ -937,11 +943,10 @@ function shouldOmitLine(ln){
 %>
 
     <a class="skip-link" href="#cotizaciones-main">Saltar al contenido principal</a>
-    <button class="cotizacion-options-fab no-print" type="button" data-cotizacion-drawer-open>☰ Opciones</button>
+    <button class="cotizacion-options-fab no-print" type="button" data-cotizacion-drawer-open aria-controls="cotizacion-options" aria-expanded="false">☰ Opciones</button>
     <button class="cotizacion-print-fab no-print" type="button" onclick="window.print()">🖨 Imprimir / PDF</button>
     <div class="cotizacion-drawer-backdrop no-print" data-cotizacion-drawer-backdrop hidden></div>
-    <main id="cotizaciones-main" class="cotizacion-layout" role="main" aria-label="Cotizacion">
-      <aside class="cotizacion-sidebar no-print" data-cotizacion-drawer hidden>
+    <aside id="cotizacion-options" class="cotizacion-sidebar no-print" data-cotizacion-drawer role="dialog" aria-modal="true" aria-label="Opciones de la cotizacion" hidden>
           <div class="cotizacion-sidebar__top">
             <strong>Opciones</strong>
             <button class="button ghost button--compact" type="button" data-cotizacion-drawer-close>Cerrar</button>
@@ -982,6 +987,13 @@ function shouldOmitLine(ln){
                 <p>Muestra la descripción extendida del catálogo debajo del producto o servicio.</p>
               </div>
             </label>
+            <label class="desglose-option">
+              <input type="checkbox" id="mostrarDireccionSucursal">
+              <div>
+                <strong>Dirección de sucursal</strong>
+                <p>Muestra la dirección debajo del nombre de cada sucursal y la incluye al imprimir.</p>
+              </div>
+            </label>
           </div>
         </div>
 
@@ -992,8 +1004,9 @@ function shouldOmitLine(ln){
             <option value="una_exhibicion">Una sola exhibición</option>
           </select>
         </div>
-      </aside>
+    </aside>
 
+    <main id="cotizaciones-main" class="cotizacion-layout" role="main" aria-label="Cotizacion">
       <section class="cotizacion-document">
         <div class="page">
       <div class="content">
@@ -1004,7 +1017,7 @@ function shouldOmitLine(ln){
 
   <% if (data.logoCliente) { %>
   <img
-    src="<%= data.logoCliente %>&sz=200&cb=<%= Date.now() %>"
+    src="<%= data.logoCliente %><%= data.logoCliente.includes('?') ? '&' : '?' %>sz=200&cb=<%= Date.now() %>"
     class="empresa-logo"
     alt="Logo empresa cliente"
     referrerpolicy="no-referrer"
@@ -1290,23 +1303,34 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
           var openButtons = Array.from(document.querySelectorAll('[data-cotizacion-drawer-open]'));
           var closeTargets = Array.from(document.querySelectorAll('[data-cotizacion-drawer-close]'));
           var backdrop = document.querySelector('[data-cotizacion-drawer-backdrop]');
+          var closeTimer = null;
           if (!drawer || openButtons.length === 0) return;
 
           function openDrawer(){
+            if (closeTimer) window.clearTimeout(closeTimer);
             drawer.hidden = false;
+            drawer.removeAttribute('inert');
             if (backdrop) backdrop.hidden = false;
+            document.body.classList.add('cotizacion-drawer-open');
+            openButtons.forEach(function(btn){ btn.setAttribute('aria-expanded', 'true'); });
             requestAnimationFrame(function(){
               drawer.classList.add('is-open');
               if (backdrop) backdrop.classList.add('is-open');
+              var closeButton = drawer.querySelector('[data-cotizacion-drawer-close]');
+              if (closeButton) closeButton.focus();
             });
           }
 
           function closeDrawer(){
             drawer.classList.remove('is-open');
             if (backdrop) backdrop.classList.remove('is-open');
-            window.setTimeout(function(){
+            document.body.classList.remove('cotizacion-drawer-open');
+            drawer.setAttribute('inert', '');
+            openButtons.forEach(function(btn){ btn.setAttribute('aria-expanded', 'false'); });
+            closeTimer = window.setTimeout(function(){
               drawer.hidden = true;
               if (backdrop) backdrop.hidden = true;
+              closeTimer = null;
             }, 220);
           }
 
@@ -1322,6 +1346,7 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
           document.addEventListener('keydown', function(event){
             if (event.key === 'Escape' && !drawer.hidden) closeDrawer();
           });
+          drawer.setAttribute('inert', '');
         })();
 
         (function(){
@@ -1343,6 +1368,7 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
           var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
           var desgloseCatalogoCodigo = document.getElementById('desgloseCatalogoCodigo');
           var desgloseCatalogoDescripcion = document.getElementById('desgloseCatalogoDescripcion');
+          var mostrarDireccionSucursal = document.getElementById('mostrarDireccionSucursal');
           var formaPagoSelect = document.getElementById('formaPagoSelect');
           var desglosePreview = document.getElementById('desglosePreview');
           var condicionesBlock = document.getElementById('condicionesBlock');
@@ -1473,6 +1499,14 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
             }
           }
 
+          function toggleDireccionesSucursal() {
+            var visible = !!(mostrarDireccionSucursal && mostrarDireccionSucursal.checked);
+            var direcciones = document.querySelectorAll('.sucursal-domicilio');
+            for (var i = 0; i < direcciones.length; i++) {
+              direcciones[i].style.display = visible ? 'block' : 'none';
+            }
+          }
+
           desglosePipc.checked = hasDesglose('pipc');
           desgloseCapacitaciones.checked = hasDesglose('capacitaciones');
           formaPagoSelect.value = <%- JSON.stringify((data && data.cotizacion && data.cotizacion.formaPago) ? data.cotizacion.formaPago : 'dos_pagos') %>;
@@ -1480,9 +1514,11 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
           desgloseCapacitaciones.addEventListener('change', renderDesglose);
           if (desgloseCatalogoCodigo) desgloseCatalogoCodigo.addEventListener('change', toggleCatalogoPartes);
           if (desgloseCatalogoDescripcion) desgloseCatalogoDescripcion.addEventListener('change', toggleCatalogoPartes);
+          if (mostrarDireccionSucursal) mostrarDireccionSucursal.addEventListener('change', toggleDireccionesSucursal);
           formaPagoSelect.addEventListener('change', renderCondiciones);
           renderDesglose();
           toggleCatalogoPartes();
+          toggleDireccionesSucursal();
           renderCondiciones();
         })();
       </script>
@@ -1497,7 +1533,7 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
         </div>
       </section>
     </main>
-    <script src="/ui/portal-shell.js?v=20260824" defer></script>
+    <script src="/ui/portal-shell.js?v=20260901b" defer></script>
   </body>
 </html>
 

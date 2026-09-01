@@ -23,6 +23,7 @@ services:
       FACTURACION_GOOGLE_CREDENTIALS_PATH: /app/secrets/facturacion/credentials.json
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
       FACTURAS_NATIVE_DUMP_DIR: /app/runtime/jobs/facturas
+      FACTURAS_SYNC_RUN_ON_START: ${FACTURAS_SYNC_RUN_ON_START:-0}
       DESARROLLOEG_LOCAL_DB_PATH: /app/runtime/jobs/pedidos-local.sqlite
       PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
       PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json
@@ -101,6 +102,7 @@ services:
       FACTURACION_GOOGLE_CREDENTIALS_PATH: /app/secrets/facturacion/credentials.json
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
       FACTURAS_NATIVE_DUMP_DIR: /app/runtime/jobs/facturas
+      FACTURAS_SYNC_RUN_ON_START: ${FACTURAS_SYNC_RUN_ON_START:-0}
       DESARROLLOEG_LOCAL_DB_PATH: /app/runtime/jobs/pedidos-local.sqlite
       PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
       PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json

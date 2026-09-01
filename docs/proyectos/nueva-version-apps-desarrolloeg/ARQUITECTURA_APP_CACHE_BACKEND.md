@@ -2,6 +2,10 @@
 
 Fecha: 2026-08-19
 
+Actualizacion relacionada:
+
+- `docs/arquitectura-portal-modulos-tiempo-real.md`: arquitectura vigente con BD local persistente, webhooks AppSheet, auditoria, SSE de tiempo real y matriz de permisos por puesto.
+
 Este documento formaliza la rama arquitectonica alternativa para DesarrolloEG:
 
 - AppSheet sigue siendo la base principal de datos operativa.

@@ -1,4 +1,4 @@
-import { refreshPersistentCacheEntry } from "../../../services/platformCache.js";
+import { readLocalOperationalTable } from "../../../services/localOperationalRepository.js";
 
 function getFirst(row, keys) {
   for (const key of keys) {
@@ -49,36 +49,13 @@ function normalizeAppSheetRows(data) {
 }
 
 async function loadCachedAppSheetTable(table, cacheKey = "rows") {
-  const result = await refreshPersistentCacheEntry({
-    namespace: `${PLANEACION_CACHE_NAMESPACE_PREFIX}.${String(table).trim().toLowerCase()}`,
-    cacheKey,
-    ttlMs: PLANEACION_TABLE_CACHE_TTL_MS,
-    source: `appsheet:${table}`,
-    loader: async () => {
-      const data = await appsheetFind(table);
-      return normalizeAppSheetRows(data);
-    },
-    allowStaleFallback: true,
-  });
-
-  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
+  void cacheKey;
+  return readLocalOperationalTable(table);
 }
 
 async function refreshCachedAppSheetTable(table, cacheKey = "rows") {
-  const result = await refreshPersistentCacheEntry({
-    namespace: `${PLANEACION_CACHE_NAMESPACE_PREFIX}.${String(table).trim().toLowerCase()}`,
-    cacheKey,
-    ttlMs: PLANEACION_TABLE_CACHE_TTL_MS,
-    source: `appsheet:${table}`,
-    loader: async () => {
-      const data = await appsheetFind(table);
-      return normalizeAppSheetRows(data);
-    },
-    allowStaleFallback: false,
-    force: true,
-  });
-
-  return Array.isArray(result?.entry?.payload) ? result.entry.payload : [];
+  void cacheKey;
+  return readLocalOperationalTable(table);
 }
 
 function toNumber(value) {

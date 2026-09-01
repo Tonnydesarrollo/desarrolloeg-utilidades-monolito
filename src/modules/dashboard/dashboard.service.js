@@ -865,7 +865,7 @@ export function renderDashboardHtml(data) {
   <title>Estado de Servicios | DESARROLLOEG</title>
   <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
   <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
-  <link rel="stylesheet" href="/ui/portal-shell.css?v=20260727" />
+  <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
   <style>
     :root {
       --bg: #f4efe8;
@@ -1388,7 +1388,7 @@ export function renderDashboardHtml(data) {
       }
     })();
   </script>
-  <script src="/ui/portal-shell.js?v=20260824" defer></script>
+  <script src="/ui/portal-shell.js?v=20260901b" defer></script>
 </body>
 </html>`;
 }

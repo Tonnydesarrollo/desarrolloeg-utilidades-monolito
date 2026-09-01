@@ -7,6 +7,7 @@ import {
   buildGoogleAuthUrl,
   buildCookieHeader,
   buildQaAccessEmployee,
+  createPortalNoteEntry,
   authenticateEmployeeByEmail,
   createSessionForEmployee,
   exchangeGoogleAuthCode,
@@ -18,14 +19,20 @@ import {
   isGoogleOAuthConfigured,
   isQaAccessEnabled,
   isRequestSecure,
+  getEmpresaLogoForPortal,
+  getTerritoryShieldForPortal,
+  listEmpresasForPortal,
   listEmployeesForPortal,
+  listPortalNotes,
+  listSucursalesForPortal,
   loadAuthenticatedEmployee,
   deleteCalendarNote,
   verifyQaAccessToken,
   upsertCalendarNote,
   updateCapacitacionDiplomas,
   updateCapacitacionStatus,
-  updateCapacitacionNotas,
+  updatePortalNoteEntry,
+  deletePortalNoteEntry,
   warmPortalDashboardCaches,
 } from "./portalAuth.service.js";
 import { getFaltantesLeyData } from "../faltantes-ley/faltantesLey.service.js";
@@ -33,11 +40,18 @@ import { renderPedidosSinLiberacionPage } from "../pedidos-ley/pedidosLey.page.j
 import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
 import { renderPedidosLeyAdminPage } from "../pedidos-ley/pedidosLey.admin.page.js";
 import { refreshAppShellCaches } from "../../services/appShellRefresh.js";
+import {
+  canUsePortalView,
+  canViewAllForPortalView,
+  getPortalViewPermission,
+  resolvePortalAccessProfile,
+} from "./portalAccessPolicy.js";
 
 export const homeRouter = express.Router();
 
-const HOME_FAVICON_PATH = "/img/brand-favicon.png?v=20260824";
-const BRAND_LOGO_PATH = "/img/brand-logo.png?v=20260824";
+const HOME_FAVICON_PATH = "/img/brand-favicon.png?v=20260825b";
+const BRAND_LOGO_PATH = "/img/brand-logo.png?v=20260825b";
+const MONTH_NAMES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 function getConstanciasBaseUrl() {
   const fallback = "https://api-constancias.desarrolloeg.com";
@@ -79,6 +93,29 @@ function escapeHtml(value = "") {
 
 function escapeAttr(value = "") {
   return escapeHtml(value);
+}
+
+function getStructuredUrl(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/^https?:\/\//i.test(text)) return text;
+  try {
+    const parsed = JSON.parse(text);
+    const candidate = String(parsed?.Url || parsed?.url || parsed?.Link || parsed?.link || "").trim();
+    return /^https?:\/\//i.test(candidate) ? candidate : "";
+  } catch {
+    return "";
+  }
+}
+
+function formatOptionalMoney(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) return "Sin importe";
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    maximumFractionDigits: 2,
+  }).format(number);
 }
 
 function renderCard(card, { minimal = false } = {}) {
@@ -285,12 +322,39 @@ function getCapacitacionConstanciasUrlFromCapacitacion(capacitacion) {
   return getCapacitacionConstanciasUrl(capacitacionId);
 }
 
+function getIntegratedConstanciasUrlFromCapacitacion(capacitacion) {
+  const capacitacionId = String(capacitacion?.id || capacitacion?.rowId || "").trim();
+  return `/CONSTANCIAS/capacitaciones/${encodeURIComponent(capacitacionId)}/HTML?embed=1`;
+}
+
 function normalizeCalendarView(value) {
   return String(value || "week").toLowerCase() === "month" ? "month" : "week";
 }
 
 function parseDashboardDate(value) {
-  const date = new Date(value || "");
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const isoLike = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoLike) {
+    const date = new Date(Number(isoLike[1]), Number(isoLike[2]) - 1, Number(isoLike[3]));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const slashLike = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/);
+  if (slashLike) {
+    const first = Number(slashLike[1]);
+    const second = Number(slashLike[2]);
+    let year = Number(slashLike[3]);
+    if (year < 100) year += 2000;
+    const dayFirst = first > 12 && second <= 12;
+    const month = dayFirst ? second : first;
+    const day = dayFirst ? first : second;
+    const date = new Date(year, month - 1, day);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const date = new Date(text);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -461,6 +525,7 @@ function buildCapacitacionCalendarEvent(capacitacion, selectedEmployeeId, return
     start: timedEvent ? toLocalDateTimeString(startDateTime) : toLocalDateKey(startOfDay(date)),
     end: endDateTime ? toLocalDateTimeString(endDateTime) : undefined,
     allDay: !timedEvent,
+    title: capacitacion.statusLabel || "Sin estado",
     backgroundColor: "#ffffff",
     borderColor: "#d9e2ec",
     textColor: "#1a2a3a",
@@ -762,6 +827,10 @@ function renderCapacitacionInlineDetailMarkup(capacitacion, {
     const employeeSummaries = Array.isArray(noteData.employeeSummaries)
       ? noteData.employeeSummaries
       : [];
+    const authorLabel = String(noteData.authorName || noteData.author || noteData.authorEmail || "Sin autor registrado").trim();
+    const authorSecondary = noteData.authorName && noteData.authorEmail
+      ? String(noteData.authorEmail).trim()
+      : "";
     return `
       <div class="calendar-detail-card calendar-detail-card--note" data-calendar-event-id="${escapeAttr(noteData.rowId || capacitacion.id || capacitacion.rowId || "")}">
         <div class="calendar-detail-top">
@@ -776,7 +845,14 @@ function renderCapacitacionInlineDetailMarkup(capacitacion, {
           <span class="chip">${escapeHtml(noteData.audienceAll ? "TODOS" : (employeeSummaries.length ? `${employeeSummaries.length} etiquetado(s)` : "Sin etiquetas"))}</span>
         </div>
         <div class="calendar-detail-section">
-          <strong>Etiqueta a empleados</strong>
+          <strong>Creada por</strong>
+          <div class="tag-row">
+            <span class="tag-pill">${escapeHtml(authorLabel)}</span>
+            ${authorSecondary ? `<span class="calendar-empty">${escapeHtml(authorSecondary)}</span>` : ""}
+          </div>
+        </div>
+        <div class="calendar-detail-section">
+          <strong>Empleados etiquetados</strong>
           <div class="tag-row">
             ${employeeSummaries.length
               ? employeeSummaries.map((item) => {
@@ -875,6 +951,8 @@ function renderCapacitacionCard(
     linkLabel = "Crear constancias",
     detailsHref = "",
     detailsLabel = "Ver detalles",
+    inlineDetails = false,
+    canEditNotes = false,
   } = {}
 ) {
   const capacitadoresLabel = capacitacion.capacitadores?.length
@@ -893,6 +971,90 @@ function renderCapacitacionCard(
     : escapeHtml(sedeLabel);
   const sucursalesPreview = sucursalesItems.slice(0, 3);
   const sucursalesMore = Math.max(0, sucursalesItems.length - sucursalesPreview.length);
+  const hourLabel = getCapacitacionHoraLabel(capacitacion);
+  const notes = String(capacitacion.notas || "").trim();
+  const threadNotes = Array.isArray(capacitacion.threadNotes) ? capacitacion.threadNotes : [];
+  const noteEntries = [
+    ...(notes ? [{
+      id: "",
+      authorName: "Registro historico",
+      body: notes,
+      createdAt: capacitacion.dateRaw || "",
+    }] : []),
+    ...threadNotes,
+  ];
+  const notesThreadMarkup = noteEntries.length
+    ? `<div class="note-thread" data-note-thread>${noteEntries.map((note) => {
+        const createdAt = String(note.createdAt || "").trim();
+        const dateLabel = createdAt
+          ? (parseDashboardDate(createdAt)?.toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" }) || createdAt)
+          : "Sin fecha";
+        return `<article class="note-entry"${note.id ? ` data-note-id="${escapeAttr(note.id)}"` : ""}>
+          <header><strong>${escapeHtml(note.authorName || note.authorEmail || "Sistema")}</strong><time>${escapeHtml(dateLabel)}</time></header>
+          <p>${escapeHtml(note.body || "")}</p>
+        </article>`;
+      }).join("")}</div>`
+    : `<span class="capacitacion-card__note-copy">Sin notas</span>`;
+  const diplomaChoiceMarkup = `
+    <${canEditDiplomas ? "form" : "div"} class="status-actions diploma-choice${canEditDiplomas ? " js-async-diplomas" : ""}" ${canEditDiplomas ? `method="post" action="/dashboard/capacitaciones/${encodeURIComponent(capacitacion.rowId)}/diplomas"` : ""}>
+      ${canEditDiplomas ? `<input type="hidden" name="returnTo" value="${returnValue}" />` : ""}
+      <span class="diploma-choice__label">Diplomas</span>
+      <button type="${canEditDiplomas ? "submit" : "button"}" name="diplomas" value="Y" class="status-button ${capacitacion.hasDiplomas ? "active" : ""}" ${canEditDiplomas ? "" : "disabled"}>SI</button>
+      <button type="${canEditDiplomas ? "submit" : "button"}" name="diplomas" value="N" class="status-button ${capacitacion.hasDiplomas ? "" : "active"}" ${canEditDiplomas ? "" : "disabled"}>NO</button>
+    </${canEditDiplomas ? "form" : "div"}>
+  `;
+
+  if (inlineDetails) {
+    return `
+      <details class="capacitacion-card capacitacion-card--expandable" data-keep-after-diplomas>
+        <summary class="capacitacion-card__summary">
+          <div class="capacitacion-card__summary-main">
+            <div class="capacitacion-head">
+              <span class="chip">${escapeHtml(capacitacion.dateLabel || "")}</span>
+              <span class="status-chip ${statusClass}">${escapeHtml(capacitacion.statusLabel || "Sin estado")}</span>
+            </div>
+            <h3>${escapeHtml(sedeLabel)}</h3>
+            <div class="capacitacion-card__summary-meta">
+              <span>${escapeHtml(hourLabel)}</span>
+              <span>${capacitadoresLabel}</span>
+              <span class="diploma-summary" aria-label="Diplomas ${capacitacion.hasDiplomas ? "si" : "no"}">
+                <span>Diplomas</span>
+                <span class="status-button ${capacitacion.hasDiplomas ? "active" : ""}">SI</span>
+                <span class="status-button ${capacitacion.hasDiplomas ? "" : "active"}">NO</span>
+              </span>
+            </div>
+          </div>
+          <span class="accordion-chevron capacitacion-card__chevron" aria-hidden="true">&#8250;</span>
+        </summary>
+        <div class="capacitacion-card__body">
+          <section class="capacitacion-card__section capacitacion-card__branches">
+            <strong>Sucursales a capacitar</strong>
+            <div class="tag-row">
+              ${sucursalesItems.length ? sucursalesItems.map((item) => `<span class="tag-pill">${escapeHtml(item)}</span>`).join("") : `<span class="calendar-empty">Sin sucursales</span>`}
+            </div>
+          </section>
+          <section class="capacitacion-card__section capacitacion-card__notes">
+            <strong>Notas</strong>
+            ${notesThreadMarkup}
+            ${canEditNotes ? `
+              <form class="notes-form js-async-notes" method="post" action="/dashboard/capacitaciones/${encodeURIComponent(capacitacion.rowId)}/notas">
+                <input type="hidden" name="returnTo" value="${returnValue}" />
+                <textarea name="notas" rows="2" class="notes-textarea" placeholder="Agregar una entrada al hilo..." required></textarea>
+                <div class="notes-actions">
+                  <button type="submit" class="status-button">Agregar nota</button>
+                  <span class="notes-state">${noteEntries.length} entrada(s)</span>
+                </div>
+              </form>
+            ` : ""}
+          </section>
+          <div class="capacitacion-card__actions">
+            ${diplomaChoiceMarkup}
+            ${linkHref ? `<a class="button primary" href="${escapeAttr(linkHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>` : ""}
+          </div>
+        </div>
+      </details>
+    `;
+  }
   const inner = `
       <div class="capacitacion-head">
         <span class="chip">${escapeHtml(capacitacion.dateLabel || "")}</span>
@@ -918,12 +1080,7 @@ function renderCapacitacionCard(
           <button type="submit" name="status" value="FINALIZADA" class="status-button ${capacitacion.statusSuffix === "FINALIZADA" ? "active" : ""}">Finalizada</button>
         </form>
       ` : ""}
-      ${canEditDiplomas ? `
-        <form class="status-actions js-async-diplomas" method="post" action="/dashboard/capacitaciones/${encodeURIComponent(capacitacion.rowId)}/diplomas">
-          <input type="hidden" name="returnTo" value="${returnValue}" />
-          <button type="submit" name="diplomas" value="Y" class="status-button ${capacitacion.hasDiplomas ? "active" : ""}">${capacitacion.hasDiplomas ? "Diplomas: Sí" : "Marcar diplomas: Sí"}</button>
-        </form>
-      ` : ""}
+      ${diplomaChoiceMarkup}
       ${detailsLinkHref ? `<a class="capacitacion-link capacitacion-details-link" href="${escapeAttr(detailsLinkHref)}">${escapeHtml(detailsLinkText)}</a>` : ""}
     ${!canEditStatus && linkHref ? `<a class="capacitacion-link capacitacion-cta" href="${escapeAttr(linkHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>` : ""}
   `;
@@ -963,6 +1120,787 @@ function renderFinalizadasSinDiplomasPanel({
       })}
     </div>
   `;
+}
+
+function renderCapacitacionesPlatformPanel({
+  capacitaciones = [],
+  showStatusControls = false,
+  selectedEmployeeId = "",
+  detailReturnPath = "/dashboard",
+} = {}) {
+  return `
+    <div class="panel accolades-panel" style="margin-top:20px;">
+      <div class="section-head">
+        <div>
+          <h2>Capacitaciones</h2>
+          <p>Listado operativo integrado al dashboard. Aqui se revisan fechas, sedes, sucursales, capacitadores, notas y estado de diplomas.</p>
+        </div>
+      </div>
+      ${renderCapacitacionesAccordion(capacitaciones, {
+        emptyMessage: "No hay capacitaciones para mostrar.",
+        hrefBuilder: (capacitacion) => getCapacitacionConstanciasUrlFromCapacitacion(capacitacion),
+        linkLabel: "Crear constancias",
+        canEditDiplomas: showStatusControls,
+        canEditNotes: showStatusControls,
+        selectedEmployeeId,
+        returnPath: detailReturnPath,
+      })}
+    </div>
+  `;
+}
+
+function renderCapacitacionesPlatformPanelV2({
+  capacitaciones = [],
+  employees = [],
+  showStatusControls = false,
+  selectedEmployeeId = "",
+  detailReturnPath = "/dashboard",
+} = {}) {
+  const capacitacionesReturnPath = `${portalPath("/dashboard")}?tab=capacitaciones`;
+  const capacitadores = employees.filter((employee) => employee.role === "capacitador");
+  const groups = [
+    {
+      key: "PROGRAMADA",
+      title: "Programadas",
+      description: "Capacitaciones pendientes o en curso.",
+      rows: capacitaciones.filter((item) => item.statusSuffix !== "FINALIZADA"),
+    },
+    {
+      key: "FINALIZADA",
+      title: "Finalizadas",
+      description: "Capacitaciones cerradas, con o sin diplomas.",
+      rows: capacitaciones.filter((item) => item.statusSuffix === "FINALIZADA"),
+    },
+  ];
+  const renderItem = (capacitacion) => {
+    const capacitadorKeys = Array.isArray(capacitacion.capacitadores)
+      ? capacitacion.capacitadores.map((item) => String(item?.key || "").trim()).filter(Boolean).join(",")
+      : "";
+    const search = [
+      capacitacion.cedeLabel,
+      capacitacion.cede,
+      capacitacion.dateLabel,
+      capacitacion.statusLabel,
+      capacitacion.statusSuffix,
+      getCapacitacionHoraLabel(capacitacion),
+      getCapacitacionSucursalesItems(capacitacion).join(" "),
+      Array.isArray(capacitacion.capacitadores) ? capacitacion.capacitadores.map((item) => item?.nombre || item?.key || "").join(" ") : "",
+      capacitacion.hasDiplomas ? "DIPLOMAS SI" : "DIPLOMAS NO",
+    ].join(" ");
+    return `
+      <div
+        data-capacitacion-item
+        data-status="${escapeAttr(capacitacion.statusSuffix || "PROGRAMADA")}"
+        data-diplomas="${capacitacion.hasDiplomas ? "Y" : "N"}"
+        data-capacitadores="${escapeAttr(capacitadorKeys)}"
+        data-search="${escapeAttr(search)}"
+      >
+        ${renderCapacitacionCard(capacitacion, {
+          href: getCapacitacionConstanciasUrlFromCapacitacion(capacitacion),
+          linkLabel: "Crear constancias",
+          canEditDiplomas: showStatusControls,
+          canEditNotes: showStatusControls,
+          selectedEmployeeId,
+          returnPath: capacitacionesReturnPath,
+          inlineDetails: true,
+        })}
+      </div>
+    `;
+  };
+
+  return `
+    <div class="panel capacitaciones-studio" data-capacitaciones-studio>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Capacitaciones</span>
+          <h2>Capacitaciones</h2>
+          <p>Vista operativa agrupada por programadas y finalizadas, con filtros vivos sin salir del dashboard.</p>
+        </div>
+      </div>
+      <div class="capacitaciones-filter-bar">
+        <div class="calendar-note-grid">
+          <label class="calendar-note-field">
+            <span>Buscar</span>
+            <input data-capacitaciones-filter="search" placeholder="Sede, sucursal, fecha..." />
+          </label>
+          <label class="calendar-note-field">
+            <span>Estatus</span>
+            <select data-capacitaciones-filter="status">
+              <option value="">Todos</option>
+              <option value="PROGRAMADA">Programadas</option>
+              <option value="FINALIZADA">Finalizadas</option>
+            </select>
+          </label>
+          <label class="calendar-note-field">
+            <span>Capacitador</span>
+            <select data-capacitaciones-filter="capacitador">
+              <option value="">Todos</option>
+              ${capacitadores.map((employee) => `
+                <option value="${escapeAttr(employee.rowId)}" ${employee.rowId === selectedEmployeeId ? "selected" : ""}>${escapeHtml(employee.nombre || employee.correo || employee.rowId)}</option>
+              `).join("")}
+            </select>
+          </label>
+          <label class="calendar-note-field">
+            <span>Diplomas</span>
+            <select data-capacitaciones-filter="diplomas">
+              <option value="">Todos</option>
+              <option value="Y">Con diplomas</option>
+              <option value="N">Sin diplomas</option>
+            </select>
+          </label>
+        </div>
+        <div class="capacitaciones-filter-bar__meta">
+          <span data-capacitaciones-results>${escapeHtml(String(capacitaciones.length))} capacitaciones visibles</span>
+          <button class="button secondary" type="button" data-capacitaciones-filter-reset>Limpiar</button>
+        </div>
+      </div>
+      <div class="capacitaciones-groups">
+        ${groups.map((group) => `
+          <details class="accordion-card capacitaciones-group" data-capacitacion-group data-group-status="${escapeAttr(group.key)}">
+            <summary class="accordion-summary">
+              <div class="accordion-summary-main">
+                <strong>${escapeHtml(group.title)}</strong>
+                <span>${escapeHtml(group.description)}</span>
+              </div>
+              <div class="accordion-summary-meta">
+                <span class="status-chip ${group.key === "FINALIZADA" ? "is-finalizada" : "is-programada"}" data-capacitacion-group-count>${escapeHtml(String(group.rows.length))}</span>
+                <span class="accordion-chevron" aria-hidden="true">+</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <div class="capacitacion-grid">
+                ${group.rows.length ? group.rows.map(renderItem).join("") : `<div class="empty-state">No hay capacitaciones ${escapeHtml(group.title.toLowerCase())}.</div>`}
+              </div>
+            </div>
+          </details>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderConstanciasWorkspacePanel({
+  capacitaciones = [],
+  faltantes = [],
+  selectedCapacitacion = null,
+  selectedEmployee = null,
+  user = null,
+  employees = [],
+  showStatusControls = false,
+  actionPath = "/dashboard",
+} = {}) {
+  const candidates = (faltantes.length ? faltantes : capacitaciones).filter(Boolean);
+  const active = selectedCapacitacion || candidates[0] || capacitaciones[0] || null;
+  const activeId = String(active?.rowId || active?.id || "").trim();
+  const constanciasUrl = active ? getCapacitacionConstanciasUrlFromCapacitacion(active) : "";
+  const canPickCapacitador = user?.role === "admin";
+  const capacitadorOptions = canPickCapacitador
+    ? employees.filter((employee) => employee.role === "capacitador")
+    : [];
+
+  return `
+    <div class="panel accolades-panel" style="margin-top:20px;">
+      <div class="section-head">
+        <div>
+          <h2>Constancias</h2>
+          <p>Creacion de constancias integrada a la plataforma, con selector de capacitacion y control para marcar diplomas como entregados.</p>
+        </div>
+      </div>
+      <div class="detail-grid">
+        ${canPickCapacitador ? `
+          <form class="detail-block detail-block-wide" method="get" action="/dashboard">
+            <strong>Capacitador</strong>
+            <select name="employee" class="notes-textarea" onchange="if(this.value){window.location.href='/dashboard/capacitador/' + encodeURIComponent(this.value);}">
+              <option value="">Vista general</option>
+              ${capacitadorOptions.map((employee) => `
+                <option value="${escapeAttr(employee.rowId)}" ${employee.rowId === selectedEmployee?.rowId ? "selected" : ""}>${escapeHtml(employee.nombre || employee.correo || employee.rowId)}</option>
+              `).join("")}
+            </select>
+          </form>
+        ` : ""}
+        <form class="detail-block detail-block-wide" method="get" action="${escapeAttr(actionPath)}">
+          <strong>Capacitacion</strong>
+          <select name="capacitacion" class="notes-textarea" onchange="this.form.submit()">
+            ${candidates.length ? candidates.map((capacitacion) => {
+              const rowId = String(capacitacion.rowId || capacitacion.id || "").trim();
+              const label = `${capacitacion.cedeLabel || capacitacion.cede || "Sin sede"} - ${capacitacion.dateLabel || capacitacion.dateRaw || "Sin fecha"}`;
+              return `<option value="${escapeAttr(rowId)}" ${rowId === activeId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+            }).join("") : `<option value="">Sin capacitaciones disponibles</option>`}
+          </select>
+        </form>
+        <div class="detail-block detail-block-wide">
+          <strong>Constancias faltantes</strong>
+          <span>${escapeHtml(String(faltantes.length))} capacitacion(es) sin constancias/diplomas.</span>
+        </div>
+        ${active ? `
+          <div class="detail-block detail-block-wide">
+            <strong>Seleccion activa</strong>
+            <span>${escapeHtml(active.cedeLabel || active.cede || "Sin sede")} - ${escapeHtml(active.dateLabel || active.dateRaw || "Sin fecha")}</span>
+          </div>
+          <div class="detail-block detail-block-wide">
+            <strong>Sucursales precargadas</strong>
+            <div class="tag-row">
+              ${(getCapacitacionSucursalesItems(active).map((item) => `<span class="tag-pill">${escapeHtml(item)}</span>`).join("")) || `<span class="calendar-empty">Sin sucursales</span>`}
+            </div>
+          </div>
+          ${showStatusControls ? `
+            <form class="detail-block detail-block-wide js-async-diplomas" method="post" action="/dashboard/capacitaciones/${encodeURIComponent(active.rowId)}/diplomas">
+              <input type="hidden" name="returnTo" value="${escapeAttr(actionPath)}" />
+              <strong>Control de diplomas</strong>
+              <button type="submit" name="diplomas" value="Y" class="status-button ${active.hasDiplomas ? "active" : ""}">
+                ${active.hasDiplomas ? "Diplomas ya marcados" : "Marcar constancias/diplomas como listos"}
+              </button>
+            </form>
+          ` : ""}
+        ` : `<div class="empty-state">No hay capacitaciones para crear constancias.</div>`}
+      </div>
+      ${constanciasUrl ? `
+        <div class="calendar-frame" style="margin-top:16px;">
+          <div class="calendar-frame-top">
+            <span class="calendar-frame-label">Vista de constancia</span>
+            <a class="button secondary button--compact" href="${escapeAttr(constanciasUrl)}" target="_blank" rel="noopener noreferrer">Abrir en pestaña</a>
+          </div>
+          <iframe title="Crear constancias" src="${escapeAttr(constanciasUrl)}" style="width:100%;min-height:720px;border:0;border-radius:22px;background:#fff;"></iframe>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderSucursalesInfoPanel({ sucursales = [] } = {}) {
+  const groups = new Map();
+  for (const sucursal of Array.isArray(sucursales) ? sucursales : []) {
+    const raw = sucursal?.raw || {};
+    const empresa = String(raw.empresa_nombre || raw["RAZON SOCIAL"] || raw.razon_social || raw.empresa_id || "Sin empresa").trim();
+    const estado = String(raw.estado_nombre || raw.ESTADO_NOMBRE || raw.estado || raw.estado_id || "Sin estado").trim();
+    const municipio = String(raw.municipio_nombre || raw.MUNICIPIO_NOMBRE || raw.municipio || raw.municipio_id || "Sin municipio").trim();
+    if (!groups.has(empresa)) groups.set(empresa, new Map());
+    const estados = groups.get(empresa);
+    if (!estados.has(estado)) estados.set(estado, new Map());
+    const municipios = estados.get(estado);
+    if (!municipios.has(municipio)) municipios.set(municipio, []);
+    municipios.get(municipio).push(sucursal);
+  }
+
+  const markup = [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, "es"))
+    .map(([empresa, estados]) => `
+      <details class="accordion-card">
+        <summary class="accordion-summary">
+          <div class="accordion-summary-main">
+            <strong>${escapeHtml(empresa)}</strong>
+            <span>${escapeHtml(String([...estados.values()].reduce((count, municipios) => count + [...municipios.values()].reduce((sum, rows) => sum + rows.length, 0), 0)))} sucursal(es)</span>
+          </div>
+          <div class="accordion-summary-meta"><span class="accordion-chevron">+</span></div>
+        </summary>
+        <div class="accordion-body">
+          ${[...estados.entries()].sort(([a], [b]) => a.localeCompare(b, "es")).map(([estado, municipios]) => `
+            <div class="detail-block detail-block-wide">
+              <strong>${escapeHtml(estado)}</strong>
+              ${[...municipios.entries()].sort(([a], [b]) => a.localeCompare(b, "es")).map(([municipio, rows]) => `
+                <div style="margin-top:12px;">
+                  <span class="chip">${escapeHtml(municipio)}</span>
+                  <div class="tag-row" style="margin-top:8px;">
+                    ${rows
+                      .sort((a, b) => String(a.displayLabel || "").localeCompare(String(b.displayLabel || ""), "es"))
+                      .map((row) => `<span class="tag-pill">${escapeHtml(row.displayLabel || row.label || row.key || "")}</span>`)
+                      .join("")}
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          `).join("")}
+        </div>
+      </details>
+    `)
+    .join("");
+
+  return `
+    <div class="panel accolades-panel" style="margin-top:20px;">
+      <div class="section-head">
+        <div>
+          <h2>Informacion de sucursales</h2>
+          <p>Sucursales agrupadas por empresa, estado y municipio. Se muestra solo el label de cada sucursal para evitar informacion redundante.</p>
+        </div>
+      </div>
+      ${markup || `<div class="empty-state">No hay sucursales para mostrar.</div>`}
+    </div>
+  `;
+}
+
+function renderNotasThreadPanel({ calendarNotes = [], capacitaciones = [], employees = [], user = null, canEditNotes = false, canEditAllNotes = false } = {}) {
+  const noteItems = [
+    ...(Array.isArray(calendarNotes) ? calendarNotes : []).map((note) => ({
+      type: "Nota calendario",
+      title: note.title || note.noteTitle || "Nota",
+      date: note.dateLabel || note.dateRaw || "",
+      body: note.notes || note.title || note.noteTitle || "",
+      author: note.author || note.authorName || note.authorEmail || "Sin autor registrado",
+    })),
+    ...(Array.isArray(capacitaciones) ? capacitaciones : []).flatMap((capacitacion) => [
+      ...(String(capacitacion.notas || "").trim() ? [{
+        type: "Capacitacion",
+        title: capacitacion.cedeLabel || capacitacion.cede || "Capacitacion",
+        date: capacitacion.dateLabel || capacitacion.dateRaw || "",
+        body: capacitacion.notas || "",
+        author: "Registro historico",
+      }] : []),
+      ...(Array.isArray(capacitacion.threadNotes) ? capacitacion.threadNotes.map((note) => ({
+        id: note.id,
+        type: "Capacitacion",
+        title: capacitacion.cedeLabel || capacitacion.cede || "Capacitacion",
+        date: note.createdAt || capacitacion.dateLabel || "",
+        body: note.body || "",
+        author: note.authorName || note.authorEmail || "Sin autor registrado",
+        authorId: note.authorId || "",
+        authorEmail: note.authorEmail || "",
+      })) : []),
+    ]),
+  ].filter((item) => String(item.body || "").trim());
+
+  return `
+    <div class="panel accolades-panel" style="margin-top:20px;">
+      <div class="section-head">
+        <div>
+          <h2>Notas</h2>
+          <p>Lectura tipo hilo para notas y observaciones visibles en el dashboard. El formato objetivo es usuario - fecha: nota.</p>
+        </div>
+      </div>
+      ${canEditNotes ? renderCalendarNoteForm({
+        employees,
+        selectedEmployeeId: user?.rowId || "",
+        returnTo: "/dashboard",
+        canEditNotes,
+        action: portalPath("/dashboard/calendario/notas"),
+        submitLabel: "Crear nota",
+      }) : ""}
+      <div class="accordion-list" style="margin-top:14px;">
+        ${noteItems.length ? noteItems.map((item) => {
+          const currentUserKeys = [user?.rowId, user?.correo].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean);
+          const authorKeys = [item.authorId, item.authorEmail].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean);
+          const canManageEntry = Boolean(item.id && canEditNotes && (canEditAllNotes || authorKeys.some((key) => currentUserKeys.includes(key))));
+          return `
+          <article class="accordion-card"${item.id ? ` data-thread-note-id="${escapeAttr(item.id)}"` : ""}>
+            <div class="accordion-body">
+              <div class="detail-grid">
+                <div class="detail-block detail-block-wide">
+                  <strong>${escapeHtml(item.author || "Sistema")} - ${escapeHtml(item.date || "Sin fecha")}: <span class="thread-note-body">"${escapeHtml(item.body)}"</span></strong>
+                  <span>${escapeHtml(item.type)} - ${escapeHtml(item.title)}</span>
+                  ${canManageEntry ? `
+                    <details class="note-entry-actions">
+                      <summary>Editar o eliminar</summary>
+                      <form class="notes-form js-edit-thread-note" method="post" action="${portalPath(`/dashboard/notas/${encodeURIComponent(item.id)}/editar`)}">
+                        <textarea name="notas" rows="3" required>${escapeHtml(item.body)}</textarea>
+                        <div class="notes-actions">
+                          <button type="submit" class="status-button">Guardar cambio</button>
+                          <button type="button" class="status-button secondary js-delete-thread-note" data-action="${portalPath(`/dashboard/notas/${encodeURIComponent(item.id)}/eliminar`)}">Eliminar</button>
+                        </div>
+                      </form>
+                    </details>
+                  ` : ""}
+                </div>
+              </div>
+            </div>
+          </article>
+        `;}).join("") : `<div class="empty-state">No hay notas visibles.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderConstanciasWorkspacePanelV2({
+  capacitaciones = [],
+  faltantes = [],
+  selectedCapacitacion = null,
+  selectedEmployee = null,
+  user = null,
+  employees = [],
+  showStatusControls = false,
+} = {}) {
+  const candidates = (faltantes.length ? faltantes : capacitaciones).filter(Boolean);
+  const defaultEmployeeId = selectedEmployee?.role === "capacitador" ? String(selectedEmployee.rowId || "") : "";
+  const active = selectedCapacitacion || candidates.find((capacitacion) => {
+    if (!defaultEmployeeId) return true;
+    return Array.isArray(capacitacion.capacitadores)
+      && capacitacion.capacitadores.some((item) => String(item?.key || "").trim() === defaultEmployeeId);
+  }) || candidates[0] || capacitaciones[0] || null;
+  const activeId = String(active?.rowId || active?.id || "").trim();
+  const capacitadorOptions = employees.filter((employee) => employee.role === "capacitador");
+  const canPickCapacitador = user?.role === "admin";
+
+  const optionsMarkup = candidates.map((capacitacion) => {
+    const rowId = String(capacitacion.rowId || capacitacion.id || "").trim();
+    const label = `${capacitacion.cedeLabel || capacitacion.cede || "Sin sede"} - ${capacitacion.dateLabel || capacitacion.dateRaw || "Sin fecha"}`;
+    const sucursalesItems = getCapacitacionSucursalesItems(capacitacion);
+    const capacitadorKeys = Array.isArray(capacitacion.capacitadores)
+      ? capacitacion.capacitadores.map((item) => String(item?.key || "").trim()).filter(Boolean).join(",")
+      : "";
+    return `
+      <option
+        value="${escapeAttr(rowId)}"
+        data-url="${escapeAttr(getCapacitacionConstanciasUrlFromCapacitacion(capacitacion))}"
+        data-integrated-url="${escapeAttr(getIntegratedConstanciasUrlFromCapacitacion(capacitacion))}"
+        data-sede="${escapeAttr(capacitacion.cedeLabel || capacitacion.cede || "Sin sede")}"
+        data-fecha="${escapeAttr(capacitacion.dateLabel || capacitacion.dateRaw || "Sin fecha")}"
+        data-diplomas="${capacitacion.hasDiplomas ? "Y" : "N"}"
+        data-capacitadores="${escapeAttr(capacitadorKeys)}"
+        data-sucursales="${escapeAttr(JSON.stringify(sucursalesItems))}"
+        ${rowId === activeId ? "selected" : ""}
+      >${escapeHtml(label)}</option>
+    `;
+  }).join("");
+
+  return `
+    <div class="panel constancias-studio platform-surface" data-constancias-studio>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Generador de Constancias</span>
+          <h2>Generador de Constancias</h2>
+          <p>Selecciona capacitador y capacitacion sin salir del dashboard. La vista de constancias se precarga con sede, fecha y sucursales.</p>
+        </div>
+      </div>
+      <div class="constancias-workbench">
+      <aside class="constancias-workbench__controls">
+      <div class="calendar-frame">
+        <div class="calendar-frame-top">
+          <span class="calendar-frame-label">Controles</span>
+          <span class="calendar-frame-caption">${escapeHtml(String(faltantes.length))} capacitacion(es) sin constancias/diplomas</span>
+        </div>
+        <div class="detail-grid">
+          ${canPickCapacitador ? `
+            <label class="calendar-note-field">
+              <span>Capacitador</span>
+              <select data-constancias-capacitador-filter>
+                <option value="">Todos los capacitadores</option>
+                ${capacitadorOptions.map((employee) => `
+                  <option value="${escapeAttr(employee.rowId)}" ${employee.rowId === defaultEmployeeId ? "selected" : ""}>${escapeHtml(employee.nombre || employee.correo || employee.rowId)}</option>
+                `).join("")}
+              </select>
+            </label>
+          ` : `
+            <label class="calendar-note-field">
+              <span>Capacitador</span>
+              <input value="${escapeAttr(selectedEmployee?.nombre || user?.nombre || "Capacitador")}" readonly />
+            </label>
+          `}
+          <label class="calendar-note-field">
+            <span>Capacitacion</span>
+            <select data-constancias-capacitacion-select>
+              ${optionsMarkup || `<option value="">Sin capacitaciones disponibles</option>`}
+            </select>
+          </label>
+          <form class="calendar-note-field js-async-diplomas" method="post" action="/dashboard/capacitaciones/${encodeURIComponent(activeId)}/diplomas" data-constancias-diplomas-form>
+            <span>Control de diplomas</span>
+            <div class="status-actions" data-constancias-diplomas-toggle>
+              <button type="submit" name="diplomas" value="Y" class="status-button ${active?.hasDiplomas ? "active" : ""}">SI</button>
+              <button type="submit" name="diplomas" value="N" class="status-button ${active?.hasDiplomas ? "" : "active"}">NO</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="calendar-detail-card" data-constancias-summary>
+        <div class="calendar-detail-top">
+          <div>
+            <span class="detail-kicker">Capacitacion seleccionada</span>
+            <h3 data-constancias-sede>${escapeHtml(active?.cedeLabel || active?.cede || "Sin sede")}</h3>
+          </div>
+          <span class="status-chip ${active?.hasDiplomas ? "is-finalizada" : "is-programada"}" data-constancias-diplomas-state>${active?.hasDiplomas ? "DIPLOMAS: SI" : "DIPLOMAS: NO"}</span>
+        </div>
+        <div class="calendar-detail-meta">
+          <span class="chip" data-constancias-fecha>${escapeHtml(active?.dateLabel || active?.dateRaw || "Sin fecha")}</span>
+        </div>
+        <div class="calendar-detail-section">
+          <strong>Sucursales precargadas</strong>
+          <div class="tag-row" data-constancias-sucursales>
+            ${(getCapacitacionSucursalesItems(active).map((item) => `<span class="tag-pill">${escapeHtml(item)}</span>`).join("")) || `<span class="calendar-empty">Sin sucursales</span>`}
+          </div>
+        </div>
+      </div>
+      </aside>
+      ${active ? `
+        <div class="calendar-frame constancias-workbench__canvas">
+          <div class="calendar-frame-top">
+            <span class="calendar-frame-label">Vista integrada</span>
+            <a class="button secondary button--compact" href="${escapeAttr(getCapacitacionConstanciasUrlFromCapacitacion(active))}" target="_blank" rel="noopener noreferrer" data-constancias-open>Abrir en pestaña</a>
+          </div>
+          <iframe title="Generador de Constancias" data-src="${escapeAttr(getIntegratedConstanciasUrlFromCapacitacion(active))}" loading="lazy" data-constancias-frame></iframe>
+        </div>
+      ` : `<div class="empty-state">No hay capacitaciones para generar constancias.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderSucursalesInfoPanelV2({ sucursales = [], empresas = [], selectedEmpresaId = "" } = {}) {
+  const companyMap = new Map();
+  for (const empresa of Array.isArray(empresas) ? empresas : []) {
+    const raw = empresa?.raw || empresa || {};
+    const key = String(empresa?.key || raw.id || raw.ID || raw["Row ID"] || "").trim();
+    if (!key) continue;
+    companyMap.set(key, {
+      key,
+      nombreComercial: String(empresa?.nombreComercial || raw.nombre_comercial || raw["NOMBRE COMERCIAL"] || raw.razon_social || raw["RAZON SOCIAL"] || key).trim(),
+      razonSocial: String(empresa?.razonSocial || raw.razon_social || raw["RAZON SOCIAL"] || "Sin razón social").trim(),
+      logo: String(empresa?.logo || raw.logo_url || raw.logo || raw.LOGOURL || raw.LOGO || "").trim(),
+      rows: [],
+    });
+  }
+  for (const sucursal of Array.isArray(sucursales) ? sucursales : []) {
+    const raw = sucursal?.raw || {};
+    const empresaId = String(raw.empresa_id || raw.EMPRESA || raw["ID EMPRESA"] || raw.razon_social || "sin-empresa").trim();
+    const empresaKey = empresaId || "sin-empresa";
+    if (!companyMap.has(empresaKey)) {
+      companyMap.set(empresaKey, {
+        key: empresaKey,
+        nombreComercial: String(raw.nombre_comercial || raw.empresa_nombre_comercial || raw.empresa_nombre || raw.razon_social || raw["RAZON SOCIAL"] || empresaKey).trim(),
+        razonSocial: String(raw.empresa_nombre || raw.razon_social || raw["RAZON SOCIAL"] || "Sin razon social").trim(),
+        logo: String(raw.logo_url || raw.logo || raw.LOGOURL || raw.LOGO || "").trim(),
+        rows: [],
+      });
+    }
+    companyMap.get(empresaKey).rows.push(sucursal);
+  }
+  const deduplicatedCompanies = new Map();
+  for (const company of companyMap.values()) {
+    const signature = `${normalizeText(company.nombreComercial)}|${normalizeText(company.razonSocial)}`;
+    const existing = deduplicatedCompanies.get(signature);
+    if (!existing) {
+      deduplicatedCompanies.set(signature, { ...company, aliases: [company.key] });
+      continue;
+    }
+    existing.aliases.push(company.key);
+    existing.rows.push(...company.rows);
+    if (!existing.logo && company.logo) existing.logo = company.logo;
+  }
+  const companies = [...deduplicatedCompanies.values()].sort((a, b) => a.nombreComercial.localeCompare(b.nombreComercial, "es"));
+  const requestedCompanyId = String(selectedEmpresaId || "").trim();
+  const selectedCompany = companies.find((company) => company.aliases.includes(requestedCompanyId)) || null;
+  const renderCompany = (company) => {
+    const byState = new Map();
+    for (const sucursal of company.rows) {
+      const raw = sucursal?.raw || {};
+      const estado = String(raw.estado_nombre || raw.ESTADO_NOMBRE || raw.estado || raw.estado_id || "Sin estado").trim();
+      const municipio = String(raw.municipio_nombre || raw.MUNICIPIO_NOMBRE || raw.municipio || raw.municipio_id || "Sin municipio").trim();
+      if (!byState.has(estado)) {
+        byState.set(estado, {
+          id: String(raw.estado_id || "").trim(),
+          escudo: String(raw.estado_escudo || "").trim(),
+          municipios: new Map(),
+        });
+      }
+      const stateEntry = byState.get(estado);
+      if (!stateEntry.municipios.has(municipio)) {
+        stateEntry.municipios.set(municipio, {
+          id: String(raw.municipio_id || "").trim(),
+          escudo: String(raw.municipio_escudo || "").trim(),
+          rows: [],
+        });
+      }
+      stateEntry.municipios.get(municipio).rows.push(sucursal);
+    }
+    const withAddress = company.rows.filter((row) => String(row?.raw?.DIRECCION || row?.raw?.direccion || "").trim()).length;
+    const withDrive = company.rows.filter((row) => getStructuredUrl(row?.raw?.DRIVE || row?.raw?.drive || "")).length;
+    const capacitadores = new Set(company.rows.flatMap((row) => String(row?.raw?.capacitadores || "").split(",")).map((value) => value.trim()).filter(Boolean));
+    const latestWorkOptions = new Set(company.rows.flatMap((row) => {
+      const raw = row?.raw || {};
+      return [raw.ultimo_pipc_estatal, raw.ultimo_municipal]
+        .map((value) => String(value || "").trim()).filter((value) => /^\d{4}$/.test(value));
+    }));
+
+    const renderSucursal = (row) => {
+      const raw = row.raw || {};
+      const label = String(row.displayLabel || row.label || row.name || row.key || "Sucursal").trim();
+      const tienda = String(row.tienda || raw.TIENDA || "").trim();
+      const address = String(raw.DIRECCION || raw.direccion || raw.ADDRESS || "").trim();
+      const trabajos = String(raw.trabajos || raw.TRABAJOS || raw.tipo || raw.TIPO || "").trim();
+      const pedidoEstatal = String(raw.pedido_estatal || "").trim();
+      const pedidoMunicipal = String(raw.pedido_municipal || "").trim();
+      const estatal = String(raw.ultimo_pipc_estatal || "").trim();
+      const municipal = String(raw.ultimo_municipal || "").trim();
+      const capacitadoresLabel = String(raw.capacitadores || "").trim();
+      const planeacion = String(raw.planeacion_status || "").trim();
+      const risk = String(raw.nivel_riesgo || "").trim();
+      const month = String(raw.mes_planeacion ?? raw.assigned_month ?? "").trim();
+      const monthLabel = MONTH_NAMES[Number(month)] || month;
+      const capacitacionStatus = String(raw.status_capacitacion || "").trim();
+      const capacitacionDate = String(raw.fecha_ultima_capacitacion || "").trim();
+      const estatalLabel = [estatal, raw.estatus_pipc_estatal].filter(Boolean).join(" · ");
+      const municipalLabel = [municipal, raw.estatus_municipal].filter(Boolean).join(" · ");
+      const driveUrl = getStructuredUrl(raw.DRIVE || raw.drive || "");
+      const lat = Number(raw.LAT ?? raw.lat);
+      const lng = Number(raw.LNG ?? raw.lng);
+      const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lng);
+      const search = [label, tienda, address, trabajos, pedidoEstatal, pedidoMunicipal, estatalLabel, municipalLabel, capacitadoresLabel, planeacion, risk, capacitacionStatus || "SIN CAPACITACIÓN", capacitacionDate].join(" ");
+      return `
+        <details class="branch-card" data-sucursal-chip data-search="${escapeAttr(search)}" data-pedidos="${escapeAttr(`${pedidoEstatal} ${pedidoMunicipal}`)}" data-trabajos="${escapeAttr(trabajos)}" data-estatal-year="${escapeAttr(estatal)}" data-municipal-year="${escapeAttr(municipal)}">
+          <summary class="branch-card__summary">
+            <span class="branch-card__store">${escapeHtml(tienda || "S/N")}</span>
+            <span class="branch-card__identity"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(address || "Dirección pendiente")}</small></span>
+            <span class="branch-card__signals">${trabajos ? `<span class="territory-pill">${escapeHtml(trabajos)}</span>` : ""}<span class="accordion-chevron" aria-hidden="true">+</span></span>
+          </summary>
+          <div class="branch-card__body">
+            <dl class="branch-facts">
+              <div><dt>Pedido estatal</dt><dd>${escapeHtml(pedidoEstatal || "Sin pedido estatal este año")}</dd></div>
+              <div><dt>Pedido municipal</dt><dd>${escapeHtml(pedidoMunicipal || "Sin pedido municipal este año")}</dd></div>
+              <div><dt>PIPC estatal</dt><dd>${escapeHtml(estatalLabel || "Sin registro")}</dd></div>
+              <div><dt>Trabajo municipal</dt><dd>${escapeHtml(municipalLabel || "Sin registro")}</dd></div>
+              <div><dt>Capacitadores</dt><dd>${escapeHtml(capacitadoresLabel || "Sin asignar")}</dd></div>
+              <div><dt>Planeación</dt><dd>${escapeHtml(monthLabel ? `${monthLabel}${planeacion ? ` · ${planeacion}` : ""}` : (planeacion || "Sin programar"))}</dd></div>
+              <div><dt>Capacitación</dt><dd>${escapeHtml(capacitacionStatus ? `${capacitacionStatus}${capacitacionDate ? ` · ${capacitacionDate}` : ""}` : "Sin capacitación")}</dd></div>
+              <div><dt>Nivel de riesgo</dt><dd>${escapeHtml(risk || "Sin clasificar")}</dd></div>
+              <div><dt>Precio estatal</dt><dd>${escapeHtml(formatOptionalMoney(raw.precio_estatal))}</dd></div>
+              <div><dt>Precio municipal</dt><dd>${escapeHtml(formatOptionalMoney(raw.precio_municipal))}</dd></div>
+            </dl>
+            <div class="branch-card__actions">
+              ${driveUrl ? `<a class="button secondary button--compact" href="${escapeAttr(driveUrl)}" target="_blank" rel="noopener noreferrer">Abrir Drive</a>` : ""}
+              ${hasCoordinates ? `<a class="button secondary button--compact" href="https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}" target="_blank" rel="noopener noreferrer">Ver ubicación</a>` : ""}
+            </div>
+          </div>
+        </details>`;
+    };
+    return `
+      <section class="company-profile" data-sucursales-company="${escapeAttr(company.key)}">
+        <a class="company-back" href="${portalPath("/dashboard")}?tab=sucursales">← Directorio de empresas</a>
+        <header class="company-hero">
+          <div class="company-hero__identity">
+            ${company.logo ? `<img class="company-profile__logo" src="${portalPath(`/dashboard/empresas/${encodeURIComponent(company.key)}/logo`)}" alt="${escapeAttr(company.nombreComercial)}" />` : `<span class="company-logo-fallback">${escapeHtml(company.nombreComercial.slice(0, 2).toUpperCase())}</span>`}
+            <div><span class="detail-kicker">Perfil empresarial</span><h3>${escapeHtml(company.nombreComercial)}</h3><p>${escapeHtml(company.razonSocial)}</p></div>
+          </div>
+          <div class="company-hero__metrics" aria-label="Resumen de empresa">
+            <article><strong>${company.rows.length}</strong><span>Sucursales</span></article>
+            <article><strong>${byState.size}</strong><span>Estados</span></article>
+            <article><strong>${withDrive}</strong><span>Con Drive</span></article>
+            <article><strong>${capacitadores.size}</strong><span>Capacitadores</span></article>
+          </div>
+        </header>
+        <div class="company-data-quality"><span>${withAddress} de ${company.rows.length} sucursales con dirección</span><span>Todo el detalle inicia contraído</span></div>
+        <div class="company-filter-bar">
+          <label class="calendar-note-field company-filter-search"><span>Buscar sucursal</span><input data-sucursales-filter="search" type="search" placeholder="Nombre, tienda, dirección..." /></label>
+          <label class="calendar-note-field"><span>Pedido</span><input data-sucursales-filter="pedido" placeholder="Pedido estatal o municipal..." /></label>
+          <label class="calendar-note-field"><span>Trabajo</span><select data-sucursales-filter="trabajo"><option value="">Todos</option><option value="ESTATAL">Estatal</option><option value="MUNICIPAL">Municipal</option><option value="OTRO">Otro</option></select></label>
+          <label class="calendar-note-field"><span>Último trabajo</span><select data-sucursales-filter="vigencia"><option value="">Todos los años</option>${[...latestWorkOptions].sort((a, b) => b.localeCompare(a, "es", { numeric: true })).map((value) => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join("")}</select></label>
+          <label class="calendar-note-field"><span>Capacitador</span><select data-sucursales-filter="capacitador"><option value="">Todos</option>${[...capacitadores].sort((a, b) => a.localeCompare(b, "es")).map((value) => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join("")}</select></label>
+          <label class="calendar-note-field"><span>Estado capacitación</span><select data-sucursales-filter="capacitacion"><option value="">Todos</option><option value="PROGRAMADA">Programada</option><option value="FINALIZADA">Finalizada</option><option value="SIN CAPACITACIÓN">Sin capacitación</option></select></label>
+          <button class="button secondary company-filter-reset" type="button" data-sucursales-filter-reset>Limpiar filtros</button>
+        </div>
+        <p class="company-results" data-sucursales-results>${company.rows.length} sucursales disponibles</p>
+        <div class="territory-list">
+          ${[...byState.entries()].sort(([a], [b]) => a.localeCompare(b, "es")).map(([estado, stateEntry]) => {
+            const count = [...stateEntry.municipios.values()].reduce((total, entry) => total + entry.rows.length, 0);
+            return `<details class="accordion-card territory-card" data-territory-state>
+              <summary class="accordion-summary">
+                <span class="territory-crest territory-crest--state">${stateEntry.escudo && stateEntry.id ? `<img src="${portalPath(`/dashboard/territorios/estado/${encodeURIComponent(stateEntry.id)}/escudo`)}" alt="Escudo de ${escapeAttr(estado)}" loading="lazy" />` : `<span>${escapeHtml(estado.slice(0, 2).toUpperCase())}</span>`}</span>
+                <div class="accordion-summary-main"><strong>${escapeHtml(estado)}</strong><span data-territory-state-count aria-live="polite">${count} sucursales · ${stateEntry.municipios.size} municipios</span></div>
+                <div class="accordion-summary-meta"><span class="accordion-chevron" aria-hidden="true">+</span></div>
+              </summary>
+              <div class="accordion-body territory-card__body">
+                ${[...stateEntry.municipios.entries()].sort(([a], [b]) => a.localeCompare(b, "es")).map(([municipio, entry]) => `
+                  <details class="municipality-card" data-territory-municipality>
+                    <summary class="municipality-card__summary">
+                      <span class="territory-crest territory-crest--municipality">${entry.escudo && entry.id ? `<img src="${portalPath(`/dashboard/territorios/municipio/${encodeURIComponent(entry.id)}/escudo`)}" alt="Escudo de ${escapeAttr(municipio)}" loading="lazy" />` : `<span>${escapeHtml(municipio.slice(0, 2).toUpperCase())}</span>`}</span>
+                      <span><strong>${escapeHtml(municipio)}</strong><small data-territory-municipality-count aria-live="polite">${entry.rows.length} sucursales</small></span>
+                      <span class="accordion-chevron" aria-hidden="true">+</span>
+                    </summary>
+                    <div class="municipality-card__body">${entry.rows.sort((a, b) => String(a.displayLabel || "").localeCompare(String(b.displayLabel || ""), "es")).map(renderSucursal).join("")}</div>
+                  </details>
+                `).join("")}
+              </div>
+            </details>`;}).join("")}
+        </div>
+      </section>
+    `;
+  };
+
+  return `
+    <div class="panel sucursales-studio platform-surface" data-sucursales-studio>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Información de sucursales</span>
+          <h2>Empresas y sucursales</h2>
+          <p>${selectedCompany ? "Perfil empresarial y sucursales agrupadas por estado y municipio." : "Selecciona una empresa para abrir su perfil y consultar sus sucursales."}</p>
+        </div>
+      </div>
+      ${selectedCompany ? renderCompany(selectedCompany) : `
+      <div class="company-directory-tools">
+        <label class="calendar-note-field company-directory-search"><span>Buscar empresa</span><input type="search" placeholder="Nombre comercial o razón social..." data-company-directory-search /></label>
+        <span class="company-results" data-company-directory-results>${companies.length} empresas disponibles</span>
+      </div>
+      <div class="company-directory">
+        ${companies.length ? companies.map((company) => `
+          <a class="company-card" href="${portalPath(`/dashboard/empresas/${encodeURIComponent(company.key)}`)}" data-company-directory-card data-search="${escapeAttr(`${company.nombreComercial} ${company.razonSocial}`)}">
+            <span class="company-card__media">
+              ${company.logo ? `<img src="${portalPath(`/dashboard/empresas/${encodeURIComponent(company.key)}/logo`)}" alt="" />` : `<span>${escapeHtml(company.nombreComercial.slice(0, 2).toUpperCase())}</span>`}
+            </span>
+            <span class="company-card__copy">
+              <strong>${escapeHtml(company.nombreComercial)}</strong>
+              <small>${escapeHtml(company.razonSocial)}</small>
+              <em>${escapeHtml(String(company.rows.length))} sucursales</em>
+            </span>
+            <span class="company-card__arrow">→</span>
+          </a>
+        `).join("") : `<div class="empty-state">No hay empresas para mostrar.</div>`}
+      </div>
+      `}
+    </div>
+  `;
+}
+
+function renderCasaLeyStoresReport({ sucursales = [] } = {}) {
+  const currentYear = new Date().getFullYear();
+  const completed = (value) => ["EN DRIVE", "IMPRESO", "ENTREGADO"].some((status) => normalizeText(value).includes(status));
+  const rows = (Array.isArray(sucursales) ? sucursales : [])
+    .filter((row) => {
+      const raw = row?.raw || {};
+      const empresaId = String(raw.empresa_id || raw.EMPRESA || raw["ID EMPRESA"] || "").trim();
+      const trabajos = normalizeText(raw.trabajos || raw.TRABAJOS || raw.tipo || raw.TIPO || "");
+      return empresaId === "1" && (trabajos.includes("ESTATAL") || trabajos.includes("MUNICIPAL"));
+    })
+    .map((row) => {
+      const raw = row.raw || {};
+      const estatalYear = extractPedidoYear(raw.ultimo_pipc_estatal);
+      const municipalYear = extractPedidoYear(raw.ultimo_municipal);
+      const estatalActual = estatalYear === currentYear && completed(raw.estatus_pipc_estatal);
+      const municipalActual = municipalYear === currentYear && completed(raw.estatus_municipal);
+      const pcYear = extractPedidoYear(raw.pc_estatal_fecha || raw.fecha_pc_estatal || raw.pc_fecha);
+      const pcStatus = pcYear === currentYear
+        ? String(raw.pc_estatal_status || raw.status_pc_estatal || raw.pc_status || "PENDIENTE").trim()
+        : "PENDIENTE";
+      return {
+        label: String(row.displayLabel || row.label || row.name || row.key || "Sucursal").trim(),
+        municipio: String(raw.municipio_nombre || raw.municipio || raw.municipio_id || "Sin municipio").trim(),
+        estado: String(raw.estado_nombre || raw.estado || raw.estado_id || "Sin estado").trim(),
+        capacitacion: String(raw.status_capacitacion || "SIN CAPACITACION").trim(),
+        capacitador: String(raw.capacitadores || "Sin asignar").trim(),
+        estatalActual,
+        municipalActual,
+        pcStatus,
+        idPc: String(raw.id_pc || raw.ID_PC || "").trim(),
+      };
+    })
+    .sort((a, b) => a.estado.localeCompare(b.estado, "es") || a.municipio.localeCompare(b.municipio, "es") || a.label.localeCompare(b.label, "es"));
+  const rowMarkup = rows.map((row) => {
+    const search = [row.label, row.municipio, row.estado, row.capacitacion, row.capacitador, row.pcStatus].join(" ");
+    return `<tr data-casa-ley-row data-search="${escapeAttr(search)}" data-work="${row.estatalActual ? "ESTATAL " : ""}${row.municipalActual ? "MUNICIPAL" : ""}">
+      <td><strong>${escapeHtml(row.label)}</strong><small style="display:block;color:var(--muted);margin-top:4px;">${escapeHtml(`${row.municipio} · ${row.estado}`)}</small></td>
+      <td><span class="chip ${row.capacitacion === "FINALIZADA" ? "ok" : ""}">${escapeHtml(row.capacitacion)}</span></td>
+      <td>${escapeHtml(row.capacitador)}</td>
+      <td><span class="chip ${row.municipalActual ? "ok" : "warn"}">${row.municipalActual ? "SI" : "NO"}</span></td>
+      <td><span class="chip ${row.estatalActual ? "ok" : "warn"}">${row.estatalActual ? "SI" : "NO"}</span></td>
+      <td><span class="chip ${normalizeText(row.pcStatus) === "PENDIENTE" ? "warn" : "ok"}">${escapeHtml(row.pcStatus)}</span>${row.idPc ? `<small style="display:block;color:var(--muted);margin-top:4px;">ID ${escapeHtml(row.idPc)}</small>` : ""}</td>
+    </tr>`;
+  }).join("");
+  return `<section class="pedidos-native pedidos-surface" data-casa-ley-report>
+    <div class="pedidos-header">
+      <div><span class="detail-kicker">Operacion Casa Ley · ${currentYear}</span><h2>Reporte de tiendas</h2><p>Seguimiento anual de trabajos, capacitacion y Proteccion Civil desde la base local persistente.</p></div>
+      <span class="pill strong" data-casa-ley-count>${rows.length} tiendas</span>
+    </div>
+    <div class="pedidos-advanced-grid" style="margin:18px 0;">
+      <label class="pedidos-field"><span>Buscar</span><input type="search" data-casa-ley-search placeholder="Tienda, municipio, estado o capacitador..."></label>
+      <label class="pedidos-field"><span>Trabajo vigente</span><select data-casa-ley-work><option value="">Todos</option><option value="ESTATAL">Estatal</option><option value="MUNICIPAL">Municipal</option></select></label>
+    </div>
+    <div class="pedidos-table-shell"><table><thead><tr><th>Tienda</th><th>Capacitacion</th><th>Capacitador</th><th>Municipal ${currentYear}</th><th>Estatal ${currentYear}</th><th>PC Estatal</th></tr></thead><tbody>${rowMarkup || `<tr><td colspan="6">No hay tiendas Casa Ley con trabajos configurados.</td></tr>`}</tbody></table></div>
+    <script>(() => { const root = document.currentScript.closest('[data-casa-ley-report]'); if (!root) return; const search = root.querySelector('[data-casa-ley-search]'); const work = root.querySelector('[data-casa-ley-work]'); const count = root.querySelector('[data-casa-ley-count]'); const apply = () => { const q = (search.value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase(); const kind = work.value; let visible = 0; root.querySelectorAll('[data-casa-ley-row]').forEach((row) => { const hay = (!q || row.dataset.search.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().includes(q)) && (!kind || row.dataset.work.includes(kind)); row.hidden = !hay; if (hay) visible += 1; }); count.textContent = visible + ' tiendas'; }; search.addEventListener('input', apply); work.addEventListener('change', apply); })();</script>
+  </section>`;
 }
 
 function renderFaltantesLeyCompactPanel({
@@ -1117,7 +2055,6 @@ function renderCapacitacionesAccordion(capacitaciones, options = {}) {
     const capacitadoresLabel = capacitacion.capacitadores?.length
       ? capacitacion.capacitadores.map((item) => item.nombre || item.key || "").filter(Boolean).join(" · ")
       : "PENDIENTE";
-    const isOpen = index === 0;
     const constanciasUrl = typeof options.hrefBuilder === "function"
       ? options.hrefBuilder(capacitacion)
       : getCapacitacionConstanciasUrlFromCapacitacion(capacitacion);
@@ -1125,7 +2062,7 @@ function renderCapacitacionesAccordion(capacitaciones, options = {}) {
     const notes = String(capacitacion.notas || "").trim();
 
     return `
-      <details class="accordion-card" ${isOpen ? "open" : ""}>
+      <details class="accordion-card">
         <summary class="accordion-summary">
           <div class="accordion-summary-main">
             <span class="chip">${escapeHtml(capacitacion.dateLabel || "")}</span>
@@ -2533,7 +3470,8 @@ function getHomeStyles() {
         letter-spacing: 0.11em;
         color: var(--muted);
       }
-      .pedidos-field input {
+      .pedidos-field input,
+      .pedidos-field select {
         width: 100%;
         border: 1px solid rgba(26,42,58,0.12);
         border-radius: 16px;
@@ -2543,7 +3481,8 @@ function getHomeStyles() {
         color: var(--ink);
         box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
       }
-      .pedidos-field input:focus {
+      .pedidos-field input:focus,
+      .pedidos-field select:focus {
         outline: none;
         border-color: rgba(29,78,216,0.42);
         box-shadow: 0 0 0 3px rgba(29,78,216,0.10);
@@ -2580,6 +3519,9 @@ function getHomeStyles() {
         border-collapse: separate;
         border-spacing: 0;
       }
+      .pedidos-table-shell table.pedidos-table--send {
+        min-width: 980px;
+      }
       .pedidos-table-shell thead th {
         position: sticky;
         top: 0;
@@ -2604,6 +3546,93 @@ function getHomeStyles() {
       }
       .pedidos-row[hidden] {
         display: none !important;
+      }
+      .pedidos-detail-row[hidden] {
+        display: none !important;
+      }
+      .pedidos-detail-row td {
+        background: rgba(239,246,255,0.72);
+        border-top: 0;
+        padding: 0 14px 16px;
+      }
+      .pedidos-sendbar {
+        display: grid;
+        grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr) auto;
+        gap: 12px;
+        align-items: end;
+        margin: 14px 0;
+        padding: 14px;
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 22px;
+        background: rgba(255,255,255,0.88);
+        box-shadow: 0 14px 30px rgba(26,42,58,0.06);
+      }
+      .pedidos-sendbar select,
+      .pedidos-sendbar textarea {
+        width: 100%;
+        border: 1px solid rgba(26,42,58,0.12);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.96);
+        padding: 12px 13px;
+        font: inherit;
+        color: var(--ink);
+      }
+      .pedidos-sendbar textarea {
+        min-height: 48px;
+        resize: vertical;
+      }
+      .pedidos-status-line {
+        grid-column: 1 / -1;
+        color: var(--muted);
+        font: 800 0.78rem/1.4 "Montserrat", sans-serif;
+      }
+      .pedidos-status-line.ok {
+        color: #166534;
+      }
+      .pedidos-status-line.err {
+        color: #b91c1c;
+      }
+      .pedidos-row-actions {
+        display: grid;
+        gap: 8px;
+        min-width: 180px;
+      }
+      .pedidos-files-panel {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 20px;
+        background: rgba(255,255,255,0.86);
+      }
+      .pedidos-files-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .pedidos-files-list {
+        display: grid;
+        gap: 8px;
+      }
+      .pedidos-file-item {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: start;
+        padding: 10px 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(26,42,58,0.10);
+        background: rgba(248,250,252,0.9);
+      }
+      .pedidos-file-item strong {
+        display: block;
+      }
+      .pedidos-file-item small {
+        display: block;
+        color: var(--muted);
+        margin-top: 2px;
       }
       .pedidos-native .chip {
         background: rgba(255,255,255,0.96);
@@ -3131,6 +4160,7 @@ function getHomeStyles() {
         font-weight: 900;
       }
       .calendar-note-field input[type="text"],
+      .calendar-note-field input[type="search"],
       .calendar-note-field input[type="date"],
       .calendar-note-field select {
         width: 100%;
@@ -3144,6 +4174,7 @@ function getHomeStyles() {
         outline: none;
       }
       .calendar-note-field input[type="text"]:focus,
+      .calendar-note-field input[type="search"]:focus,
       .calendar-note-field input[type="date"]:focus,
       .calendar-note-field select:focus {
         border-color: rgba(192,57,43,0.55);
@@ -3836,6 +4867,78 @@ function getHomeStyles() {
         box-shadow: var(--shadow);
         border-top: 5px solid var(--navy);
       }
+      .capacitacion-card--expandable {
+        display: block;
+        padding: 0;
+        overflow: hidden;
+      }
+      .capacitacion-card--expandable[open] {
+        box-shadow: 0 24px 64px rgba(20,32,43,0.13);
+      }
+      .capacitacion-card__summary {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px;
+        cursor: pointer;
+        list-style: none;
+      }
+      .capacitacion-card__summary::-webkit-details-marker {
+        display: none;
+      }
+      .capacitacion-card__summary-main {
+        display: grid;
+        gap: 11px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .capacitacion-card__summary-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        color: var(--muted);
+        font: 700 0.78rem "Montserrat", sans-serif;
+      }
+      .diploma-summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .diploma-summary > span:first-child {
+        color: var(--crimson);
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+      .diploma-summary .status-button {
+        padding: 5px 8px;
+        cursor: inherit;
+        font-size: 0.68rem;
+      }
+      .capacitacion-card--expandable[open] > .capacitacion-card__summary .accordion-chevron {
+        transform: rotate(45deg);
+        background: rgba(192,57,43,0.10);
+      }
+      .capacitacion-card__body {
+        display: grid;
+        gap: 16px;
+        padding: 0 18px 18px;
+        border-top: 1px solid rgba(26,42,58,0.08);
+      }
+      .capacitacion-card__detail-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 16px;
+      }
+      .capacitacion-card__actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
       .capacitacion-card-link {
         text-decoration: none;
         color: inherit;
@@ -3911,6 +5014,288 @@ function getHomeStyles() {
         margin-top: 4px;
         padding: 0;
       }
+      @media (max-width: 720px) {
+        .capacitacion-card__summary {
+          padding: 15px;
+        }
+        .capacitacion-card__summary-meta {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .capacitacion-card__detail-grid {
+          grid-template-columns: 1fr;
+        }
+        .capacitacion-card__body {
+          padding: 0 15px 15px;
+        }
+        .capacitacion-card__actions {
+          align-items: stretch;
+          flex-direction: column;
+        }
+      }
+      .capacitaciones-studio {
+        --cap-glass-border: rgba(255,255,255,0.82);
+        --cap-glass-shadow: 0 20px 54px rgba(20,32,43,0.10);
+        overflow: hidden;
+        border: 1px solid var(--cap-glass-border);
+        border-top: 1px solid var(--cap-glass-border);
+        border-radius: 30px;
+        background:
+          linear-gradient(145deg, rgba(255,255,255,0.80), rgba(255,255,255,0.42) 48%, rgba(234,240,246,0.38)),
+          linear-gradient(315deg, rgba(192,57,43,0.06), transparent 38%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.94), var(--cap-glass-shadow);
+        backdrop-filter: blur(30px) saturate(1.2);
+      }
+      .capacitaciones-studio > .section-head {
+        margin-bottom: 18px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(26,42,58,0.08);
+      }
+      .capacitaciones-filter-bar {
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+        border: 1px solid var(--cap-glass-border);
+        border-radius: 24px;
+        background: linear-gradient(150deg, rgba(255,255,255,0.64), rgba(246,249,252,0.38));
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.90), 0 12px 32px rgba(20,32,43,0.07);
+        backdrop-filter: blur(22px) saturate(1.15);
+      }
+      .capacitaciones-filter-bar .calendar-note-grid {
+        grid-template-columns: minmax(220px, 1.45fr) repeat(3, minmax(150px, 1fr));
+      }
+      .capacitaciones-filter-bar .calendar-note-field {
+        gap: 6px;
+      }
+      .capacitaciones-filter-bar .calendar-note-field input,
+      .capacitaciones-filter-bar .calendar-note-field select {
+        width: 100%;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 18px;
+        outline: none;
+        color: var(--ink);
+        background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.54));
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.88), 0 8px 22px rgba(20,32,43,0.05);
+        font: 700 0.82rem "Montserrat", sans-serif;
+      }
+      .capacitaciones-filter-bar .calendar-note-field input:focus,
+      .capacitaciones-filter-bar .calendar-note-field select:focus {
+        border-color: rgba(192,57,43,0.42);
+        box-shadow: 0 0 0 4px rgba(192,57,43,0.07), inset 0 1px 0 rgba(255,255,255,0.9);
+      }
+      .capacitaciones-filter-bar__meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(26,42,58,0.07);
+        color: var(--muted);
+        font: 750 0.8rem "Montserrat", sans-serif;
+      }
+      .capacitaciones-filter-bar__meta .button {
+        min-height: 38px;
+        padding: 8px 15px;
+        border-radius: 999px;
+      }
+      .capacitaciones-groups {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .capacitaciones-group {
+        border: 1px solid var(--cap-glass-border);
+        border-radius: 26px;
+        background: linear-gradient(150deg, rgba(255,255,255,0.68), rgba(241,246,250,0.40));
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 14px 38px rgba(20,32,43,0.07);
+        backdrop-filter: blur(24px) saturate(1.16);
+      }
+      .capacitaciones-group[open] {
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.94), 0 22px 54px rgba(20,32,43,0.11);
+      }
+      .capacitaciones-group > .accordion-summary {
+        min-height: 80px;
+        padding: 16px 18px;
+      }
+      .capacitaciones-group > .accordion-summary .accordion-summary-main strong {
+        color: var(--navy);
+        font-size: 1rem;
+      }
+      .capacitaciones-group > .accordion-body {
+        padding: 0 16px 16px;
+      }
+      .capacitaciones-studio .capacitacion-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .capacitaciones-studio .capacitacion-card {
+        border: 1px solid rgba(255,255,255,0.86);
+        border-top: 1px solid rgba(255,255,255,0.86);
+        border-radius: 24px;
+        background:
+          linear-gradient(145deg, rgba(255,255,255,0.76), rgba(247,250,252,0.46)),
+          linear-gradient(320deg, rgba(20,44,66,0.035), transparent 44%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.96), 0 14px 34px rgba(20,32,43,0.08);
+        transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+      }
+      .capacitaciones-studio .capacitacion-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(255,255,255,0.98);
+        box-shadow: inset 0 1px 0 #fff, 0 22px 48px rgba(20,32,43,0.12);
+      }
+      .capacitaciones-studio .capacitacion-card__summary {
+        min-height: 118px;
+        padding: 17px;
+      }
+      .capacitaciones-studio .capacitacion-card__summary-main {
+        align-content: start;
+        gap: 9px;
+      }
+      .capacitaciones-studio .capacitacion-card h3 {
+        color: var(--navy);
+        font-size: 1rem;
+        line-height: 1.22;
+      }
+      .capacitaciones-studio .capacitacion-head {
+        align-items: center;
+        justify-content: flex-start;
+        gap: 7px;
+      }
+      .capacitaciones-studio .capacitacion-head .chip,
+      .capacitaciones-studio .status-chip {
+        padding: 5px 8px;
+        font-size: 0.62rem;
+      }
+      .capacitaciones-studio .capacitacion-card__summary-meta {
+        gap: 7px 12px;
+        font-size: 0.73rem;
+      }
+      .capacitaciones-studio .diploma-summary {
+        flex-basis: 100%;
+      }
+      .capacitaciones-studio .capacitacion-card__body {
+        gap: 0;
+        padding: 0 17px 17px;
+        background: linear-gradient(180deg, rgba(238,244,248,0.22), rgba(255,255,255,0.28));
+      }
+      .capacitaciones-studio .capacitacion-card__chevron {
+        flex: 0 0 auto;
+        transform: rotate(90deg);
+        font-size: 1.25rem;
+      }
+      .capacitaciones-studio .capacitacion-card--expandable[open] > .capacitacion-card__summary .capacitacion-card__chevron {
+        transform: rotate(-90deg);
+      }
+      .capacitaciones-studio .capacitacion-card__section {
+        display: grid;
+        grid-template-columns: 150px minmax(0, 1fr);
+        gap: 14px;
+        align-items: center;
+        padding: 14px 0;
+        border-top: 1px solid rgba(26,42,58,0.07);
+      }
+      .capacitaciones-studio .capacitacion-card__section > strong {
+        color: var(--crimson);
+        font: 900 0.7rem "Montserrat", sans-serif;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+      .capacitaciones-studio .capacitacion-card__branches .tag-row {
+        align-items: center;
+        min-width: 0;
+      }
+      .capacitaciones-studio .capacitacion-card__branches .tag-pill {
+        flex: 0 1 auto;
+        align-self: center;
+        max-width: 100%;
+        min-height: 32px;
+        padding: 6px 10px;
+        white-space: normal;
+      }
+      .capacitaciones-studio .capacitacion-card__notes .notes-form {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+      }
+      .capacitaciones-studio .capacitacion-card__notes .notes-textarea {
+        min-height: 72px;
+        padding: 11px 13px;
+        border-radius: 16px;
+        background: rgba(255,255,255,0.66);
+      }
+      .capacitaciones-studio .capacitacion-card__notes .notes-actions {
+        display: grid;
+        justify-items: start;
+        min-width: 120px;
+      }
+      .capacitaciones-studio .capacitacion-card__notes .notes-state,
+      .capacitaciones-studio .capacitacion-card__note-copy {
+        color: var(--muted);
+        font: 700 0.75rem "Montserrat", sans-serif;
+      }
+      .capacitaciones-studio .capacitacion-card__actions {
+        padding-top: 14px;
+        border-top: 1px solid rgba(26,42,58,0.07);
+      }
+      .capacitaciones-studio .capacitacion-card__detail-grid {
+        padding: 10px;
+        border: 1px solid rgba(255,255,255,0.72);
+        border-radius: 20px;
+        background: rgba(255,255,255,0.30);
+      }
+      .capacitaciones-studio .capacitacion-card__detail-grid .detail-block {
+        min-height: 0;
+        padding: 11px;
+        border: 0;
+        border-radius: 16px;
+        background: rgba(255,255,255,0.46);
+        box-shadow: none;
+      }
+      @media (max-width: 980px) {
+        .capacitaciones-filter-bar .calendar-note-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .capacitaciones-studio .capacitacion-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 620px) {
+        .capacitaciones-studio {
+          padding: 16px;
+          border-radius: 24px;
+        }
+        .capacitaciones-filter-bar .calendar-note-grid {
+          grid-template-columns: 1fr;
+        }
+        .capacitaciones-filter-bar__meta {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .capacitaciones-group > .accordion-summary {
+          min-height: 72px;
+          padding: 14px;
+        }
+        .capacitaciones-group > .accordion-body {
+          padding: 0 10px 10px;
+        }
+        .capacitaciones-studio .capacitacion-card__summary {
+          min-height: 0;
+        }
+        .capacitaciones-studio .capacitacion-card__section {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .capacitaciones-studio .capacitacion-card__notes .notes-form {
+          grid-template-columns: 1fr;
+        }
+        .capacitaciones-studio .capacitacion-card__notes .notes-actions {
+          grid-template-columns: 1fr auto;
+          align-items: center;
+          width: 100%;
+        }
+      }
       .status-actions {
         display: flex;
         flex-wrap: wrap;
@@ -3933,6 +5318,350 @@ function getHomeStyles() {
         background: var(--navy);
         color: #fff;
         border-color: var(--navy);
+      }
+      .status-button:disabled {
+        cursor: default;
+        opacity: 1;
+      }
+      .diploma-choice {
+        align-items: center;
+        width: fit-content;
+        padding: 6px;
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.78);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 10px 22px rgba(26,42,58,0.05);
+      }
+      .diploma-choice__label {
+        padding: 0 8px;
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .diploma-choice .status-button {
+        min-width: 54px;
+        padding: 8px 13px;
+      }
+      .platform-surface {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.82);
+        border-top: 0;
+        background:
+          radial-gradient(circle at 92% 4%, rgba(202,162,74,0.18), transparent 24%),
+          radial-gradient(circle at 8% 10%, rgba(25,49,77,0.10), transparent 25%),
+          linear-gradient(145deg, rgba(255,255,255,0.96), rgba(242,246,250,0.92));
+        backdrop-filter: blur(18px) saturate(1.08);
+        box-shadow: 0 24px 54px rgba(26,42,58,0.11), inset 0 1px 0 rgba(255,255,255,0.9);
+      }
+      .platform-surface::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto;
+        height: 4px;
+        background: linear-gradient(90deg, var(--navy), var(--gold), var(--crimson));
+      }
+      .constancias-workbench {
+        display: grid;
+        grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+        margin-top: 16px;
+        padding: 10px;
+        border: 1px solid rgba(26,42,58,0.08);
+        border-radius: 24px;
+        background: rgba(255,255,255,0.62);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.96), 0 18px 38px rgba(26,42,58,0.07);
+      }
+      .constancias-workbench__controls {
+        position: sticky;
+        top: 18px;
+        display: grid;
+        gap: 10px;
+      }
+      .constancias-workbench__controls .calendar-frame,
+      .constancias-workbench__controls .calendar-detail-card,
+      .constancias-workbench__canvas {
+        margin: 0 !important;
+        border-radius: 16px;
+        box-shadow: none;
+        background: rgba(255,255,255,0.82);
+      }
+      .constancias-workbench__controls .detail-grid { grid-template-columns: 1fr; }
+      .constancias-workbench__canvas { min-width: 0; overflow: hidden; }
+      .constancias-studio iframe {
+        width: 100%;
+        min-height: 780px;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+      }
+      .company-directory-tools {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 18px;
+        padding: 14px;
+        border: 1px solid rgba(26,42,58,0.08);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.72);
+      }
+      .company-directory-search { width: min(560px, 100%); }
+      .company-directory {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .sucursales-studio {
+        content-visibility: visible;
+        contain: none;
+      }
+      .company-card {
+        appearance: none;
+        width: 100%;
+        display: grid;
+        grid-template-columns: 62px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        padding: 15px;
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 20px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(244,248,252,0.90));
+        box-shadow: 0 14px 30px rgba(26,42,58,0.07), inset 0 1px 0 rgba(255,255,255,0.94);
+        color: var(--ink);
+        cursor: pointer;
+        text-align: left;
+        transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+      }
+      .company-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(202,162,74,0.58);
+        box-shadow: 0 20px 38px rgba(26,42,58,0.11), inset 0 1px 0 #fff;
+      }
+      .company-card__media,
+      .company-logo-fallback {
+        width: 62px;
+        height: 62px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 1px solid rgba(26,42,58,0.09);
+        border-radius: 17px;
+        background: rgba(255,255,255,0.92);
+        color: var(--navy);
+        font-weight: 900;
+      }
+      .company-card__media img,
+      .company-profile__logo {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      .company-card__copy {
+        min-width: 0;
+        display: grid;
+        gap: 4px;
+      }
+      .company-card__copy strong,
+      .company-card__copy small,
+      .company-card__copy em {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .company-card__copy strong { font-family: "Montserrat", sans-serif; font-size: 0.95rem; }
+      .company-card__copy small { color: var(--muted); white-space: nowrap; }
+      .company-card__copy em { color: var(--crimson); font-size: 0.74rem; font-style: normal; font-weight: 800; }
+      .company-card__arrow { color: var(--navy); font-size: 1.2rem; font-weight: 900; }
+      .company-profiles { margin-top: 18px; }
+      .company-profile {
+        display: grid;
+        gap: 18px;
+        margin-top: 18px;
+      }
+      .company-profile[hidden] { display: none; }
+      .company-back {
+        width: fit-content;
+        color: var(--navy);
+        font: 850 0.84rem "Montserrat", sans-serif;
+        text-decoration: none;
+      }
+      .company-back:hover { color: var(--crimson); }
+      .company-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(440px, 0.75fr);
+        gap: 18px;
+        padding: clamp(18px, 3vw, 28px);
+        border: 1px solid rgba(255,255,255,0.82);
+        border-radius: 22px;
+        background:
+          radial-gradient(circle at 8% 0%, rgba(214,164,58,0.15), transparent 26%),
+          linear-gradient(135deg, rgba(255,255,255,0.91), rgba(239,245,251,0.70));
+        box-shadow: inset 0 1px 0 #fff, 0 18px 42px rgba(26,42,58,0.09);
+      }
+      .company-hero__identity {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        min-width: 0;
+      }
+      .company-hero__identity h3 {
+        margin: 10px 0 4px;
+        color: var(--navy);
+        font-size: clamp(1.65rem, 3vw, 2.55rem);
+        line-height: 1;
+      }
+      .company-hero__identity p { margin: 0; }
+      .company-hero__metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .company-hero__metrics article {
+        display: grid;
+        align-content: center;
+        gap: 5px;
+        min-height: 96px;
+        padding: 13px;
+        border: 1px solid rgba(26,42,58,0.08);
+        border-radius: 8px;
+        background: rgba(255,255,255,0.68);
+      }
+      .company-hero__metrics strong { color: var(--navy); font-size: 1.8rem; line-height: 1; }
+      .company-hero__metrics span { color: var(--muted); font: 800 0.67rem "Montserrat", sans-serif; text-transform: uppercase; }
+      .company-profile__logo {
+        width: 104px;
+        height: 104px;
+        flex: 0 0 104px;
+        padding: 10px;
+        border: 1px solid rgba(26,42,58,0.10);
+        border-radius: 18px;
+        background: #fff;
+      }
+      .company-data-quality {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 11px 14px;
+        border: 1px solid rgba(26,42,58,0.08);
+        border-radius: 12px;
+        color: var(--muted);
+        background: rgba(255,255,255,0.58);
+        font: 750 0.78rem "Montserrat", sans-serif;
+      }
+      .company-filter-bar {
+        display: grid;
+        grid-template-columns: minmax(250px, 1.6fr) repeat(4, minmax(145px, 1fr)) auto;
+        align-items: end;
+        gap: 10px;
+        padding: 14px;
+        border: 1px solid rgba(26,42,58,0.09);
+        border-radius: 16px;
+        background: rgba(246,249,252,0.78);
+      }
+      .company-filter-bar .calendar-note-field { margin: 0; }
+      .company-filter-bar :is(input, select) { width: 100%; min-height: 44px; padding: 0 12px; }
+      .company-filter-reset { min-height: 44px; white-space: nowrap; }
+      .company-results { margin: -4px 0 0; font-size: 0.82rem; font-weight: 800; }
+      .territory-list { display: grid; gap: 12px; }
+      .territory-card > .accordion-summary { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; }
+      .territory-crest {
+        display: inline-grid;
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid rgba(26,42,58,0.09);
+        border-radius: 12px;
+        color: var(--navy);
+        background: rgba(255,255,255,0.86);
+        font: 900 0.72rem "Montserrat", sans-serif;
+      }
+      .territory-crest--state { width: 48px; height: 48px; }
+      .territory-crest--municipality { width: 40px; height: 40px; }
+      .territory-crest img { width: 100%; height: 100%; padding: 4px; object-fit: contain; }
+      .territory-card__body { padding-top: 3px; }
+      .municipality-card {
+        overflow: hidden;
+        border: 1px solid rgba(26,42,58,0.09);
+        border-radius: 14px;
+        background: rgba(255,255,255,0.65);
+      }
+      .municipality-card__summary {
+        display: grid;
+        grid-template-columns: 46px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 11px;
+        padding: 12px 14px;
+        list-style: none;
+      }
+      .municipality-card__summary::-webkit-details-marker,
+      .branch-card__summary::-webkit-details-marker { display: none; }
+      .municipality-card__summary > span:nth-child(2) { display: grid; gap: 3px; }
+      .municipality-card__summary strong { color: var(--navy); font: 850 0.9rem "Montserrat", sans-serif; }
+      .municipality-card__summary small { color: var(--muted); font: 700 0.75rem "Montserrat", sans-serif; }
+      .municipality-card[open] > .municipality-card__summary .accordion-chevron,
+      .branch-card[open] > .branch-card__summary .accordion-chevron { transform: rotate(45deg); }
+      .municipality-card__body { display: grid; gap: 8px; padding: 0 12px 12px; }
+      .branch-card {
+        overflow: hidden;
+        border: 1px solid rgba(26,42,58,0.08);
+        border-radius: 10px;
+        background: rgba(249,251,253,0.92);
+      }
+      .branch-card__summary {
+        display: grid;
+        grid-template-columns: 66px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        min-height: 64px;
+        padding: 10px 12px;
+        list-style: none;
+      }
+      .branch-card__store {
+        display: inline-grid;
+        min-height: 36px;
+        place-items: center;
+        padding: 4px 8px;
+        border-radius: 8px;
+        color: var(--navy);
+        background: var(--navy-soft);
+        font: 900 0.74rem "Montserrat", sans-serif;
+      }
+      .branch-card__identity { display: grid; min-width: 0; gap: 3px; }
+      .branch-card__identity strong { font: 850 0.9rem "Montserrat", sans-serif; }
+      .branch-card__identity small { overflow: hidden; color: var(--muted); font-size: 0.76rem; text-overflow: ellipsis; white-space: nowrap; }
+      .branch-card__signals { display: flex; align-items: center; gap: 8px; }
+      .territory-pill { padding: 7px 9px; border-radius: 999px; color: var(--navy); background: var(--navy-soft); font: 800 0.68rem "Montserrat", sans-serif; }
+      .branch-card__body { display: grid; gap: 12px; padding: 0 12px 14px 90px; }
+      .branch-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+      .branch-facts div { display: grid; gap: 4px; min-height: 66px; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.85); }
+      .branch-facts dt { color: var(--muted); font: 800 0.65rem "Montserrat", sans-serif; text-transform: uppercase; }
+      .branch-facts dd { margin: 0; color: var(--ink); font: 750 0.78rem "Montserrat", sans-serif; line-height: 1.35; }
+      .branch-card__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+      @media (max-width: 1100px) {
+        .constancias-workbench { grid-template-columns: 1fr; }
+        .constancias-workbench__controls { position: static; }
+        .company-hero { grid-template-columns: 1fr; }
+        .company-filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .company-filter-search { grid-column: span 2; }
+        .branch-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 640px) {
+        .company-directory-tools { align-items: stretch; flex-direction: column; }
+        .company-hero__identity { align-items: flex-start; }
+        .company-profile__logo { width: 72px; height: 72px; flex-basis: 72px; }
+        .company-hero__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .company-filter-bar { grid-template-columns: 1fr; }
+        .company-filter-search { grid-column: auto; }
+        .territory-card > .accordion-summary { grid-template-columns: 46px minmax(0, 1fr) auto; padding: 12px; }
+        .branch-card__summary { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; }
+        .branch-card__signals .territory-pill { display: none; }
+        .branch-card__body { padding-left: 12px; }
+        .branch-facts { grid-template-columns: 1fr; }
       }
       .capacitacion-link {
         display: inline-flex;
@@ -4671,7 +6400,7 @@ function getHomeStyles() {
 
 function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAction, sideContent, bodyContent, footer, headExtra = "", bodyScripts = "", mainClass = "" }) {
   const portalBasePath = getActivePortalBasePath();
-  const loaderLogoPath = "/img/brand-logo.png?v=20260824";
+  const loaderLogoPath = "/img/brand-logo.png?v=20260825b";
   return `<!DOCTYPE html>
   <html lang="es">
   <head>
@@ -4680,10 +6409,11 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
     <title>${escapeHtml(title)}</title>
     <link rel="icon" type="image/png" href="${HOME_FAVICON_PATH}" />
     <link rel="shortcut icon" type="image/png" href="${HOME_FAVICON_PATH}" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
     ${getHomeStyles()}
     ${headExtra}
   </head>
-  <body>
+  <body class="portal-shell portal-dashboard">
     <a class="skip-link" href="#contenido-principal">Saltar al contenido principal</a>
     <div class="page-loader" id="page-loader" aria-hidden="true">
       <div class="page-loader-card" role="status" aria-live="polite" aria-label="Cargando">
@@ -4736,11 +6466,13 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
           loader.classList.add("is-hidden");
           window.setTimeout(() => loader.remove(), 320);
         };
-        if (document.readyState === "complete") {
+        if (document.readyState === "complete" || document.readyState === "interactive") {
           requestAnimationFrame(hide);
-          return;
+        } else {
+          window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(hide), { once: true });
         }
         window.addEventListener("load", hide, { once: true });
+        window.setTimeout(hide, 1800);
       })();
     </script>
     <script>
@@ -4774,7 +6506,7 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
         }
       })();
     </script>
-    <script src="/ui/portal-shell.js?v=20260824" defer></script>
+    <script src="/ui/portal-shell.js?v=20260901c" defer></script>
     ${bodyScripts || ""}
   </body>
   </html>`;
@@ -4795,7 +6527,7 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
     <link rel="shortcut icon" type="image/png" href="${HOME_FAVICON_PATH}" />
     ${getHomeStyles()}
   </head>
-  <body>
+  <body class="portal-auth">
     <a class="skip-link" href="#login-main">Saltar al contenido principal</a>
     <div class="auth-shell">
       <main id="login-main" class="auth-card" role="main" aria-label="Acceso al portal">
@@ -4839,25 +6571,26 @@ function normalizeText(value = "") {
 
 function getPedidoRowClassification(row = {}, thresholds = {}) {
   const amount = Number(row.importeNumber);
-  const estatalMin = Number(thresholds?.estatalMin || 32000);
-  const municipalMin = Number(thresholds?.municipalMin || 9794.98);
+  const estatalMin = Number(thresholds?.estatalMin || 32967.49);
+  const municipalMin = Number(thresholds?.municipalMin || 11000);
   const tipo = row.tipoClasificacion || (Number.isFinite(amount)
     ? (amount >= estatalMin ? "estatal" : amount >= municipalMin ? "municipal" : "sin-clasificar")
     : "sin-clasificar");
   const statusText = normalizeText(row.status || "");
-  const liberado = statusText.includes("LIBERADO") || statusText.includes("LIBERACION") || statusText.includes("LIBERADO PENDIENTE");
-  const facturaLey = statusText.includes("LEY");
-  const pago = statusText.includes("PAGO");
+  const business = row.business || {};
+  const fallbackLiberado = statusText.includes("LIBERADO") || statusText.includes("LIBERACION") || statusText.includes("LIBERADO PENDIENTE");
+  const fallbackFacturaLey = statusText.includes("LEY");
+  const fallbackPago = statusText.includes("PAGO");
   return {
     tipo,
-    liberado,
-    facturaLey,
-    pago,
-    noLiberado: statusText.includes("SIN LIBERACION")
+    liberado: business.hasLiberacion ?? fallbackLiberado,
+    facturaLey: business.hasFacturaLey ?? fallbackFacturaLey,
+    pago: business.pagado ?? fallbackPago,
+    noLiberado: business.hasLiberacion === false || statusText.includes("SIN LIBERACION")
       || statusText.includes("NO LIBERADO")
       || (statusText.includes("PENDIENTE") && !statusText.includes("PAGO")),
-    liberadoPendLey: statusText.includes("LIBERADO") && !facturaLey,
-    pendientePago: statusText.includes("PENDIENTE") && statusText.includes("PAGO"),
+    liberadoPendLey: business.liberadoPendienteFactura ?? (fallbackLiberado && !fallbackFacturaLey),
+    pendientePago: business.noPagado ?? (statusText.includes("PENDIENTE") && statusText.includes("PAGO")),
     estatal: tipo === "estatal",
     municipal: tipo === "municipal",
   };
@@ -4878,7 +6611,8 @@ function renderPedidosAdminDashboardPanel({ data = {}, year = new Date().getFull
         <div class="page-loader-spinner" aria-hidden="true" style="width:40px;height:40px;border-width:3px;"></div>
         <span>Cargando pedidos</span>
       </div>
-      <div data-pedidos-root style="display:none;">${data?.rows?.length ? renderPedidosDashboardFragment({ user: null, data, year, embedded: true }) : ""}</div>
+      <div data-pedidos-root style="display:none;">${renderPedidosDashboardFragment({ user: null, data, year, embedded: true })}</div>
+    </div>
   `;
 }
 
@@ -4904,11 +6638,22 @@ function renderPedidoDashboardMetric(label, value, detail, tone = "blue") {
 
 function getPedidoDashboardStatusBucket(row = {}, flags = null, hasOrder = true) {
   if (!hasOrder) return "sin-pedido";
+  const business = row.business || {};
+  if (business.sinLiberacionEnviado) return "sin-liberacion-enviados";
+  if (business.sinLiberacionListo) return "sin-liberacion-no-enviados";
+  if (business.sinLiberacionSinTrabajo) return "sin-liberacion-sin-trabajo";
+  if (business.pagado) return "pagados";
+  if (business.noPagado) return "pendientes-pago";
+  if (business.liberadoPendienteFactura) return "liberados";
   const statusText = normalizeText(row.status || "");
+  const sent = Boolean(row.enviadoBool) || ["SI", "S", "Y", "YES", "TRUE", "1", "ENVIADO"].includes(normalizeText(row.enviado || ""));
   const paid = Boolean(flags?.pago || row.pagoBool || statusText.includes("PAGADO"));
   const pendingPayment = Boolean(flags?.pendientePago || row.pendientePago || (statusText.includes("PENDIENTE") && statusText.includes("PAGO")));
   const liberated = Boolean(flags?.liberado || row.liberacionBool || statusText.includes("LIBERADO"));
   const noLiberado = Boolean(flags?.noLiberado || row.noLiberado || statusText.includes("SIN LIBERACION") || statusText.includes("NO LIBERADO"));
+  if (noLiberado) {
+    return sent ? "sin-liberacion-enviados" : "sin-liberacion-no-enviados";
+  }
   if (pendingPayment) {
     return "pendientes-pago";
   }
@@ -4918,11 +6663,8 @@ function getPedidoDashboardStatusBucket(row = {}, flags = null, hasOrder = true)
   if (liberated) {
     return "liberados";
   }
-  if (noLiberado) {
-    return "sin-liberacion";
-  }
   if (statusText.includes("SIN LIBERACION") || statusText.includes("NO LIBERADO")) {
-    return "sin-liberacion";
+    return sent ? "sin-liberacion-enviados" : "sin-liberacion-no-enviados";
   }
   if (statusText.includes("LIBERADO") && !statusText.includes("LEY")) {
     return "liberados";
@@ -4937,28 +6679,43 @@ function getPedidoDashboardTypeBucket(row = {}) {
 }
 
 function getPedidoCoverageBranchKey(row = {}) {
-  return normalizeText(row.key || row.id || row.tienda || row.displayLabel || row.label || row.label2 || "");
+  return normalizeText(row.key || row.id || row.row_id || row.rowId || row.tienda || row.displayLabel || row.label || row.label2 || "");
 }
 
 function getPedidoCoverageBranchLabel(row = {}) {
   return String(row.displayLabel || row.label || row.label2 || row.tienda || row.key || row.id || "").trim();
 }
 
-function getPedidoCoverageBranchKinds(row = {}) {
+function getPedidoCoverageBranchKinds(row = {}, fallbackKinds = []) {
   const work = normalizeText(row.trabajos || "");
   const kinds = [];
   if (work.includes("ESTATAL")) kinds.push("estatal");
   if (work.includes("MUNICIPAL")) kinds.push("municipal");
-  return kinds;
+  const unique = [];
+  for (const kind of kinds) {
+    if (!unique.includes(kind)) unique.push(kind);
+  }
+  if (unique.length) return unique;
+  return Array.isArray(fallbackKinds) ? fallbackKinds.filter(Boolean) : [];
 }
 
 function isPedidoCoverageBranchAllowed(row = {}) {
-  return normalizeText(row.empresaId || row.empresa || "") === "1"
-    && normalizeText(row.status || "").includes("ACTIVA");
+  const company = normalizeText(row.empresaId || row.empresa || row.raw?.empresa_id || "");
+  const status = normalizeText(row.status || row.planeacionStatus || row.raw?.planeacion_status || row.raw?.status || "");
+  const blocked = ["INACTIVA", "INACTIVO", "BAJA", "CANCELADA", "CANCELADO"].some((word) => status.includes(word));
+  return company === "1" && !blocked;
+}
+
+function getPedidoCoverageFacturadorKinds(facturadorId = "") {
+  const normalized = String(facturadorId || "").trim();
+  if (normalized === "xwDqa6Mt6a42iqKHzJG9L6") return ["estatal"];
+  if (normalized === "EiHiUQ9YHf4mA-C7L_ziyc") return ["municipal"];
+  return [];
 }
 
 function buildPedidosCoverageModel(rows = [], branches = [], facturadorId = "") {
   const normalizedFacturadorId = normalizeText(facturadorId || "");
+  const facturadorKinds = getPedidoCoverageFacturadorKinds(facturadorId);
   const ordersByBranchKey = new Map();
   const orderRows = Array.isArray(rows) ? rows : [];
 
@@ -4970,6 +6727,8 @@ function buildPedidosCoverageModel(rows = [], branches = [], facturadorId = "") 
       row.tiendaLabel,
       row.tienda?.label,
       row.tienda?.displayLabel,
+      row.tienda?.id,
+      row.tienda?.row_id,
     ].map((item) => normalizeText(item)).filter(Boolean);
     const deduped = [];
     for (const key of rowKeys) {
@@ -4992,6 +6751,8 @@ function buildPedidosCoverageModel(rows = [], branches = [], facturadorId = "") 
     const candidateKeys = [
       branch.key,
       branch.id,
+      branch.row_id,
+      branch.rowId,
       branch.tienda,
       branch.displayLabel,
       branch.label,
@@ -5016,11 +6777,17 @@ function buildPedidosCoverageModel(rows = [], branches = [], facturadorId = "") 
 
   for (const branch of Array.isArray(branches) ? branches : []) {
     if (!isPedidoCoverageBranchAllowed(branch)) continue;
-    const kinds = getPedidoCoverageBranchKinds(branch);
+    const branchOrders = getBranchOrders(branch);
+    const inferredKinds = [];
+    for (const order of branchOrders) {
+      const kind = getPedidoDashboardTypeBucket(order);
+      if (kind !== "otros" && !inferredKinds.includes(kind)) inferredKinds.push(kind);
+    }
+    const fallbackKinds = inferredKinds;
+    const kinds = getPedidoCoverageBranchKinds(branch, fallbackKinds)
+      .filter((kind) => !facturadorKinds.length || facturadorKinds.includes(kind));
     for (const kind of kinds) {
-      const isCuliacanMunicipal = kind === "municipal" && normalizeText(branch.municipioNombre || branch.municipioLabel || branch.municipio?.displayLabel || "").includes("CULIACAN");
-      if (isCuliacanMunicipal) continue;
-      const orders = getBranchOrders(branch).filter((row) => row._flags?.[kind]);
+      const orders = branchOrders.filter((row) => row._flags?.[kind]);
       const order = orders[0] || null;
       const entry = {
         branch,
@@ -5030,7 +6797,7 @@ function buildPedidosCoverageModel(rows = [], branches = [], facturadorId = "") 
       branchesByKind[kind].push(entry);
     }
     if (!kinds.length) {
-      const orders = getBranchOrders(branch).filter((row) => getPedidoDashboardTypeBucket(row) === "otros");
+      const orders = branchOrders.filter((row) => getPedidoDashboardTypeBucket(row) === "otros");
       const order = orders[0] || null;
       branchesByKind.otros.push({
         branch,
@@ -5127,6 +6894,8 @@ function renderPedidosCoverageSection({ rows = [], catalogs = {}, facturadorId =
   const estatales = entries.filter((item) => item.kind === "estatal");
   const municipales = entries.filter((item) => item.kind === "municipal");
   const otros = entries.filter((item) => item.kind === "otros");
+  const conPedido = entries.filter((item) => item.order).length;
+  const sinPedido = entries.filter((item) => !item.order).length;
 
   return `
     <section class="pedidos-coverage" data-pedidos-view="sucursales">
@@ -5145,6 +6914,8 @@ function renderPedidosCoverageSection({ rows = [], catalogs = {}, facturadorId =
           <span class="pill strong">Estatales: ${escapeHtml(String(estatales.length))}</span>
           <span class="pill strong">Municipales: ${escapeHtml(String(municipales.length))}</span>
           <span class="pill strong">Otros: ${escapeHtml(String(otros.length))}</span>
+          <span class="pill strong">Con pedido: ${escapeHtml(String(conPedido))}</span>
+          <span class="pill strong">Sin pedido: ${escapeHtml(String(sinPedido))}</span>
         </div>
       </div>
       <div class="pedidos-coverage-section">
@@ -5154,7 +6925,18 @@ function renderPedidosCoverageSection({ rows = [], catalogs = {}, facturadorId =
   `;
 }
 
-function buildPedidosDashboardToolbar({ requestedYear, thresholds, facturadorId, facturadorLabel, selectedScope, selectedStatus, selectedType, searchText }) {
+function buildPedidosDashboardToolbar({ requestedYear, thresholds, facturadorId, facturadorLabel, facturadores = [], selectedScope, selectedStatus, selectedType, searchText }) {
+  const selectedFacturadorId = String(facturadorId || "").trim();
+  const facturadorOptions = Array.isArray(facturadores) ? facturadores : [];
+  const selectedExists = !selectedFacturadorId || facturadorOptions.some((option) => String(option?.value || option?.id || "").trim() === selectedFacturadorId);
+  const facturadorOptionMarkup = [
+    `<option value="">Todos los proveedores</option>`,
+    ...(!selectedExists
+      ? [`<option value="${escapeAttr(selectedFacturadorId)}" selected>${escapeHtml(facturadorLabel || selectedFacturadorId)}</option>`]
+      : []),
+    ...facturadorOptionMarkupFromOptions(facturadorOptions, selectedFacturadorId),
+  ].join("");
+
   return `
     <div class="pedidos-toolbar">
       <div class="pedidos-filter-group">
@@ -5177,7 +6959,9 @@ function buildPedidosDashboardToolbar({ requestedYear, thresholds, facturadorId,
         <div class="pedidos-toolbar-label">Estatus</div>
         <div class="pedidos-tabs" data-pedidos-status-tabs>
           <button type="button" class="pedidos-tab-btn${selectedStatus === "all" ? " is-active" : ""}" data-pedidos-status="all">Todos</button>
-          <button type="button" class="pedidos-tab-btn${selectedStatus === "sin-liberacion" ? " is-active" : ""}" data-pedidos-status="sin-liberacion">Sin liberación</button>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "sin-liberacion" ? " is-active" : ""}" data-pedidos-status="sin-liberacion">Sin liberación sin trabajo</button>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "sin-liberacion-no-enviados" ? " is-active" : ""}" data-pedidos-status="sin-liberacion-no-enviados">Sin liberacion no enviados</button>
+          <button type="button" class="pedidos-tab-btn${selectedStatus === "sin-liberacion-enviados" ? " is-active" : ""}" data-pedidos-status="sin-liberacion-enviados">Sin liberacion enviados</button>
           <button type="button" class="pedidos-tab-btn${selectedStatus === "liberados" ? " is-active" : ""}" data-pedidos-status="liberados">Liberados</button>
           <button type="button" class="pedidos-tab-btn${selectedStatus === "pagados" ? " is-active" : ""}" data-pedidos-status="pagados">Pagados</button>
           <button type="button" class="pedidos-tab-btn${selectedStatus === "pendientes-pago" ? " is-active" : ""}" data-pedidos-status="pendientes-pago">Pendientes de pago</button>
@@ -5193,7 +6977,9 @@ function buildPedidosDashboardToolbar({ requestedYear, thresholds, facturadorId,
           </div>
           <div class="pedidos-field">
             <label>Facturador</label>
-            <input data-pedidos-facturador type="text" value="${escapeAttr(String(facturadorId || ""))}" placeholder="ID del facturador">
+            <select data-pedidos-facturador>
+              ${facturadorOptionMarkup}
+            </select>
           </div>
           <div class="pedidos-field">
             <label>Precio estatal</label>
@@ -5223,6 +7009,70 @@ function buildPedidosDashboardToolbar({ requestedYear, thresholds, facturadorId,
   `;
 }
 
+function pedidoStatusMatchesFilter(bucket = "", selectedStatus = "all") {
+  const status = String(selectedStatus || "all").trim();
+  if (status === "all") return true;
+  if (status === "sin-liberacion") {
+    return bucket === "sin-liberacion-sin-trabajo";
+  }
+  return bucket === status;
+}
+
+function pedidoRowStatusMatches(row = {}, selectedStatus = "all") {
+  const status = String(selectedStatus || "all").trim();
+  const business = row.business || {};
+  if (status === "all") return true;
+  if (status === "sin-liberacion") {
+    return Boolean(business.sinLiberacionSinTrabajo) || pedidoStatusMatchesFilter(row._statusBucket, status);
+  }
+  const businessFlagByStatus = {
+    "sin-liberacion-no-enviados": "sinLiberacionListo",
+    "sin-liberacion-enviados": "sinLiberacionEnviado",
+    "sin-liberacion-sin-trabajo": "sinLiberacionSinTrabajo",
+    liberados: "liberadoPendienteFactura",
+    pagados: "pagado",
+    "pendientes-pago": "noPagado",
+  };
+  const businessFlag = businessFlagByStatus[status];
+  return Boolean((businessFlag && business[businessFlag]) || row._statusBucket === status);
+}
+
+function extractPedidoYear(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const directYear = text.match(/\b(20\d{2})\b/);
+  if (directYear?.[1]) return Number(directYear[1]);
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) return parsed.getFullYear();
+  return null;
+}
+
+function getPedidoTrabajosDelYear(row = {}, year = new Date().getFullYear()) {
+  const targetYear = Number(year);
+  const trabajos = [];
+  if (Number.isFinite(targetYear) && extractPedidoYear(row.ultimoPipcEstatal || row.tienda?.ultimoPipcEstatal) === targetYear) {
+    trabajos.push("Estatal");
+  }
+  if (Number.isFinite(targetYear) && extractPedidoYear(row.ultimoPipcMunicipal || row.tienda?.ultimoPipcMunicipal) === targetYear) {
+    trabajos.push("Municipal");
+  }
+  return trabajos.length ? trabajos.join(" + ") : "Sin trabajo del año";
+}
+
+function facturadorOptionMarkupFromOptions(options = [], selectedFacturadorId = "") {
+  return options
+    .map((option) => {
+      const value = String(option?.value || option?.id || "").trim();
+      const label = String(option?.label || option?.nombre || value).trim();
+      if (!value || !label) return "";
+      const count = Number(option?.count || 0);
+      const countLabel = count > 0 ? ` (${count})` : "";
+      return `<option value="${escapeAttr(value)}"${value === selectedFacturadorId ? " selected" : ""}>${escapeHtml(label + countLabel)}</option>`;
+    })
+    .filter(Boolean)
+    .join("");
+}
+
 export function renderPedidosDashboardFragment({ user = null, data = {}, year = new Date().getFullYear(), embedded = false } = {}) {
   const rows = Array.isArray(data.rows) ? data.rows : [];
   const requestedYear = Number(data.requestedYear || data.year || year || new Date().getFullYear());
@@ -5233,8 +7083,8 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
   const searchText = String(data.search || "").trim();
   const state = {
     year: requestedYear,
-    estatalMin: Number(thresholds.estatalMin || 32000),
-    municipalMin: Number(thresholds.municipalMin || 9794.98),
+    estatalMin: Number(thresholds.estatalMin || 32967.49),
+    municipalMin: Number(thresholds.municipalMin || 11000),
     facturadorId: String(data.facturadorId || "").trim(),
     facturadorLabel: String(data.facturadorLabel || "").trim(),
   };
@@ -5263,7 +7113,7 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
     return { ...row, _flags: flags, _statusBucket, _typeBucket, _searchText };
   });
   const filteredRows = classifiedRows.filter((row) => {
-    if (selectedStatus !== "all" && row._statusBucket !== selectedStatus) return false;
+    if (!pedidoRowStatusMatches(row, selectedStatus)) return false;
     if (selectedType !== "all" && row._typeBucket !== selectedType) return false;
     if (searchText && !row._searchText.includes(normalizeText(searchText))) return false;
     return true;
@@ -5271,7 +7121,9 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
   const coverageRows = buildPedidosCoverageModel(classifiedRows, data.catalogs?.sucursalesLookup?.rows || [], state.facturadorId);
   const counts = {
     total: filteredRows.length,
-    sinLiberacion: filteredRows.filter((row) => row._statusBucket === "sin-liberacion").length,
+    sinLiberacion: filteredRows.filter((row) => pedidoStatusMatchesFilter(row._statusBucket, "sin-liberacion")).length,
+    sinLiberacionNoEnviados: filteredRows.filter((row) => row._statusBucket === "sin-liberacion-no-enviados").length,
+    sinLiberacionEnviados: filteredRows.filter((row) => row._statusBucket === "sin-liberacion-enviados").length,
     liberados: filteredRows.filter((row) => row._statusBucket === "liberados").length,
     pagados: filteredRows.filter((row) => row._statusBucket === "pagados").length,
     pendientesPago: filteredRows.filter((row) => row._statusBucket === "pendientes-pago").length,
@@ -5302,8 +7154,9 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
       ];
   const makeOrderRowMarkup = (row) => {
     const municipio = row.tienda?.municipioNombre || row.tienda?.municipioLabel || row.municipio?.nombre || row.municipio?.displayLabel || "";
-    const estado = row.tienda?.estadoNombre || row.tienda?.estadoLabel || row.estado?.nombre || row.estado?.displayLabel || "";
     const tipo = row.clasificacionLabel || (row._flags.estatal ? "Estatal" : row._flags.municipal ? "Municipal" : "Otros");
+    const trabajosYear = getPedidoTrabajosDelYear(row, requestedYear);
+    const trabajosTone = trabajosYear === "Sin trabajo del año" ? "warn" : "ok";
     const tone = row.clasificacionLabel && normalizeText(row.clasificacionLabel).includes("CULIACAN")
       ? "warn"
       : row._flags.estatal
@@ -5319,42 +7172,66 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
       row.tiendaKey,
       row.establecimiento,
       municipio,
-      estado,
       row.clasificacionLabel,
       row.clasificacionDetalle,
     ].map((item) => normalizeText(item)).join(" ");
+    const pedido = String(row.pedido || "").trim();
+    const rowKey = pedido || String(row.rowId || row.uuid || "").trim();
+    const isSinLiberacion = row.business?.hasLiberacion === false;
+    const canSend = Boolean(pedido) && Boolean(row.business?.sinLiberacionListo || row.business?.sinLiberacionEnviado);
+    const sendLabel = row._statusBucket === "sin-liberacion-enviados" ? "Reenviar" : "Enviar";
+    const sentChip = isSinLiberacion
+      ? row._statusBucket === "sin-liberacion-enviados"
+        ? '<span class="chip ok">Enviado</span>'
+        : '<span class="chip warn">No enviado</span>'
+      : "";
+    const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(Number(row.importeNumber || 0));
     return `
       <tr
         class="pedidos-row"
         data-pedidos-row
+        data-pedido="${escapeAttr(pedido)}"
+        data-facturador-nombre="${escapeAttr(row.facturadorNombre || "")}"
         data-status="${escapeAttr(row._statusBucket)}"
         data-type="${escapeAttr(row._typeBucket)}"
         data-search="${escapeAttr(search)}"
       >
         <td>
-          <div class="stack">
-            <strong>${escapeHtml(row.pedido || "")}</strong>
-            <span class="muted">${escapeHtml(row.descripcion || "")}</span>
-          </div>
+          <strong>${escapeHtml(pedido)}</strong>
         </td>
+        <td><span class="chip ${tone}">${escapeHtml(tipo)}</span></td>
         <td>
-          <div class="stack">
-            <strong>${escapeHtml(row.tiendaLabel || row.establecimiento || "")}</strong>
-            <span class="muted">${escapeHtml(row.tiendaKey || row.establecimiento || "")}</span>
-          </div>
+          <strong>${escapeHtml(row.tiendaLabel || row.establecimiento || "")}</strong>
         </td>
         <td><strong>${escapeHtml(municipio)}</strong></td>
-        <td><strong>${escapeHtml(estado)}</strong></td>
-        <td>${escapeHtml(formatDate(row.fecha || row["fecha(DATE)"] || ""))}</td>
-        <td><strong>${escapeHtml(new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(Number(row.importeNumber || 0)))}</strong></td>
-        <td><span class="chip ${tone}">${escapeHtml(tipo)}</span></td>
-        <td><span class="chip ${tone}">${escapeHtml(row.status || "Sin status")}</span></td>
+        <td><strong>${escapeHtml(money)}</strong></td>
+        <td><span class="chip ${trabajosTone}">${escapeHtml(trabajosYear)}</span></td>
+        <td>
+          <div class="pedidos-row-actions">
+            ${canSend
+              ? `${sentChip}
+                 <button type="button" class="button secondary button--compact" data-pedidos-toggle-files="${escapeAttr(rowKey)}">Ver archivos</button>
+                 <button type="button" class="button primary button--compact" data-pedidos-send="${escapeAttr(rowKey)}">${escapeHtml(sendLabel)}</button>`
+              : `${sentChip || `<span class="chip ${tone}">${escapeHtml(row.status || "Sin status")}</span>`}`}
+          </div>
+        </td>
+      </tr>
+      <tr class="pedidos-detail-row" data-pedidos-detail-row data-pedido-detail="${escapeAttr(rowKey)}" hidden>
+        <td colspan="7">
+          <div class="pedidos-files-panel" data-pedidos-files-panel="${escapeAttr(rowKey)}">
+            <div class="pedidos-files-head">
+              <strong>Archivos del pedido ${escapeHtml(pedido)}</strong>
+              <span class="muted" data-pedidos-files-state="${escapeAttr(rowKey)}">Selecciona "Ver archivos" para cargar Drive solo para este pedido.</span>
+            </div>
+            <div class="pedidos-files-list" data-pedidos-files-list="${escapeAttr(rowKey)}"></div>
+          </div>
+        </td>
       </tr>
     `;
   };
   const rowMarkup = filteredRows.length
     ? filteredRows.map((row) => makeOrderRowMarkup(row)).join("")
-    : `<tr><td colspan="8" class="empty">No hay pedidos para estos filtros.</td></tr>`;
+    : `<tr><td colspan="7" class="empty">No hay pedidos para estos filtros.</td></tr>`;
   const branchesMarkup = renderPedidosCoverageSection({
     rows: classifiedRows,
     catalogs: data.catalogs || {},
@@ -5378,6 +7255,7 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
           thresholds,
           facturadorId: state.facturadorId,
           facturadorLabel: state.facturadorLabel,
+          facturadores: data.catalogs?.facturadores || [],
           selectedScope,
           selectedStatus,
           selectedType,
@@ -5407,7 +7285,9 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
                 ].join("")
               : [
                   ...typeSummaryChips,
-                  `<span class="pill strong">Sin liberación: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "sin-liberacion").length))}</span>`,
+                  `<span class="pill strong">Sin liberacion no enviados: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "sin-liberacion-no-enviados").length))}</span>`,
+                  `<span class="pill strong">Sin liberacion enviados: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "sin-liberacion-enviados").length))}</span>`,
+                  `<span class="pill strong">Sin trabajo: ${escapeHtml(String(typeRows.filter((row) => pedidoStatusMatchesFilter(row._statusBucket, "sin-liberacion")).length))}</span>`,
                   `<span class="pill strong">Liberados: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "liberados").length))}</span>`,
                   `<span class="pill strong">Pagados: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "pagados").length))}</span>`,
                   `<span class="pill strong">Pend. pago: ${escapeHtml(String(typeRows.filter((row) => row._statusBucket === "pendientes-pago").length))}</span>`,
@@ -5421,18 +7301,33 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
               <p>Listado operativo de pedidos cargados para el año filtrado.</p>
             </div>
           </div>
+          <div class="pedidos-sendbar" data-pedidos-sendbar>
+            <div class="pedidos-field">
+              <label>Remitente</label>
+              <select data-pedidos-sender>
+                <option value="">Cargando remitentes...</option>
+              </select>
+            </div>
+            <div class="pedidos-field">
+              <label>Correo destino</label>
+              <textarea data-pedidos-to rows="2" placeholder="correo@dominio.com"></textarea>
+            </div>
+            <div class="pedidos-actions">
+              <button type="button" class="button secondary" data-pedidos-config-refresh>Actualizar remitente</button>
+            </div>
+            <div class="pedidos-status-line" data-pedidos-send-status>Listo para cargar archivos bajo demanda.</div>
+          </div>
           <div class="pedidos-table-shell table-shell">
-            <table>
+            <table class="pedidos-table--send">
               <thead>
                 <tr>
                   <th>Pedido</th>
+                  <th>Tipo</th>
                   <th>Sucursal</th>
                   <th>Municipio</th>
-                  <th>Estado</th>
-                  <th>Fecha</th>
                   <th>Importe</th>
-                  <th>Tipo</th>
-                  <th>Status</th>
+                  <th>Trabajos</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>${rowMarkup}</tbody>
@@ -5453,14 +7348,18 @@ export function renderPedidosDashboardFragment({ user = null, data = {}, year = 
   `;
 }
 
-async function renderDashboardPage({
+export async function renderDashboardPage({
   user,
   employees,
   pedidosData = null,
   dashboardData = null,
+  sucursales = [],
+  empresas = [],
   selectedEmployee = user,
   returnPath = "/dashboard",
   selectedCapacitacionId = "",
+  selectedEmpresaId = "",
+  initialTabId = "",
   calendarView = "week",
   calendarPath = "/dashboard",
   calendarQuery = {},
@@ -5471,15 +7370,19 @@ async function renderDashboardPage({
   const groupedRouteCards = role === "admin" ? groupAdminRouteCards(routeCards) : null;
   const title = "Portal";
   const logoPath = BRAND_LOGO_PATH;
-  const viewingOtherDashboard = user?.role === "admin" && user?.rowId !== selected.rowId;
+  const viewingOtherDashboard = canUseGlobalScope(user, "calendario") && user?.rowId !== selected.rowId;
   const capacitadorView = role === "capacitador";
   const resolvedDashboardData = dashboardData || await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: selected });
+  const resolvedEmpresas = empresas.length ? empresas : await listEmpresasForPortal();
   const { visible, programadas, finalizadasSinDiplomas, birthdayEvents, calendarCapacitaciones, calendarNotes } = resolvedDashboardData;
   const selectedCapacitacion = String(selectedCapacitacionId || "").trim()
     ? visible.find((item) => item.rowId === String(selectedCapacitacionId || "").trim())
     : null;
-  const showRoutes = user?.role === "admin";
-  const showStatusControls = Boolean(user?.role === "admin" || user?.rowId === selected.rowId);
+  const showRoutes = Boolean(getUserAccessProfile(user)?.views && Object.keys(getUserAccessProfile(user).views).length > 0);
+  const showStatusControls = Boolean(
+    hasPortalCapability(user, "capacitaciones", "edit")
+      && canAccessEmployeeScope(user, selected, "capacitaciones"),
+  );
   const selectedEmployeeId = selected.rowId;
   const selectedEmployeeRole = selected.role;
   const detailReturnPath = returnPath || "/dashboard";
@@ -5491,7 +7394,20 @@ async function renderDashboardPage({
       returnPath: dashboardReturnHref,
     });
   const sessionUser = user || selected;
-  const dashboardHeaderTitle = "Calendario";
+  const dashboardHeaderTitle = selectedEmpresaId
+    ? "Empresas y sucursales"
+    : ({
+        capacitaciones: "Capacitaciones",
+        constancias: "Constancias",
+        sucursales: "Empresas y sucursales",
+        notas: "Notas",
+        gestion: "Gestion",
+        pedidos: "Pedidos",
+        "reporte-ley": "Reporte Casa Ley",
+        faltantes: "Faltantes",
+        diplomas: "Diplomas faltantes",
+        ley: "Faltantes Ley",
+      }[String(initialTabId || "").trim()] || "Calendario");
   const getDashboardTabIcon = (tabId) => ({
     calendar: "📅",
     gestion: "⚙️",
@@ -5589,6 +7505,38 @@ async function renderDashboardPage({
     detailReturnPath,
     emptyMessage: "No hay capacitaciones finalizadas sin diploma.",
   });
+  const capacitacionesPanel = renderCapacitacionesPlatformPanelV2({
+    capacitaciones: visible,
+    employees,
+    showStatusControls,
+    selectedEmployeeId,
+    detailReturnPath,
+  });
+  const constanciasPanel = renderConstanciasWorkspacePanelV2({
+    capacitaciones: visible,
+    faltantes: finalizadasSinDiplomas,
+    selectedCapacitacion,
+    selectedEmployee: selected,
+    user,
+    employees,
+    showStatusControls,
+    actionPath: selected.rowId && selected.rowId !== user?.rowId
+      ? `/dashboard/capacitador/${encodeURIComponent(selected.rowId)}`
+      : "/dashboard",
+  });
+  const sucursalesPanel = renderSucursalesInfoPanelV2({
+    sucursales,
+    empresas: resolvedEmpresas,
+    selectedEmpresaId,
+  });
+  const notasPanel = renderNotasThreadPanel({
+    calendarNotes,
+    capacitaciones: visible,
+    employees,
+    user,
+    canEditNotes: showStatusControls,
+    canEditAllNotes: canMutateGlobalScope(user, "notas"),
+  });
   const faltantesLeyUrl = role === "capacitador"
     ? `/dashboard/faltantes-ley-panel?employee=${encodeURIComponent(selected.rowId)}`
     : "";
@@ -5601,7 +7549,7 @@ async function renderDashboardPage({
       })
     : "";
 
-  const peoplePanel = user?.role === "admin"
+  const peoplePanel = canUseGlobalScope(user, "capacitaciones")
     ? `
       <div class="panel">
         <h2>Capacitadores</h2>
@@ -5611,7 +7559,7 @@ async function renderDashboardPage({
       </div>
     `
     : "";
-  const adminFaltantesPanel = user?.role === "admin"
+  const adminFaltantesPanel = hasPortalCapability(user, "faltantes-ley", "view")
     ? `
       <div class="panel">
         <div class="section-head">
@@ -5626,7 +7574,7 @@ async function renderDashboardPage({
       </div>
     `
     : "";
-  const managementPanel = user?.role === "admin"
+  const managementPanel = canUseGlobalScope(user, "capacitaciones")
     ? `
       <div class="dashboard-tab-panel-content dashboard-tab-panel--management">
         ${peoplePanel}
@@ -5634,23 +7582,56 @@ async function renderDashboardPage({
       </div>
     `
     : "";
-  const pedidosPanel = user?.role === "admin"
+  const pedidosPanel = hasPortalCapability(user, "pedidos", "view")
     ? renderPedidosAdminDashboardPanel({
         data: pedidosData || {},
         year: pedidosData?.requestedYear || pedidosData?.year || new Date().getFullYear(),
         embedded: true,
       })
     : "";
+  const casaLeyReportPanel = hasPortalCapability(user, "reportes", "view")
+    ? renderCasaLeyStoresReport({ sucursales })
+    : "";
   const dashboardTabs = [
     {
       id: "calendar",
+      view: "calendario",
       label: "Calendario",
       count: calendarEventCount,
       content: calendarPanel,
     },
+    {
+      id: "capacitaciones",
+      view: "capacitaciones",
+      label: "Capacitaciones",
+      count: visible.length,
+      content: capacitacionesPanel,
+    },
+    {
+      id: "constancias",
+      view: "crear-constancias-por-capacitacion",
+      label: "Constancias",
+      count: finalizadasSinDiplomas.length,
+      content: constanciasPanel,
+    },
+    {
+      id: "sucursales",
+      view: "informacion-sucursales",
+      label: "Sucursales",
+      count: Array.isArray(sucursales) ? sucursales.length : 0,
+      content: sucursalesPanel,
+    },
+    {
+      id: "notas",
+      view: "notas",
+      label: "Notas",
+      count: calendarNotes.length,
+      content: notasPanel,
+    },
     ...(managementPanel
       ? [{
           id: "gestion",
+          view: "gestion",
           label: "Gestión",
           content: managementPanel,
         }]
@@ -5658,19 +7639,30 @@ async function renderDashboardPage({
     ...(pedidosPanel
       ? [{
           id: "pedidos",
+          view: "pedidos",
           label: "Pedidos",
           content: pedidosPanel,
+        }]
+      : []),
+    ...(casaLeyReportPanel
+      ? [{
+          id: "reporte-ley",
+          view: "reportes",
+          label: "Reporte Casa Ley",
+          content: casaLeyReportPanel,
         }]
       : []),
     ...(adminFaltantesPanel
       ? [{
           id: "faltantes",
+          view: "faltantes-ley",
           label: "Faltantes",
           content: adminFaltantesPanel,
         }]
       : []),
     {
       id: "diplomas",
+      view: "constancias-faltantes",
       label: "Diplomas faltantes",
       count: finalizadasSinDiplomas.length,
       content: finalizadasPanel,
@@ -5678,12 +7670,22 @@ async function renderDashboardPage({
     ...(role === "capacitador" && faltantesLeyPanel
       ? [{
           id: "ley",
+          view: "faltantes-ley",
           label: "Faltantes Ley",
           content: faltantesLeyPanel,
         }]
       : []),
-  ].filter((tab) => Boolean(tab.content));
-  const activeTabId = dashboardTabs[0]?.id || "calendar";
+  ].filter((tab) => Boolean(tab.content) && hasPortalCapability(user, tab.view, "view"));
+  const requestedTabId = String(initialTabId || "").trim();
+  const activeTabId = dashboardTabs.some((tab) => tab.id === requestedTabId)
+    ? requestedTabId
+    : (dashboardTabs[0]?.id || "calendar");
+  const dashboardTabBasePath = viewingOtherDashboard
+    ? portalPath(`/dashboard/capacitador/${encodeURIComponent(selected.rowId)}`)
+    : portalPath("/dashboard");
+  const sucursalesTabPath = selectedEmpresaId
+    ? portalPath(`/dashboard/empresas/${encodeURIComponent(selectedEmpresaId)}`)
+    : dashboardTabBasePath;
   const dashboardPrimaryLinks = showRoutes
     ? Array.from(new Map((groupedRouteCards?.primary || routeCards.slice(0, 5))
         .slice(0, 6)
@@ -5719,7 +7721,7 @@ async function renderDashboardPage({
         </section>
         ${showRoutes ? `
         <section class="dashboard-nav-group">
-          <h2>Accesos</h2>
+          <h2>Herramientas legacy</h2>
           <div class="dashboard-nav-group__links">
             ${dashboardPrimaryLinks.map((card) => `
               <a class="dashboard-nav-link dashboard-nav-link--compact" href="${escapeAttr(card.href)}">
@@ -5784,14 +7786,18 @@ async function renderDashboardPage({
   `).join("");
   const calendarBootstrap = user
     ? `
-      <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js" defer></script>
       <script>
         document.addEventListener("DOMContentLoaded", function () {
           const dataEl = document.getElementById("dashboard-calendar-data");
           const mount = document.getElementById("dashboard-calendar");
           const detailMount = document.getElementById("dashboard-calendar-detail");
-          if (!dataEl || !mount || typeof FullCalendar === "undefined") return;
+          if (!dataEl || !mount) return;
           const payload = JSON.parse(dataEl.textContent || "{}");
+          const hasFullCalendar = typeof FullCalendar !== "undefined";
+          if (!hasFullCalendar) {
+            mount.innerHTML = '<div class="calendar-empty" style="padding:16px;">El calendario no pudo cargarse, pero la navegacion sigue disponible.</div>';
+          }
           const isMobile = window.matchMedia("(max-width: 767px)").matches;
           const initialView = isMobile
             ? (payload.mobileInitialView || mount.dataset.mobileView || payload.initialView || mount.dataset.initialView || "dayGridMonth")
@@ -5805,15 +7811,23 @@ async function renderDashboardPage({
           const defaultCapacitadorFilter = String(payload.defaultCapacitadorFilter || "");
           const selectedEmployeeId = String(payload.selectedEmployeeId || "");
           const returnTo = String(payload.returnTo || "/dashboard");
+          const portalUrl = (path) => (window.__PORTAL_URL__ ? window.__PORTAL_URL__(path) : path);
           const filterButtons = Array.from(document.querySelectorAll("[data-capacitador-filter]"));
           const tabs = Array.from(document.querySelectorAll("[data-dashboard-tab]"));
           const panels = Array.from(document.querySelectorAll("[data-dashboard-tab-panel]"));
           const mobileChips = Array.from(document.querySelectorAll(".dashboard-mobile-chip"));
           const operationTitle = document.querySelector("[data-dashboard-operation-title]");
+          const dashboardTabBasePath = ${JSON.stringify(dashboardTabBasePath)};
+          const sucursalesTabPath = ${JSON.stringify(sucursalesTabPath)};
           const operationTitleMap = {
             calendar: "Calendario",
+            capacitaciones: "Capacitaciones",
+            constancias: "Constancias",
+            sucursales: "Empresas y sucursales",
+            notas: "Notas",
             gestion: "Gestión",
             pedidos: "Pedidos",
+            "reporte-ley": "Reporte Casa Ley",
             faltantes: "Faltantes",
             diplomas: "Diplomas faltantes",
             ley: "Faltantes Ley",
@@ -6050,10 +8064,11 @@ async function renderDashboardPage({
                   \${canEditNotes ? \`
                     <form class="notes-form js-async-notes" method="post" action="/dashboard/capacitaciones/\${escapeHtml(eventData.capacitacionId || eventData.id || "")}/notas">
                       <input type="hidden" name="returnTo" value="/dashboard" />
-                      <textarea name="notas" rows="4" class="notes-textarea" placeholder="Escribe notas del evento...">\${escapeHtml(props.notes || "")}</textarea>
+                      \${props.notes ? '<div class="note-entry"><header><strong>Registro historico</strong></header><p>' + escapeHtml(props.notes) + '</p></div>' : ""}
+                      <textarea name="notas" rows="4" class="notes-textarea" placeholder="Agregar una entrada al hilo..." required></textarea>
                       <div class="notes-actions">
-                        <button type="submit" class="status-button">Guardar notas</button>
-                        <span class="notes-state">\${props.notes ? "Notas guardadas" : "Sin notas"}</span>
+                        <button type="submit" class="status-button">Agregar nota</button>
+                        <span class="notes-state">Hilo de notas</span>
                       </div>
                     </form>
                   \` : \`<span>\${escapeHtml(props.notes || "Sin notas")}</span>\`}
@@ -6064,10 +8079,28 @@ async function renderDashboardPage({
               </div>
             \`;
           };
-          const updateNotesState = (form, value) => {
+          const updateNotesState = (form, note) => {
             const button = form?.querySelector('button[type="submit"]');
             const state = form?.querySelector(".notes-state");
-            if (state) state.textContent = value ? "Notas guardadas" : "Sin notas";
+            const textarea = form?.querySelector('textarea[name="notas"]');
+            const section = form?.closest(".capacitacion-card__notes, .calendar-detail-section");
+            let thread = section?.querySelector("[data-note-thread]");
+            if (!thread && section && note?.body) {
+              thread = document.createElement("div");
+              thread.className = "note-thread";
+              thread.dataset.noteThread = "true";
+              form.before(thread);
+            }
+            if (thread && note?.body) {
+              const article = document.createElement("article");
+              article.className = "note-entry";
+              article.dataset.noteId = String(note.id || "");
+              const date = note.createdAt ? new Date(note.createdAt).toLocaleString("es-MX") : "Ahora";
+              article.innerHTML = '<header><strong>' + escapeText(note.authorName || note.authorEmail || "Usuario") + '</strong><time>' + escapeText(date) + '</time></header><p>' + escapeText(note.body) + '</p>';
+              thread.appendChild(article);
+            }
+            if (textarea) textarea.value = "";
+            if (state) state.textContent = "Nota agregada";
             if (button) button.disabled = false;
           };
           const syncDetail = (eventData) => {
@@ -6087,6 +8120,7 @@ async function renderDashboardPage({
             const props = eventData?.extendedProps || {};
             if (props.eventType !== "capacitacion") return true;
             const keys = Array.isArray(props.capacitadorKeys) ? props.capacitadorKeys.map((item) => String(item || "").trim()).filter(Boolean) : [];
+            if (!keys.length) return true;
             return keys.includes(activeCapacitadorFilter);
           });
           const applyCalendarFilter = () => {
@@ -6105,6 +8139,33 @@ async function renderDashboardPage({
             });
           };
           const updateDiplomaState = (form, value) => {
+            const buttons = Array.from(form?.querySelectorAll('button[name="diplomas"]') || []);
+            if (buttons.length) {
+              const isYes = String(value || "").trim().toUpperCase() === "Y";
+              if (buttons.length === 1) {
+                const [button] = buttons;
+                button.textContent = isYes ? "Diplomas: Si" : "Marcar diplomas: Si";
+                button.classList.toggle("active", isYes);
+                button.disabled = false;
+              } else {
+                buttons.forEach((button) => {
+                  const active = String(button.value || "").trim().toUpperCase() === (isYes ? "Y" : "N");
+                  button.classList.toggle("active", active);
+                  button.disabled = false;
+                });
+              }
+              const studio = form.closest("[data-constancias-studio]");
+              const state = studio?.querySelector("[data-constancias-diplomas-state]");
+              if (state) {
+                state.textContent = isYes ? "DIPLOMAS: SI" : "DIPLOMAS: NO";
+                state.classList.toggle("is-finalizada", isYes);
+                state.classList.toggle("is-programada", !isYes);
+              }
+              const select = studio?.querySelector("[data-constancias-capacitacion-select]");
+              const option = select?.selectedOptions?.[0];
+              if (option) option.dataset.diplomas = isYes ? "Y" : "N";
+              return;
+            }
             const button = form?.querySelector('button[name="diplomas"]');
             if (!button) return;
             const isYes = String(value || "").trim().toUpperCase() === "Y";
@@ -6118,7 +8179,15 @@ async function renderDashboardPage({
             const loading = panel.querySelector("[data-pedidos-loading]");
             const root = panel.querySelector("[data-pedidos-root]");
             const content = root?.querySelector("[data-pedidos-panel]") || panel.querySelector("[data-pedidos-panel]");
-            if (!content) return;
+            if (!content) {
+              if (loading) loading.style.display = "none";
+              if (root) {
+                root.style.display = "block";
+                root.innerHTML = '<div class="panel" style="margin:0;border-top-color:var(--danger);"><div class="section-head"><div><h2>No se pudo inicializar pedidos</h2><p>La respuesta no incluyo el panel esperado. Intenta refrescar la pagina.</p></div></div></div>';
+              }
+              panel.dataset.loaded = "true";
+              return;
+            }
             if (root) root.style.display = "block";
             if (loading) loading.style.display = "none";
 
@@ -6134,11 +8203,11 @@ async function renderDashboardPage({
               search: String(content.dataset.search || "").trim(),
               year: String(content.dataset.year || new Date().getFullYear()).trim(),
               facturadorId: String(content.dataset.facturadorId || "").trim(),
-              estatalMin: String(content.dataset.estatalMin || "32000").trim(),
-              municipalMin: String(content.dataset.municipalMin || "9794.98").trim(),
+              estatalMin: String(content.dataset.estatalMin || "32967.49").trim(),
+              municipalMin: String(content.dataset.municipalMin || "11000").trim(),
             };
-            const portalUrl = (path) => (window.__PORTAL_URL__ ? window.__PORTAL_URL__(path) : path);
             const rows = Array.from(content.querySelectorAll("[data-pedidos-row]"));
+            const detailRows = Array.from(content.querySelectorAll("[data-pedidos-detail-row]"));
             const branchRows = Array.from(content.querySelectorAll("[data-pedidos-branch-row]"));
             const scopeButtons = Array.from(content.querySelectorAll("[data-pedidos-scope]"));
             const statusButtons = Array.from(content.querySelectorAll("[data-pedidos-status]"));
@@ -6157,6 +8226,110 @@ async function renderDashboardPage({
             const stats = content.querySelector("[data-pedidos-stats]");
             const pedidosView = content.querySelector('[data-pedidos-view="pedidos"]');
             const sucursalesView = content.querySelector('[data-pedidos-view="sucursales"]');
+            const senderSelect = content.querySelector("[data-pedidos-sender]");
+            const toInput = content.querySelector("[data-pedidos-to]");
+            const sendStatus = content.querySelector("[data-pedidos-send-status]");
+            const configRefreshBtn = content.querySelector("[data-pedidos-config-refresh]");
+            const filesByPedido = new Map();
+            const selectedFilesByPedido = new Map();
+            const rowByPedido = new Map(rows.map((row) => [String(row.dataset.pedido || "").trim(), row]).filter(([pedido]) => pedido));
+            const setSendStatus = (message, kind = "") => {
+              if (!sendStatus) return;
+              sendStatus.textContent = message || "";
+              sendStatus.classList.toggle("ok", kind === "ok");
+              sendStatus.classList.toggle("err", kind === "err");
+            };
+            const apiJson = async (url, options = {}) => {
+              const response = await fetch(portalUrl(url), {
+                credentials: "same-origin",
+                headers: {
+                  "X-Requested-With": "fetch",
+                  ...(options.headers || {}),
+                },
+                ...options,
+              });
+              const text = await response.text();
+              let data = null;
+              try {
+                data = text ? JSON.parse(text) : null;
+              } catch {
+                throw new Error("El backend no devolvio JSON valido.");
+              }
+              if (!response.ok || data?.ok === false) {
+                throw new Error(data?.error || "HTTP " + response.status);
+              }
+              return data;
+            };
+            const cssEscape = (value) => {
+              if (window.CSS && typeof window.CSS.escape === "function") return window.CSS.escape(value);
+              return String(value || "").replace(/["\\\\]/g, "\\\\$&");
+            };
+            const fileKey = (file) => String(file?.id || file?.relativePath || file?.path || file?.openUrl || file?.downloadUrl || file?.name || "").trim();
+            const renderFiles = (pedido, files) => {
+              const list = content.querySelector('[data-pedidos-files-list="' + cssEscape(pedido) + '"]');
+              const stateNode = content.querySelector('[data-pedidos-files-state="' + cssEscape(pedido) + '"]');
+              if (!list) return;
+              if (!files.length) {
+                list.innerHTML = '<div class="empty">No se encontraron archivos para este pedido.</div>';
+                if (stateNode) stateNode.textContent = "Sin archivos encontrados.";
+                return;
+              }
+              selectedFilesByPedido.set(pedido, new Set(files.map(fileKey).filter(Boolean)));
+              list.innerHTML = files.map((file) => {
+                const key = fileKey(file);
+                const label = file.name || file.relativePath || key;
+                const meta = [file.mimeType, file.size ? (Math.round(Number(file.size) / 1024) + " KB") : ""].filter(Boolean).join(" · ");
+                const link = file.openUrl || file.downloadUrl || "";
+                return '<label class="pedidos-file-item">' +
+                  '<input type="checkbox" data-pedidos-file="' + escapeHtml(pedido) + '" value="' + escapeHtml(key) + '" checked />' +
+                  '<span><strong>' + escapeHtml(label) + '</strong><small>' + escapeHtml(meta || "Archivo disponible") + '</small></span>' +
+                  (link ? '<a href="' + escapeHtml(link) + '" target="_blank" rel="noopener">Abrir</a>' : '<span></span>') +
+                '</label>';
+              }).join("");
+              if (stateNode) stateNode.textContent = files.length + " archivo(s) cargado(s).";
+              list.querySelectorAll("[data-pedidos-file]").forEach((input) => {
+                input.addEventListener("change", () => {
+                  const selected = new Set(Array.from(list.querySelectorAll("[data-pedidos-file]:checked")).map((item) => String(item.value || "").trim()).filter(Boolean));
+                  selectedFilesByPedido.set(pedido, selected);
+                });
+              });
+            };
+            const loadFilesForPedido = async (pedido, { open = true } = {}) => {
+              const safePedido = String(pedido || "").trim();
+              if (!safePedido) throw new Error("Falta pedido.");
+              const detail = content.querySelector('[data-pedido-detail="' + cssEscape(safePedido) + '"]');
+              const stateNode = content.querySelector('[data-pedidos-files-state="' + cssEscape(safePedido) + '"]');
+              if (open && detail) detail.hidden = false;
+              if (filesByPedido.has(safePedido)) return filesByPedido.get(safePedido);
+              if (stateNode) stateNode.textContent = "Cargando archivos de Drive...";
+              const data = await apiJson("/api/pedidos-ley/pedido/" + encodeURIComponent(safePedido) + "/files");
+              const files = Array.isArray(data.matchedFiles) ? data.matchedFiles : [];
+              filesByPedido.set(safePedido, files);
+              renderFiles(safePedido, files);
+              return files;
+            };
+            const loadPedidosConfig = async () => {
+              try {
+                const [config, senderStatus] = await Promise.all([
+                  apiJson("/api/pedidos-ley/config"),
+                  apiJson("/api/pedidos-ley/sender/status"),
+                ]);
+                const recipients = Array.isArray(config.defaultRecipients) ? config.defaultRecipients : ["SGIIREGION1@casaley.com.mx"];
+                if (toInput && !String(toInput.value || "").trim()) {
+                  toInput.value = recipients.join(", ");
+                }
+                const accounts = Array.isArray(senderStatus.accounts) ? senderStatus.accounts : [];
+                if (senderSelect) {
+                  senderSelect.innerHTML = '<option value="">-- Seleccionar remitente --</option>' + accounts.map((account) => {
+                    const email = String(account.email || "").trim();
+                    return '<option value="' + escapeHtml(email) + '"' + (email === senderStatus.activeEmail ? " selected" : "") + '>' + escapeHtml(email) + '</option>';
+                  }).join("");
+                }
+                setSendStatus(accounts.length ? "Remitente listo." : "No hay remitentes configurados.", accounts.length ? "ok" : "err");
+              } catch (error) {
+                setSendStatus(error instanceof Error ? error.message : "No se pudo cargar remitente.", "err");
+              }
+            };
             const updateButtonState = (buttons, attr, activeValue) => {
               buttons.forEach((button) => {
                 const value = String(button.getAttribute(attr) || "all").trim();
@@ -6167,20 +8340,33 @@ async function renderDashboardPage({
             };
             const renderLocal = () => {
               const query = normalizeText(state.search);
+              const statusMatches = (status, filter) => {
+                if (filter === "all") return true;
+                if (filter === "sin-liberacion") {
+                  return status === "sin-liberacion-sin-trabajo";
+                }
+                return status === filter;
+              };
               const matchesFilters = (row) => {
                 const status = String(row.dataset.status || "otros").trim();
                 const type = String(row.dataset.type || "otros").trim();
                 const haystack = normalizeText(row.dataset.search || "");
-                return (state.status === "all" || status === state.status)
+                return statusMatches(status, state.status)
                   && (state.type === "all" || type === state.type)
                   && (!query || haystack.includes(query));
               };
               const visibleOrderRows = rows.filter(matchesFilters);
               const visibleBranchRows = branchRows.filter(matchesFilters);
               rows.forEach((row) => { row.hidden = true; });
+              detailRows.forEach((row) => { row.hidden = true; });
               branchRows.forEach((row) => { row.hidden = true; });
               if (state.scope === "pedidos") {
-                visibleOrderRows.forEach((row) => { row.hidden = false; });
+                visibleOrderRows.forEach((row) => {
+                  row.hidden = false;
+                  const pedido = String(row.dataset.pedido || "").trim();
+                  const detail = pedido ? content.querySelector('[data-pedido-detail="' + cssEscape(pedido) + '"]') : null;
+                  if (detail && detail.dataset.open === "true") detail.hidden = false;
+                });
               }
               if (state.scope === "sucursales") {
                 visibleBranchRows.forEach((row) => { row.hidden = false; });
@@ -6275,10 +8461,91 @@ async function renderDashboardPage({
               state.search = "";
               state.year = String(new Date().getFullYear());
               state.facturadorId = "";
-              state.estatalMin = "32000";
-              state.municipalMin = "9794.98";
+              state.estatalMin = "32967.49";
+              state.municipalMin = "11000";
               reload();
             });
+            configRefreshBtn?.addEventListener("click", loadPedidosConfig);
+            senderSelect?.addEventListener("change", async () => {
+              const email = String(senderSelect.value || "").trim();
+              if (!email) return;
+              try {
+                await apiJson("/api/pedidos-ley/sender/select", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email }),
+                });
+                setSendStatus("Remitente activo: " + email, "ok");
+              } catch (error) {
+                setSendStatus(error instanceof Error ? error.message : "No se pudo seleccionar remitente.", "err");
+              }
+            });
+            content.querySelectorAll("[data-pedidos-toggle-files]").forEach((button) => {
+              button.addEventListener("click", async () => {
+                const pedido = String(button.getAttribute("data-pedidos-toggle-files") || "").trim();
+                const detail = content.querySelector('[data-pedido-detail="' + cssEscape(pedido) + '"]');
+                if (!detail) return;
+                const shouldOpen = detail.hidden;
+                detail.dataset.open = shouldOpen ? "true" : "false";
+                detail.hidden = !shouldOpen;
+                button.textContent = shouldOpen ? "Ocultar archivos" : "Ver archivos";
+                if (shouldOpen) {
+                  try {
+                    await loadFilesForPedido(pedido);
+                  } catch (error) {
+                    setSendStatus(error instanceof Error ? error.message : "No se pudieron cargar archivos.", "err");
+                  }
+                }
+              });
+            });
+            content.querySelectorAll("[data-pedidos-send]").forEach((button) => {
+              button.addEventListener("click", async () => {
+                const pedido = String(button.getAttribute("data-pedidos-send") || "").trim();
+                const row = rowByPedido.get(pedido);
+                const to = String(toInput?.value || "").trim();
+                const fromEmail = String(senderSelect?.value || "").trim();
+                if (!to) {
+                  setSendStatus("Agrega al menos un correo destino.", "err");
+                  return;
+                }
+                try {
+                  button.disabled = true;
+                  setSendStatus("Cargando archivos del pedido " + pedido + "...", "");
+                  const files = await loadFilesForPedido(pedido);
+                  const selected = selectedFilesByPedido.get(pedido) || new Set(files.map(fileKey).filter(Boolean));
+                  const selectedFiles = files.filter((file) => selected.has(fileKey(file)));
+                  if (!selectedFiles.length) {
+                    setSendStatus("Selecciona al menos un archivo para enviar.", "err");
+                    return;
+                  }
+                  setSendStatus("Enviando pedido " + pedido + "...", "");
+                  await apiJson("/api/pedidos-ley/send", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      pedido,
+                      to,
+                      fromEmail,
+                      facturadorNombre: row?.dataset?.facturadorNombre || "",
+                      files: selectedFiles,
+                      textBody: "Le informamos que el trabajo correspondiente al pedido " + pedido + " ya esta listo. Adjuntamos el documento final para su revision.",
+                      htmlBody: "<p>Le informamos que el trabajo correspondiente al pedido <strong>" + escapeHtml(pedido) + "</strong> ya esta listo.</p><p>Adjuntamos el documento final para su revision.</p>",
+                    }),
+                  });
+                  setSendStatus("Pedido " + pedido + " enviado correctamente.", "ok");
+                  row?.setAttribute("data-status", "sin-liberacion-enviados");
+                  row?.setAttribute("hidden", "hidden");
+                  const detail = content.querySelector('[data-pedido-detail="' + cssEscape(pedido) + '"]');
+                  if (detail) detail.hidden = true;
+                } catch (error) {
+                  setSendStatus(error instanceof Error ? error.message : "No se pudo enviar el pedido.", "err");
+                } finally {
+                  button.disabled = false;
+                  renderLocal();
+                }
+              });
+            });
+            void loadPedidosConfig();
             renderLocal();
           };
           const loadPedidosPanel = () => {
@@ -6343,8 +8610,31 @@ async function renderDashboardPage({
               if (shell) shell.dataset.loading = "false";
             }
           };
-          const setActiveTab = (tabId, { focus = false } = {}) => {
-            const nextTab = String(tabId || "").trim() || (tabs[0]?.dataset.dashboardTab || "calendar");
+          const getTabFromLocation = () => {
+            const currentPath = window.location.pathname.replace(/\\/$/, "");
+            if (currentPath === String(sucursalesTabPath || "").replace(/\\/$/, "") && sucursalesTabPath !== dashboardTabBasePath) {
+              return "sucursales";
+            }
+            const requested = new URL(window.location.href).searchParams.get("tab") || "";
+            return panels.some((panel) => panel.dataset.dashboardTabPanel === requested)
+              ? requested
+              : (tabs[0]?.dataset.dashboardTab || "calendar");
+          };
+          const buildTabUrl = (tabId) => {
+            const useContextPath = tabId === "sucursales" && sucursalesTabPath !== dashboardTabBasePath;
+            const url = new URL(useContextPath ? sucursalesTabPath : dashboardTabBasePath, window.location.origin);
+            if (!useContextPath) url.searchParams.set("tab", tabId);
+            return url.pathname + url.search;
+          };
+          const setActiveTab = (tabId, { focus = false, historyMode = "none" } = {}) => {
+            const requestedTab = String(tabId || "").trim();
+            if (requestedTab === "pedidos") {
+              window.location.assign(portalUrl("/dashboard/pedidos"));
+              return;
+            }
+            const nextTab = panels.some((panel) => panel.dataset.dashboardTabPanel === requestedTab)
+              ? requestedTab
+              : (tabs[0]?.dataset.dashboardTab || "calendar");
             if (operationTitle) {
               operationTitle.textContent = operationTitleMap[nextTab] || operationTitleMap.calendar;
             }
@@ -6359,25 +8649,31 @@ async function renderDashboardPage({
               panel.hidden = !isActive;
               panel.classList.toggle("is-active", isActive);
             });
+            document.dispatchEvent(new CustomEvent("desarrolloeg:dashboard-tab", { detail: { tabId: nextTab } }));
             if (nextTab === "calendar" && calendarInstance) {
               requestAnimationFrame(() => requestAnimationFrame(() => calendarInstance?.updateSize?.()));
             }
             if (nextTab === "ley") {
               loadDeferredPanel("ley");
             }
-            if (nextTab === "pedidos") {
-              loadPedidosPanel();
-            }
             if (focus) {
               tabs.find((button) => button.dataset.dashboardTab === nextTab)?.focus();
             }
+            if (historyMode === "push" || historyMode === "replace") {
+              const nextUrl = buildTabUrl(nextTab);
+              const currentUrl = window.location.pathname + window.location.search;
+              if (nextUrl !== currentUrl) {
+                window.history[historyMode === "replace" ? "replaceState" : "pushState"]({ dashboardTab: nextTab }, "", nextUrl);
+              }
+            }
           };
           tabs.forEach((button) => {
-            button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab));
+            button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab, { historyMode: "push" }));
           });
           mobileChips.forEach((button) => {
-            button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab, { focus: false }));
+            button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab, { focus: false, historyMode: "push" }));
           });
+          window.addEventListener("popstate", () => setActiveTab(getTabFromLocation(), { historyMode: "none" }));
           if (detailMount) {
             detailMount.addEventListener("click", (event) => {
               const target = event.target instanceof Element ? event.target : null;
@@ -6415,16 +8711,24 @@ async function renderDashboardPage({
             }
             return payload;
           };
+          window.refreshAppShellCache = refreshAppShellCache;
           document.addEventListener("submit", async (event) => {
             const form = event.target;
             if (!(form instanceof HTMLFormElement) || !form.classList.contains("js-async-diplomas")) return;
             event.preventDefault();
-            const button = form.querySelector('button[name="diplomas"]');
-            if (button) button.disabled = true;
+            const button = event.submitter instanceof HTMLButtonElement
+              ? event.submitter
+              : form.querySelector('button[name="diplomas"]');
+            const nextDiplomas = button?.name === "diplomas"
+              ? String(button.value || "Y").trim()
+              : String(form.querySelector('button[name="diplomas"].active')?.value || "Y").trim();
+            form.querySelectorAll('button[name="diplomas"]').forEach((item) => { item.disabled = true; });
             try {
+              const payload = new FormData(form);
+              payload.set("diplomas", nextDiplomas || "Y");
               const response = await fetch(form.action, {
                 method: "POST",
-                body: new FormData(form),
+                body: payload,
                 headers: { "X-Requested-With": "fetch" },
                 credentials: "same-origin",
               });
@@ -6432,9 +8736,9 @@ async function renderDashboardPage({
                 const errorText = await response.text();
                 throw new Error(errorText || "HTTP " + response.status);
               }
-              updateDiplomaState(form, form.querySelector('button[name="diplomas"]')?.value || "Y");
+              updateDiplomaState(form, nextDiplomas || "Y");
               const card = form.closest(".capacitacion-card");
-              if (card) {
+              if (card && !card.hasAttribute("data-keep-after-diplomas") && !form.closest("[data-constancias-studio]")) {
                 card.style.transition = "opacity 180ms ease, transform 180ms ease";
                 card.style.opacity = "0";
                 card.style.transform = "translateY(-4px)";
@@ -6442,7 +8746,7 @@ async function renderDashboardPage({
               }
               await refreshAppShellCache("portal", { reload: false, quiet: true });
             } catch (error) {
-              if (button) button.disabled = false;
+              form.querySelectorAll('button[name="diplomas"]').forEach((item) => { item.disabled = false; });
               alert(error instanceof Error ? error.message : "No se pudo actualizar los diplomas.");
             }
           });
@@ -6463,11 +8767,11 @@ async function renderDashboardPage({
                 },
                 credentials: "same-origin",
               });
+              const responsePayload = await response.json().catch(() => null);
               if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || "HTTP " + response.status);
+                throw new Error(responsePayload?.error || "HTTP " + response.status);
               }
-              updateNotesState(form, String(form.querySelector('textarea[name="notas"]')?.value || "").trim());
+              updateNotesState(form, responsePayload?.note);
               await refreshAppShellCache("portal", { reload: false, quiet: true });
             } catch (error) {
               if (button) button.disabled = false;
@@ -6501,7 +8805,53 @@ async function renderDashboardPage({
               alert(error instanceof Error ? error.message : "No se pudo guardar la nota.");
             }
           });
-          calendarInstance = new FullCalendar.Calendar(mount, {
+          document.addEventListener("submit", async (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement) || !form.classList.contains("js-edit-thread-note")) return;
+            event.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            if (button) button.disabled = true;
+            try {
+              const response = await fetch(form.action, {
+                method: "POST",
+                body: new URLSearchParams(new FormData(form)),
+                headers: {
+                  "X-Requested-With": "fetch",
+                  "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                },
+                credentials: "same-origin",
+              });
+              const payload = await response.json().catch(() => null);
+              if (!response.ok) throw new Error(payload?.error || "No se pudo editar la nota.");
+              const article = form.closest("[data-thread-note-id]");
+              const body = article?.querySelector(".thread-note-body");
+              if (body) body.textContent = '"' + String(payload?.note?.body || "") + '"';
+              form.closest("details")?.removeAttribute("open");
+            } catch (error) {
+              alert(error instanceof Error ? error.message : "No se pudo editar la nota.");
+            } finally {
+              if (button) button.disabled = false;
+            }
+          });
+          document.addEventListener("click", async (event) => {
+            const button = event.target instanceof Element ? event.target.closest(".js-delete-thread-note") : null;
+            if (!button) return;
+            if (!window.confirm("¿Eliminar esta entrada del hilo?")) return;
+            try {
+              const response = await fetch(String(button.dataset.action || ""), {
+                method: "POST",
+                headers: { "X-Requested-With": "fetch" },
+                credentials: "same-origin",
+              });
+              const payload = await response.json().catch(() => null);
+              if (!response.ok) throw new Error(payload?.error || "No se pudo eliminar la nota.");
+              button.closest("[data-thread-note-id]")?.remove();
+            } catch (error) {
+              alert(error instanceof Error ? error.message : "No se pudo eliminar la nota.");
+            }
+          });
+          if (hasFullCalendar) {
+            calendarInstance = new FullCalendar.Calendar(mount, {
             locale: "es",
             firstDay: 1,
             initialView,
@@ -6539,7 +8889,7 @@ async function renderDashboardPage({
                 ? [props.employeeRole || "", props.dateLabel || ""]
                 : eventType === "calendar-note"
                   ? [props.dateLabel || "", Array.isArray(props.employeeNames) ? String(props.employeeNames.length) + " etiquetado(s)" : ""]
-                  : [props.sedeLabel || "", props.hourLabel || "", props.capacitadoresLabel || ""];
+                  : [props.statusLabel || "", props.hourLabel || "", props.capacitadoresLabel || ""];
               const subtitle = subtitleParts
                 .map((item) => String(item || "").trim())
                 .filter(Boolean)
@@ -6607,8 +8957,31 @@ async function renderDashboardPage({
               }
               info.el.title = parts.join(" | ");
             }
-          });
-          calendarInstance.render();
+            });
+            calendarInstance.render();
+            const refreshCalendarEvents = async () => {
+              const query = new URLSearchParams({
+                employee: String(config.selectedEmployeeId || ""),
+                returnTo: String(config.returnTo || "/dashboard"),
+                _: String(Date.now()),
+              });
+              const response = await fetch(portalUrl("/api/portal/calendar?" + query.toString()), {
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "fetch" },
+                cache: "no-store",
+              });
+              const payload = await response.json().catch(() => null);
+              if (!response.ok) throw new Error(payload?.error || "No se pudo actualizar el calendario.");
+              events.splice(0, events.length, ...(Array.isArray(payload?.events) ? payload.events : []));
+              calendarInstance.removeAllEvents();
+              calendarInstance.addEventSource(getVisibleEvents());
+              return payload;
+            };
+            window.__DESARROLLOEG_REFRESH_CALENDAR__ = refreshCalendarEvents;
+            window.addEventListener("desarrolloeg:data-changed", () => {
+              void refreshCalendarEvents().catch(() => {});
+            });
+          }
           syncFilterButtons();
           const createNoteButton = document.querySelector("[data-open-calendar-note]");
           if (createNoteButton) {
@@ -6649,7 +9022,7 @@ async function renderDashboardPage({
             });
           });
           applyCalendarFilter();
-          setActiveTab(tabs.find((button) => button.classList.contains("active"))?.dataset.dashboardTab || tabs[0]?.dataset.dashboardTab || "calendar");
+          setActiveTab(getTabFromLocation(), { historyMode: "none" });
         });
       </script>
     `
@@ -6675,6 +9048,344 @@ async function renderDashboardPage({
       </section>
     `,
     bodyScripts: `
+      <script>
+        (function () {
+          if (window.__DESARROLLOEG_PORTAL_REALTIME_STARTED__) return;
+          window.__DESARROLLOEG_PORTAL_REALTIME_STARTED__ = true;
+          const portalUrl = (path) => (window.__PORTAL_URL__ ? window.__PORTAL_URL__(path) : path);
+          let lastCursor = null;
+          let lastRevision = null;
+          let pendingCursor = null;
+          let checking = false;
+          let eventsConnected = false;
+          const stateUrl = () => {
+            const base = portalUrl("/api/app-shell/cache/state?scope=portal");
+            return base + (base.includes("?") ? "&" : "?") + "_=" + Date.now();
+          };
+          const eventsUrl = () => portalUrl("/api/app-shell/events?scope=portal");
+          const shouldDeferReload = () => {
+            const active = document.activeElement;
+            return active instanceof HTMLInputElement
+              || active instanceof HTMLTextAreaElement
+              || active instanceof HTMLSelectElement;
+          };
+          const reloadWhenReady = (cursor) => {
+            pendingCursor = cursor;
+            if (shouldDeferReload()) return false;
+            pendingCursor = null;
+            window.dispatchEvent(new CustomEvent("desarrolloeg:data-changed", {
+              detail: { scope: "portal", cursor, source: "dashboard-realtime" },
+            }));
+            return true;
+          };
+          const handleCursor = (cursor, { initial = false } = {}) => {
+            const numericCursor = Number(cursor || 0);
+            if (!Number.isFinite(numericCursor) || numericCursor <= 0) return;
+            if (lastCursor == null || initial) {
+              lastCursor = numericCursor;
+              return;
+            }
+            if (numericCursor > lastCursor) {
+              lastCursor = numericCursor;
+              reloadWhenReady(numericCursor);
+            }
+          };
+          const handleRevision = (revision, { initial = false } = {}) => {
+            const numericRevision = Number(revision || 0);
+            if (!Number.isFinite(numericRevision) || numericRevision <= 0) return false;
+            if (lastRevision == null || initial) {
+              lastRevision = numericRevision;
+              return false;
+            }
+            if (numericRevision !== lastRevision) {
+              lastRevision = numericRevision;
+              reloadWhenReady(numericRevision);
+              return true;
+            }
+            return false;
+          };
+          const handleRefreshEvent = (state) => {
+            const numericRevision = Number(state?.revision || 0);
+            if (Number.isFinite(numericRevision) && numericRevision > 0) {
+              lastRevision = numericRevision;
+            }
+            const numericCursor = Number(state?.cursor || 0);
+            if (Number.isFinite(numericCursor) && numericCursor > 0 && lastCursor == null) {
+              lastCursor = numericCursor;
+              return;
+            }
+            if (Number.isFinite(numericCursor) && numericCursor > 0 && numericCursor > lastCursor) {
+              lastCursor = numericCursor;
+              reloadWhenReady(numericCursor);
+              return;
+            }
+            reloadWhenReady(numericCursor || Date.now());
+          };
+          const startEventStream = () => {
+            if (!("EventSource" in window)) return;
+            const source = new EventSource(eventsUrl());
+            source.addEventListener("open", () => {
+              eventsConnected = true;
+            });
+            source.addEventListener("init", (event) => {
+              const state = JSON.parse(event.data || "{}");
+              handleCursor(state?.cursor, { initial: true });
+              handleRevision(state?.revision, { initial: true });
+            });
+            source.addEventListener("app-shell-cache", (event) => {
+              const state = JSON.parse(event.data || "{}");
+              handleRefreshEvent(state);
+            });
+            source.addEventListener("error", () => {
+              eventsConnected = false;
+            });
+          };
+          const checkState = async () => {
+            if (checking) return;
+            if (pendingCursor != null && !shouldDeferReload()) {
+              const cursor = pendingCursor;
+              pendingCursor = null;
+              window.dispatchEvent(new CustomEvent("desarrolloeg:data-changed", {
+                detail: { scope: "portal", cursor, source: "dashboard-realtime" },
+              }));
+            }
+            checking = true;
+            try {
+              const response = await fetch(stateUrl(), {
+                headers: { "X-Requested-With": "fetch" },
+                credentials: "same-origin",
+                cache: "no-store",
+              });
+              if (!response.ok) return;
+              const state = await response.json().catch(() => null);
+              if (handleRevision(state?.revision, { initial: lastRevision == null })) return;
+              handleCursor(state?.cursor, { initial: lastCursor == null });
+            } finally {
+              checking = false;
+            }
+          };
+          window.__DESARROLLOEG_PORTAL_REALTIME_CHECK__ = checkState;
+          startEventStream();
+          window.setInterval(checkState, 3000);
+          window.addEventListener("focus", checkState);
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") checkState();
+          });
+          checkState();
+        })();
+      </script>
+      <script>
+        (function () {
+          const escapeText = (value) => String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+          const capacitaciones = document.querySelector("[data-capacitaciones-studio]");
+          if (capacitaciones) {
+            const normalize = (value) => String(value || "")
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .trim()
+              .toUpperCase();
+            const controls = Array.from(capacitaciones.querySelectorAll("[data-capacitaciones-filter]"));
+            const items = Array.from(capacitaciones.querySelectorAll("[data-capacitacion-item]"));
+            const groups = Array.from(capacitaciones.querySelectorAll("[data-capacitacion-group]"));
+            const applyCapacitacionesFilters = () => {
+              const search = normalize(capacitaciones.querySelector('[data-capacitaciones-filter="search"]')?.value || "");
+              const status = normalize(capacitaciones.querySelector('[data-capacitaciones-filter="status"]')?.value || "");
+              const capacitador = String(capacitaciones.querySelector('[data-capacitaciones-filter="capacitador"]')?.value || "").trim();
+              const diplomas = String(capacitaciones.querySelector('[data-capacitaciones-filter="diplomas"]')?.value || "").trim().toUpperCase();
+              const filtersActive = Boolean(search || status || capacitador || diplomas);
+              let totalVisible = 0;
+              items.forEach((item) => {
+                const haystack = normalize(item.dataset.search || item.textContent || "");
+                const itemStatus = normalize(item.dataset.status || "");
+                const itemDiplomas = String(item.dataset.diplomas || "").trim().toUpperCase();
+                const keys = String(item.dataset.capacitadores || "").split(",").map((key) => key.trim()).filter(Boolean);
+                const visible = (!search || haystack.includes(search))
+                  && (!status || itemStatus === status)
+                  && (!capacitador || keys.includes(capacitador))
+                  && (!diplomas || itemDiplomas === diplomas);
+                item.hidden = !visible;
+                if (visible) totalVisible += 1;
+              });
+              groups.forEach((group) => {
+                const visibleCount = Array.from(group.querySelectorAll("[data-capacitacion-item]")).filter((item) => !item.hidden).length;
+                const count = group.querySelector("[data-capacitacion-group-count]");
+                if (count) count.textContent = String(visibleCount);
+                group.hidden = visibleCount === 0;
+                if (filtersActive && visibleCount > 0) group.open = true;
+              });
+              const results = capacitaciones.querySelector("[data-capacitaciones-results]");
+              if (results) results.textContent = totalVisible + (totalVisible === 1 ? " capacitacion visible" : " capacitaciones visibles");
+            };
+            controls.forEach((control) => {
+              control.addEventListener("input", applyCapacitacionesFilters);
+              control.addEventListener("change", applyCapacitacionesFilters);
+            });
+            capacitaciones.querySelector("[data-capacitaciones-filter-reset]")?.addEventListener("click", () => {
+              controls.forEach((control) => { control.value = ""; });
+              groups.forEach((group) => { group.open = false; });
+              applyCapacitacionesFilters();
+            });
+            applyCapacitacionesFilters();
+          }
+
+          const constancias = document.querySelector("[data-constancias-studio]");
+          if (constancias) {
+            const capacitador = constancias.querySelector("[data-constancias-capacitador-filter]");
+            const capacitacion = constancias.querySelector("[data-constancias-capacitacion-select]");
+            const frame = constancias.querySelector("[data-constancias-frame]");
+            const openLink = constancias.querySelector("[data-constancias-open]");
+            const sede = constancias.querySelector("[data-constancias-sede]");
+            const fecha = constancias.querySelector("[data-constancias-fecha]");
+            const state = constancias.querySelector("[data-constancias-diplomas-state]");
+            const sucursalesList = constancias.querySelector("[data-constancias-sucursales]");
+            const diplomasForm = constancias.querySelector("[data-constancias-diplomas-form]");
+            const updateFromSelected = () => {
+              const option = capacitacion?.selectedOptions?.[0];
+              if (!option) return;
+              const url = option.dataset.url || "";
+              const integratedUrl = option.dataset.integratedUrl || url;
+              const rowId = option.value || "";
+              const hasDiplomas = String(option.dataset.diplomas || "").toUpperCase() === "Y";
+              const panel = constancias.closest("[data-dashboard-tab-panel]");
+              if (frame && integratedUrl) {
+                frame.dataset.src = integratedUrl;
+                if (!panel || !panel.hidden) frame.src = integratedUrl;
+              }
+              if (openLink && url) openLink.href = url;
+              if (sede) sede.textContent = option.dataset.sede || "Sin sede";
+              if (fecha) fecha.textContent = option.dataset.fecha || "Sin fecha";
+              if (sucursalesList) {
+                let items = [];
+                try {
+                  items = JSON.parse(option.dataset.sucursales || "[]");
+                } catch {
+                  items = [];
+                }
+                sucursalesList.innerHTML = Array.isArray(items) && items.length
+                  ? items.map((item) => '<span class="tag-pill">' + escapeText(item) + '</span>').join("")
+                  : '<span class="calendar-empty">Sin sucursales</span>';
+              }
+              if (state) {
+                state.textContent = hasDiplomas ? "DIPLOMAS: SI" : "DIPLOMAS: NO";
+                state.classList.toggle("is-finalizada", hasDiplomas);
+                state.classList.toggle("is-programada", !hasDiplomas);
+              }
+              if (diplomasForm && rowId) diplomasForm.action = "/dashboard/capacitaciones/" + encodeURIComponent(rowId) + "/diplomas";
+              diplomasForm?.querySelectorAll('button[name="diplomas"]').forEach((button) => {
+                const active = String(button.value || "").toUpperCase() === (hasDiplomas ? "Y" : "N");
+                button.classList.toggle("active", active);
+              });
+            };
+            const applyCapacitadorFilter = () => {
+              const selected = String(capacitador?.value || "").trim();
+              let firstVisible = null;
+              capacitacion?.querySelectorAll("option").forEach((option) => {
+                const keys = String(option.dataset.capacitadores || "").split(",").map((item) => item.trim()).filter(Boolean);
+                const visible = !selected || keys.includes(selected);
+                option.hidden = !visible;
+                option.disabled = !visible;
+                if (visible && !firstVisible) firstVisible = option;
+              });
+              if (firstVisible && (capacitacion.selectedOptions[0]?.disabled || capacitacion.selectedOptions[0]?.hidden)) {
+                capacitacion.value = firstVisible.value;
+              }
+              updateFromSelected();
+            };
+            capacitador?.addEventListener("change", applyCapacitadorFilter);
+            capacitacion?.addEventListener("change", updateFromSelected);
+            document.addEventListener("desarrolloeg:dashboard-tab", (event) => {
+              if (event.detail?.tabId === "constancias") updateFromSelected();
+            });
+            applyCapacitadorFilter();
+          }
+
+          const sucursales = document.querySelector("[data-sucursales-studio]");
+          if (sucursales) {
+            const directorySearch = sucursales.querySelector("[data-company-directory-search]");
+            const applyDirectorySearch = () => {
+              const query = String(directorySearch?.value || "").trim().toUpperCase();
+              let visible = 0;
+              sucursales.querySelectorAll("[data-company-directory-card]").forEach((card) => {
+                card.hidden = Boolean(query) && !String(card.dataset.search || "").toUpperCase().includes(query);
+                if (!card.hidden) visible += 1;
+              });
+              const result = sucursales.querySelector("[data-company-directory-results]");
+              if (result) result.textContent = visible + (visible === 1 ? " empresa disponible" : " empresas disponibles");
+            };
+            directorySearch?.addEventListener("input", applyDirectorySearch);
+            applyDirectorySearch();
+            const applyFilters = (panel) => {
+              const controls = Array.from(panel.querySelectorAll("[data-sucursales-filter]"));
+              const valueFor = (kind) => String(controls.find((input) => input.dataset.sucursalesFilter === kind)?.value || "").trim().toUpperCase();
+              const pedido = valueFor("pedido");
+              const trabajo = valueFor("trabajo");
+              const vigencia = valueFor("vigencia");
+              const filters = controls.filter((input) => !["pedido", "trabajo", "vigencia"].includes(input.dataset.sucursalesFilter)).map((input) => {
+                const values = input instanceof HTMLSelectElement && input.multiple
+                  ? Array.from(input.selectedOptions).map((option) => option.value)
+                  : [input.value];
+                return values.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean);
+              }).filter((values) => values.length);
+              let visibleCount = 0;
+              panel.querySelectorAll("[data-sucursal-chip]").forEach((chip) => {
+                const haystack = String(chip.dataset.search || chip.textContent || "").toUpperCase();
+                const trabajos = String(chip.dataset.trabajos || "").toUpperCase();
+                const hasEstatal = trabajos.includes("ESTATAL");
+                const hasMunicipal = trabajos.includes("MUNICIPAL");
+                const matchesPedido = !pedido || String(chip.dataset.pedidos || "").toUpperCase().includes(pedido);
+                const matchesTrabajo = !trabajo
+                  || (trabajo === "ESTATAL" && hasEstatal)
+                  || (trabajo === "MUNICIPAL" && hasMunicipal)
+                  || (trabajo === "OTRO" && !hasEstatal && !hasMunicipal);
+                const matchesVigencia = !vigencia
+                  || (trabajo === "ESTATAL" && chip.dataset.estatalYear === vigencia)
+                  || (trabajo === "MUNICIPAL" && chip.dataset.municipalYear === vigencia)
+                  || (!trabajo && (chip.dataset.estatalYear === vigencia || chip.dataset.municipalYear === vigencia));
+                const matchesGeneric = filters.every((values) => values.some((value) => haystack.includes(value)));
+                chip.hidden = !(matchesPedido && matchesTrabajo && matchesVigencia && matchesGeneric);
+                if (!chip.hidden) visibleCount += 1;
+              });
+              panel.querySelectorAll("[data-territory-municipality]").forEach((municipality) => {
+                const municipalityCount = municipality.querySelectorAll("[data-sucursal-chip]:not([hidden])").length;
+                municipality.hidden = municipalityCount === 0;
+                const countLabel = municipality.querySelector("[data-territory-municipality-count]");
+                if (countLabel) countLabel.textContent = municipalityCount + (municipalityCount === 1 ? " sucursal" : " sucursales");
+              });
+              panel.querySelectorAll("[data-territory-state]").forEach((state) => {
+                const stateCount = state.querySelectorAll("[data-sucursal-chip]:not([hidden])").length;
+                const municipalityCount = state.querySelectorAll("[data-territory-municipality]:not([hidden])").length;
+                state.hidden = stateCount === 0;
+                const countLabel = state.querySelector("[data-territory-state-count]");
+                if (countLabel) {
+                  countLabel.textContent = stateCount
+                    + (stateCount === 1 ? " sucursal · " : " sucursales · ")
+                    + municipalityCount
+                    + (municipalityCount === 1 ? " municipio" : " municipios");
+                }
+              });
+              const result = panel.querySelector("[data-sucursales-results]");
+              if (result) result.textContent = visibleCount + (visibleCount === 1 ? " sucursal disponible" : " sucursales disponibles");
+            };
+            sucursales.querySelectorAll("[data-sucursales-company]").forEach((panel) => {
+              panel.querySelectorAll("[data-sucursales-filter]").forEach((input) => {
+                input.addEventListener("input", () => applyFilters(panel));
+                input.addEventListener("change", () => applyFilters(panel));
+              });
+              panel.querySelector("[data-sucursales-filter-reset]")?.addEventListener("click", () => {
+                panel.querySelectorAll("[data-sucursales-filter]").forEach((input) => { input.value = ""; });
+                panel.querySelectorAll("details").forEach((detail) => { detail.open = false; });
+                applyFilters(panel);
+              });
+              applyFilters(panel);
+            });
+          }
+        })();
+      </script>
       ${calendarBootstrap}
       <script>
         (function () {
@@ -6723,7 +9434,7 @@ async function renderDashboardPage({
             button.setAttribute("aria-busy", "true");
             try {
               const scope = button.dataset.refreshScope || "portal";
-              await refreshAppShellCache(scope, { reload: true, quiet: false });
+              await window.refreshAppShellCache(scope, { reload: true, quiet: false });
             } catch (error) {
               alert(error instanceof Error ? error.message : "No se pudo actualizar la cachÃ©.");
             } finally {
@@ -6799,6 +9510,37 @@ async function requireUser(req, res) {
     return null;
   }
   return user;
+}
+
+function getUserAccessProfile(user = {}) {
+  return user?.accessProfile || resolvePortalAccessProfile(user);
+}
+
+function hasPortalCapability(user, view, action = "view") {
+  return canUsePortalView({ ...user, accessProfile: getUserAccessProfile(user) }, view, action);
+}
+
+function canUseGlobalScope(user, view) {
+  return canViewAllForPortalView({ ...user, accessProfile: getUserAccessProfile(user) }, view);
+}
+
+function canMutateGlobalScope(user, view) {
+  return getPortalViewPermission({ ...user, accessProfile: getUserAccessProfile(user) }, view).scope === "all";
+}
+
+function canAccessEmployeeScope(user, targetEmployee, view) {
+  if (!user || !targetEmployee) return false;
+  return String(user.rowId || "") === String(targetEmployee.rowId || "") || canUseGlobalScope(user, view);
+}
+
+function rejectCapability(res, message = "No tienes permiso para realizar esta accion.") {
+  res.status(403).type("html").send(renderLoginPage(message));
+}
+
+function setNoStore(res) {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
 }
 
 homeRouter.get("/", async (req, res) => {
@@ -6916,6 +9658,193 @@ homeRouter.get("/api/auth/me", async (req, res) => {
   res.json({ ok: true, user: getEmployeeSummary(user) });
 });
 
+homeRouter.get("/api/portal/calendar", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+  if (!hasPortalCapability(user, "calendario", "view")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para ver el calendario." });
+    return;
+  }
+  const employees = await listEmployeesForPortal({ runAsUserEmail: user.correo });
+  const requestedEmployeeId = String(req.query.employee || "").trim();
+  const selectedEmployee = employees.find((employee) => employee.rowId === requestedEmployeeId) || user;
+  if (!canAccessEmployeeScope(user, selectedEmployee, "calendario")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para ver ese calendario." });
+    return;
+  }
+  const data = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee });
+  const returnPath = String(req.query.returnTo || "/dashboard").trim();
+  const events = [
+    ...data.calendarCapacitaciones.map((capacitacion) => buildCapacitacionCalendarEvent(capacitacion, selectedEmployee.rowId, returnPath)),
+    ...data.birthdayEvents,
+    ...data.calendarNotes.map((note) => buildCalendarNoteEvent(note, selectedEmployee.rowId, returnPath)),
+  ].filter(Boolean);
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ ok: true, generatedAt: new Date().toISOString(), events });
+});
+
+homeRouter.get("/api/portal/bootstrap", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    home: portalPath("/dashboard"),
+    defaultView: "calendario",
+    user: getEmployeeSummary(user),
+  });
+});
+
+homeRouter.get("/api/portal/capacitaciones", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+  if (!hasPortalCapability(user, "capacitaciones", "view")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para ver capacitaciones." });
+    return;
+  }
+  const employees = await listEmployeesForPortal({ runAsUserEmail: user.correo });
+  const requestedEmployeeId = String(req.query.employee || "").trim();
+  const selectedEmployee = employees.find((employee) => employee.rowId === requestedEmployeeId) || user;
+  if (!canAccessEmployeeScope(user, selectedEmployee, "capacitaciones")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para ver esas capacitaciones." });
+    return;
+  }
+  const data = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee });
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    selectedEmployee: getEmployeeSummary(selectedEmployee),
+    capabilities: getUserAccessProfile(user)?.views?.capacitaciones || { actions: [], scope: "none" },
+    counts: {
+      total: data.visible.length,
+      programadas: data.visible.filter((item) => item.statusSuffix === "PROGRAMADA").length,
+      finalizadas: data.visible.filter((item) => item.statusSuffix === "FINALIZADA").length,
+      sinDiplomas: data.finalizadasSinDiplomas.length,
+    },
+    rows: data.visible.map((item) => ({
+      id: item.rowId,
+      date: item.dateRaw,
+      dateLabel: item.dateLabel,
+      status: item.statusSuffix,
+      statusLabel: item.statusLabel,
+      sedeId: item.cede,
+      sede: item.cedeLabel,
+      horaInicio: item.horaInicio,
+      horaFin: item.horaFin,
+      diplomas: item.hasDiplomas,
+      sucursales: getCapacitacionSucursalesItems(item),
+      capacitadores: item.capacitadores || [],
+      notasHistoricas: item.notas || "",
+      threadNotes: item.threadNotes || [],
+    })),
+  });
+});
+
+homeRouter.get("/api/portal/empresas", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+  if (!hasPortalCapability(user, "informacion-sucursales", "view")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para ver empresas y sucursales." });
+    return;
+  }
+  const [empresas, sucursales] = await Promise.all([
+    listEmpresasForPortal(),
+    listSucursalesForPortal({ runAsUserEmail: user.correo }),
+  ]);
+  const requestedId = String(req.query.id || "").trim();
+  const filteredEmpresas = requestedId ? empresas.filter((empresa) => empresa.key === requestedId) : empresas;
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    rows: filteredEmpresas.map((empresa) => ({
+      ...empresa,
+      sucursales: sucursales.filter((sucursal) => String(
+        sucursal?.raw?.empresa_id
+          || sucursal?.raw?.EMPRESA
+          || sucursal?.raw?.["ID EMPRESA"]
+          || "",
+      ).trim() === empresa.key),
+    })),
+  });
+});
+
+homeRouter.get("/api/portal/pedidos", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+  if (!hasPortalCapability(user, "pedidos", "view")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para ver pedidos." });
+    return;
+  }
+  try {
+    const data = await fetchPedidosLeyAdminDashboardData({
+      year: String(req.query.year || "").trim(),
+      forceRefresh: String(req.query.refresh || "") === "1",
+      facturadorId: String(req.query.facturadorId || "").trim() || undefined,
+      thresholds: {
+        estatalMin: req.query.estatalMin,
+        municipalMin: req.query.municipalMin,
+      },
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ ok: true, generatedAt: new Date().toISOString(), data });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "No se pudieron cargar los pedidos." });
+  }
+});
+
+homeRouter.get("/api/portal/notas", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+  if (!hasPortalCapability(user, "notas", "view")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para ver notas." });
+    return;
+  }
+  const data = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user });
+  const visibleIds = data.visible.map((item) => item.rowId);
+  const capacitacionNotes = listPortalNotes({ entityType: "capacitacion", entityIds: visibleIds });
+  const calendarNotes = data.calendarNotes.map((note) => ({
+    id: `calendar:${note.rowId}`,
+    entityType: "calendario",
+    entityId: note.rowId,
+    authorId: note.authorId || "",
+    authorName: note.authorName || note.author || "Sin autor registrado",
+    authorEmail: note.authorEmail || "",
+    body: note.notes || note.title || "",
+    createdAt: note.dateRaw || "",
+    updatedAt: note.dateRaw || "",
+    mentions: note.audienceAll ? ["TODOS"] : (note.employeeKeys || []),
+    title: note.title || "Nota",
+  }));
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    rows: [...calendarNotes, ...capacitacionNotes]
+      .sort((left, right) => String(left.createdAt || "").localeCompare(String(right.createdAt || ""))),
+  });
+});
+
 homeRouter.get("/api/auth/logout", async (req, res) => {
   res.setHeader("Set-Cookie", [
     buildClearCookieHeader({ secure: isRequestSecure(req) }),
@@ -6953,26 +9882,108 @@ homeRouter.post("/dashboard/cache/refresh", async (req, res) => {
   }
 });
 
-homeRouter.get("/dashboard", async (req, res) => {
+homeRouter.get("/dashboard/empresas/:empresaId/logo", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  try {
+    const logo = await getEmpresaLogoForPortal(req.params.empresaId);
+    if (!logo) {
+      res.status(404).end();
+      return;
+    }
+    res.set("Cache-Control", "private, max-age=3600");
+    res.type(logo.contentType).send(logo.bytes);
+  } catch (error) {
+    console.warn("No se pudo cargar el logo de empresa:", error instanceof Error ? error.message : error);
+    res.status(404).end();
+  }
+});
+
+homeRouter.get("/dashboard/territorios/:kind/:territoryId/escudo", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).end();
+    return;
+  }
+  const shield = await getTerritoryShieldForPortal(req.params.kind, req.params.territoryId);
+  if (!shield) {
+    res.status(404).end();
+    return;
+  }
+  res.set("Cache-Control", "private, max-age=86400");
+  res.type(shield.contentType).send(shield.bytes);
+});
+
+homeRouter.get("/dashboard/empresas/:empresaId", async (req, res) => {
+  setNoStore(res);
   const user = await requireUser(req, res);
   if (!user) {
     res.redirect("/login");
     return;
   }
 
-  const [employees, dashboardData, pedidosData] = await Promise.all([
+  const [employees, dashboardData, sucursales, empresas] = await Promise.all([
     listEmployeesForPortal({ runAsUserEmail: user.correo }),
     getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
-    user.role === "admin"
-      ? fetchPedidosLeyAdminDashboardData({ year: new Date().getFullYear() }).catch(() => null)
-      : Promise.resolve(null),
+    listSucursalesForPortal({ runAsUserEmail: user.correo }),
+    listEmpresasForPortal(),
+  ]);
+  const selectedEmpresaId = String(req.params.empresaId || "").trim();
+  if (!empresas.some((empresa) => empresa.key === selectedEmpresaId)) {
+    res.status(404).type("html").send(renderLoginPage("No encontramos la empresa solicitada."));
+    return;
+  }
+
+  res.type("html").send(await renderDashboardPage({
+    user,
+    employees,
+    dashboardData,
+    sucursales,
+    empresas,
+    selectedEmpresaId,
+    initialTabId: "sucursales",
+    returnPath: `/dashboard/empresas/${encodeURIComponent(selectedEmpresaId)}`,
+    calendarPath: req.path,
+    calendarQuery: req.query,
+  }));
+});
+
+homeRouter.get("/dashboard", async (req, res) => {
+  setNoStore(res);
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.redirect("/login");
+    return;
+  }
+  if (String(req.query.tab || "").trim().toLowerCase() === "pedidos") {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(req.query || {})) {
+      if (key === "tab" || value === undefined || value === null) continue;
+      const values = Array.isArray(value) ? value : [value];
+      values.forEach((item) => query.append(key, String(item)));
+    }
+    const suffix = query.toString();
+    res.redirect(302, `/dashboard/pedidos${suffix ? `?${suffix}` : ""}`);
+    return;
+  }
+  if (!hasPortalCapability(user, "calendario", "view")) {
+    rejectCapability(res, "Tu puesto no tiene acceso al portal operativo.");
+    return;
+  }
+
+  const [employees, dashboardData, sucursales] = await Promise.all([
+    listEmployeesForPortal({ runAsUserEmail: user.correo }),
+    getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
+    listSucursalesForPortal({ runAsUserEmail: user.correo }),
   ]);
   const calendarView = normalizeCalendarView(req.query.calendar);
   res.type("html").send(await renderDashboardPage({
     user,
     employees,
     dashboardData,
-    pedidosData,
+    sucursales,
+    selectedCapacitacionId: req.query.capacitacion,
+    initialTabId: req.query.tab,
     returnPath: "/dashboard",
     calendarView,
     calendarPath: req.path,
@@ -6981,15 +9992,17 @@ homeRouter.get("/dashboard", async (req, res) => {
 });
 
 homeRouter.get("/dashboard/capacitador/:rowId", async (req, res) => {
+  setNoStore(res);
   const user = await requireUser(req, res);
   if (!user) {
     res.redirect("/login");
     return;
   }
 
-  const [employees, dashboardData] = await Promise.all([
+  const [employees, dashboardData, sucursales] = await Promise.all([
     listEmployeesForPortal({ runAsUserEmail: user.correo }),
     getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
+    listSucursalesForPortal({ runAsUserEmail: user.correo }),
   ]);
   const target = employees.find((item) => item.rowId === String(req.params.rowId || ""));
   if (!target) {
@@ -6997,7 +10010,7 @@ homeRouter.get("/dashboard/capacitador/:rowId", async (req, res) => {
     return;
   }
 
-  if (user.role !== "admin" && user.rowId !== target.rowId) {
+  if (!hasPortalCapability(user, "calendario", "view") || !canAccessEmployeeScope(user, target, "calendario")) {
     res.status(403).type("html").send(renderLoginPage("No tienes permiso para abrir ese dashboard."));
     return;
   }
@@ -7007,7 +10020,10 @@ homeRouter.get("/dashboard/capacitador/:rowId", async (req, res) => {
     user,
     employees,
     dashboardData,
+    sucursales,
     selectedEmployee: target,
+    selectedCapacitacionId: req.query.capacitacion,
+    initialTabId: req.query.tab,
     returnPath: `/dashboard/capacitador/${encodeURIComponent(target.rowId)}`,
     calendarView,
     calendarPath: req.path,
@@ -7016,15 +10032,17 @@ homeRouter.get("/dashboard/capacitador/:rowId", async (req, res) => {
 });
 
 homeRouter.get("/dashboard/capacitacion/:rowId", async (req, res) => {
+  setNoStore(res);
   const user = await requireUser(req, res);
   if (!user) {
     res.redirect("/login");
     return;
   }
 
-  const [employees, dashboardData] = await Promise.all([
+  const [employees, dashboardData, sucursales] = await Promise.all([
     listEmployeesForPortal({ runAsUserEmail: user.correo }),
     getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
+    listSucursalesForPortal({ runAsUserEmail: user.correo }),
   ]);
   const employeeParam = String(req.query.employee || "").trim();
   const targetEmployee = employees.find((item) => item.rowId === employeeParam) || user;
@@ -7032,7 +10050,7 @@ homeRouter.get("/dashboard/capacitacion/:rowId", async (req, res) => {
   const safeReturnTo = returnTo.startsWith("/") ? returnTo : (targetEmployee.rowId === user.rowId ? "/dashboard" : `/dashboard/capacitador/${encodeURIComponent(targetEmployee.rowId)}`);
   const calendarView = normalizeCalendarView(req.query.calendar);
 
-  if (user.role !== "admin" && targetEmployee.rowId !== user.rowId) {
+  if (!hasPortalCapability(user, "capacitaciones", "view") || !canAccessEmployeeScope(user, targetEmployee, "capacitaciones")) {
     res.status(403).type("html").send(renderLoginPage("No tienes permiso para abrir ese detalle."));
     return;
   }
@@ -7041,6 +10059,7 @@ homeRouter.get("/dashboard/capacitacion/:rowId", async (req, res) => {
     user,
     employees,
     dashboardData,
+    sucursales,
     selectedEmployee: targetEmployee,
     selectedCapacitacionId: req.params.rowId,
     returnPath: safeReturnTo,
@@ -7061,7 +10080,7 @@ homeRouter.get("/dashboard/faltantes-ley-panel", async (req, res) => {
   const employeeId = String(req.query.employee || "").trim();
   const selectedEmployee = employees.find((item) => item.rowId === employeeId) || user;
 
-  if (user.role !== "admin" && selectedEmployee.rowId !== user.rowId) {
+  if (!hasPortalCapability(user, "constancias-faltantes", "view") || !canAccessEmployeeScope(user, selectedEmployee, "constancias-faltantes")) {
     res.status(403).type("html").send(renderLoginPage("No tienes permiso para ver estos faltantes."));
     return;
   }
@@ -7079,27 +10098,29 @@ homeRouter.get("/dashboard/faltantes-ley-panel", async (req, res) => {
 });
 
 homeRouter.get("/dashboard/general", async (req, res) => {
+  setNoStore(res);
   const user = await requireUser(req, res);
   if (!user) {
     res.redirect("/login");
     return;
   }
-  if (user.role !== "admin") {
+  if (!canUseGlobalScope(user, "calendario")) {
     res.redirect("/dashboard");
     return;
   }
 
-  const [employees, dashboardData, pedidosData] = await Promise.all([
+  const [employees, dashboardData, sucursales] = await Promise.all([
     listEmployeesForPortal({ runAsUserEmail: user.correo }),
     getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user }),
-    fetchPedidosLeyAdminDashboardData({ year: new Date().getFullYear() }).catch(() => null),
+    listSucursalesForPortal({ runAsUserEmail: user.correo }),
   ]);
   const calendarView = normalizeCalendarView(req.query.calendar);
   res.type("html").send(await renderDashboardPage({
     user,
     employees,
     dashboardData,
-    pedidosData,
+    sucursales,
+    selectedCapacitacionId: req.query.capacitacion,
     returnPath: "/dashboard/general",
     calendarView,
     calendarPath: req.path,
@@ -7108,13 +10129,14 @@ homeRouter.get("/dashboard/general", async (req, res) => {
 });
 
 homeRouter.get("/dashboard/pedidos", async (req, res) => {
+  setNoStore(res);
   const user = await requireUser(req, res);
   if (!user) {
     res.redirect("/login");
     return;
   }
 
-  if (user.role !== "admin") {
+  if (!hasPortalCapability(user, "pedidos", "view")) {
     res.status(403).type("html").send(renderLoginPage("Solo los administradores pueden abrir pedidos."));
     return;
   }
@@ -7149,7 +10171,7 @@ homeRouter.get("/dashboard/pedidos/panel", async (req, res) => {
     return;
   }
 
-  if (user.role !== "admin") {
+  if (!hasPortalCapability(user, "pedidos", "view")) {
     res.status(403).type("html").send(renderLoginPage("Solo los administradores pueden abrir pedidos."));
     return;
   }
@@ -7216,6 +10238,10 @@ homeRouter.post("/dashboard/capacitaciones/:rowId/status", async (req, res) => {
     res.redirect("/login");
     return;
   }
+  if (!hasPortalCapability(user, "capacitaciones", "edit")) {
+    rejectCapability(res, "No tienes permiso para editar capacitaciones.");
+    return;
+  }
 
   const targetRowId = String(req.params.rowId || "").trim();
   const nextStatus = String(req.body?.status || "").trim();
@@ -7223,7 +10249,7 @@ homeRouter.post("/dashboard/capacitaciones/:rowId/status", async (req, res) => {
   const safeReturnTo = returnTo.startsWith("/") ? returnTo : "/dashboard";
 
   try {
-    if (user.role !== "admin") {
+    if (!canUseGlobalScope(user, "capacitaciones")) {
       const { programadas: visibleCapacitaciones } = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user });
       const target = visibleCapacitaciones.find((item) => item.rowId === targetRowId);
       if (!target) {
@@ -7245,6 +10271,10 @@ homeRouter.post("/dashboard/capacitaciones/:rowId/diplomas", async (req, res) =>
     res.redirect("/login");
     return;
   }
+  if (!hasPortalCapability(user, "crear-constancias-por-capacitacion", "edit")) {
+    rejectCapability(res, "No tienes permiso para cambiar el estado de diplomas.");
+    return;
+  }
 
   const targetRowId = String(req.params.rowId || "").trim();
   const returnTo = String(req.body?.returnTo || "/dashboard").trim();
@@ -7252,7 +10282,7 @@ homeRouter.post("/dashboard/capacitaciones/:rowId/diplomas", async (req, res) =>
   const nextValue = String(req.body?.diplomas || "Y").trim().toUpperCase() === "Y";
 
   try {
-    if (user.role !== "admin") {
+    if (!canUseGlobalScope(user, "crear-constancias-por-capacitacion")) {
       const { visible } = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user });
       const target = visible.find((item) => item.rowId === targetRowId);
       if (!target) {
@@ -7274,6 +10304,10 @@ homeRouter.post("/dashboard/capacitaciones/:rowId/notas", async (req, res) => {
     res.redirect("/login");
     return;
   }
+  if (!hasPortalCapability(user, "notas", "create")) {
+    rejectCapability(res, "No tienes permiso para agregar notas.");
+    return;
+  }
 
   const targetRowId = String(req.params.rowId || "").trim();
   const returnTo = String(req.body?.returnTo || "/dashboard").trim();
@@ -7281,7 +10315,7 @@ homeRouter.post("/dashboard/capacitaciones/:rowId/notas", async (req, res) => {
   const notas = String(req.body?.notas || "").trim();
 
   try {
-    if (user.role !== "admin") {
+    if (!canUseGlobalScope(user, "capacitaciones")) {
       const { visible } = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user });
       const target = visible.find((item) => item.rowId === targetRowId);
       if (!target) {
@@ -7290,9 +10324,14 @@ homeRouter.post("/dashboard/capacitaciones/:rowId/notas", async (req, res) => {
       }
     }
 
-    await updateCapacitacionNotas(targetRowId, notas, user.correo);
+    const note = createPortalNoteEntry({
+      entityType: "capacitacion",
+      entityId: targetRowId,
+      body: notas,
+      author: user,
+    });
     if (String(req.headers["x-requested-with"] || "").toLowerCase() === "fetch") {
-      res.json({ ok: true, notas });
+      res.json({ ok: true, note });
       return;
     }
     res.redirect(safeReturnTo);
@@ -7305,10 +10344,79 @@ homeRouter.post("/dashboard/capacitaciones/:rowId/notas", async (req, res) => {
   }
 });
 
+homeRouter.post("/dashboard/notas/:noteId/editar", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+  if (!hasPortalCapability(user, "notas", "edit")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para editar notas." });
+    return;
+  }
+  const noteId = String(req.params.noteId || "").trim();
+  const note = listPortalNotes().find((item) => item.id === noteId);
+  if (!note) {
+    res.status(404).json({ ok: false, error: "La nota no existe." });
+    return;
+  }
+  const isAuthor = [note.authorId, note.authorEmail]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .some((value) => value && (value === String(user.rowId || "").trim().toLowerCase()
+      || value === String(user.correo || "").trim().toLowerCase()));
+  if (!isAuthor && !getUserAccessProfile(user)?.allPermissions) {
+    res.status(403).json({ ok: false, error: "Solo el creador puede editar esta nota." });
+    return;
+  }
+  try {
+    const updated = updatePortalNoteEntry(noteId, req.body?.notas || req.body?.body || "");
+    res.json({ ok: true, note: updated });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error instanceof Error ? error.message : "No se pudo editar la nota." });
+  }
+});
+
+homeRouter.post("/dashboard/notas/:noteId/eliminar", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "No autenticado" });
+    return;
+  }
+  if (!hasPortalCapability(user, "notas", "delete")) {
+    res.status(403).json({ ok: false, error: "No tienes permiso para eliminar notas." });
+    return;
+  }
+  const noteId = String(req.params.noteId || "").trim();
+  const note = listPortalNotes().find((item) => item.id === noteId);
+  if (!note) {
+    res.status(404).json({ ok: false, error: "La nota no existe." });
+    return;
+  }
+  const isAuthor = [note.authorId, note.authorEmail]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .some((value) => value && (value === String(user.rowId || "").trim().toLowerCase()
+      || value === String(user.correo || "").trim().toLowerCase()));
+  if (!isAuthor && !getUserAccessProfile(user)?.allPermissions) {
+    res.status(403).json({ ok: false, error: "Solo el creador puede eliminar esta nota." });
+    return;
+  }
+  try {
+    deletePortalNoteEntry(noteId);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error instanceof Error ? error.message : "No se pudo eliminar la nota." });
+  }
+});
+
 homeRouter.post("/dashboard/calendario/notas", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) {
     res.redirect("/login");
+    return;
+  }
+  const noteAction = String(req.body?.rowId || "").trim() ? "edit" : "create";
+  if (!hasPortalCapability(user, "notas", noteAction)) {
+    rejectCapability(res, `No tienes permiso para ${noteAction === "edit" ? "editar" : "crear"} notas.`);
     return;
   }
 
@@ -7326,9 +10434,24 @@ homeRouter.post("/dashboard/calendario/notas", async (req, res) => {
   const safeReturnTo = returnTo.startsWith("/") ? returnTo : "/dashboard";
 
   try {
-    if (user.role !== "admin" && empleados.length > 0 && !empleados.map((item) => String(item || "").trim()).includes(user.rowId)) {
+    if (!canMutateGlobalScope(user, "notas") && empleados.length > 0 && !empleados.map((item) => String(item || "").trim()).includes(user.rowId)) {
       res.status(403).type("html").send(renderLoginPage("Solo puedes crear notas etiquetándote a ti mismo o desde un perfil de admin."));
       return;
+    }
+
+    if (targetRowId && !canMutateGlobalScope(user, "notas")) {
+      const { calendarNotes = [] } = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user });
+      const targetNote = calendarNotes.find((note) => String(note?.rowId || "") === targetRowId);
+      const authorKeys = [targetNote?.authorId, targetNote?.authorEmail]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+      const currentUserKeys = [user.rowId, user.correo]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+      if (!targetNote || !authorKeys.some((key) => currentUserKeys.includes(key))) {
+        res.status(403).type("html").send(renderLoginPage("Solo el creador puede editar esta nota."));
+        return;
+      }
     }
 
     const note = await upsertCalendarNote({
@@ -7338,6 +10461,11 @@ homeRouter.post("/dashboard/calendario/notas", async (req, res) => {
       notes: notas,
       icon: icono,
       employees: empleados,
+      author: {
+        rowId: user.rowId,
+        nombre: user.nombre,
+        correo: user.correo,
+      },
     }, user.correo);
 
     if (String(req.headers["x-requested-with"] || "").toLowerCase() === "fetch") {
@@ -7361,6 +10489,10 @@ homeRouter.post("/dashboard/calendario/notas/eliminar", async (req, res) => {
     res.redirect("/login");
     return;
   }
+  if (!hasPortalCapability(user, "notas", "delete")) {
+    rejectCapability(res, "No tienes permiso para eliminar notas.");
+    return;
+  }
 
   const targetRowId = String(req.body?.rowId || "").trim();
   const returnTo = String(req.body?.returnTo || "/dashboard").trim();
@@ -7369,6 +10501,23 @@ homeRouter.post("/dashboard/calendario/notas/eliminar", async (req, res) => {
   try {
     if (!targetRowId) {
       throw new Error("No se pudo identificar la nota a eliminar.");
+    }
+
+    const { calendarNotes = [] } = await getCapacitacionesDashboardData({ viewer: user, selectedEmployee: user });
+    const targetNote = calendarNotes.find((note) => String(note?.rowId || "") === targetRowId);
+    if (!targetNote) {
+      res.status(404).type("html").send(renderLoginPage("La nota ya no existe o no esta disponible."));
+      return;
+    }
+    const isAuthor = [targetNote.authorId, targetNote.authorEmail]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean)
+      .some((value) => value === String(user.rowId || "").trim().toLowerCase()
+        || value === String(user.correo || "").trim().toLowerCase());
+    const canDeleteAny = Boolean(getUserAccessProfile(user)?.allPermissions);
+    if (!isAuthor && !canDeleteAny) {
+      rejectCapability(res, "Solo el creador de la nota puede eliminarla.");
+      return;
     }
 
     await deleteCalendarNote({ rowId: targetRowId }, user.correo);

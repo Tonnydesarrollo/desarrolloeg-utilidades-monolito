@@ -4,7 +4,7 @@ import path from "path";
 import https from "https";
 import { fileURLToPath } from "url";
 import sharp from "sharp";
-import { mapaSucursales } from "../facturacion/services/appsheet.js";
+import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -199,37 +199,22 @@ async function postJsonWithRetry(url, options) {
 }
 
 async function leerTablaAppSheet(nombreTabla) {
-  if (!APPSHEET_APP_ID || !APPSHEET_API_KEY) {
-    return null;
+  return readLocalOperationalTable(nombreTabla);
+}
+
+async function mapaSucursales() {
+  const map = {};
+  for (const row of readLocalOperationalTable("SUCURSALES")) {
+    map[row.ID] = {
+      id: row.ID,
+      nombre: row.NOMBRE || row.LABEL || "",
+      tienda: row.TIENDA || "",
+      razonSocial: row["RAZON SOCIAL"] || "",
+      municipio: { nombre: row.MUNICIPIO_NOMBRE || "" },
+      estado: { nombre: row.ESTADO_NOMBRE || "" },
+    };
   }
-
-  const url = `https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/${encodeURIComponent(nombreTabla)}/Action`;
-  const body = {
-    Action: "Find",
-    Properties: {
-      Locale: "es-MX",
-      Timezone: "Central Standard Time",
-      UserSettings: {},
-    },
-    Rows: [],
-  };
-
-  const res = await withAppsheetConcurrency(() =>
-    fetchWithRetry(url, {
-      method: "POST",
-      headers: {
-        ApplicationAccessKey: APPSHEET_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    })
-  );
-
-  const text = await res.text();
-  if (!text) return [];
-
-  const data = JSON.parse(text);
-  return Array.isArray(data) ? data : (data.Rows || data.rows || []);
+  return map;
 }
 
 function formatDate(value) {
@@ -250,7 +235,11 @@ function compact(value) {
 }
 
 function buildRowView(row, sucursal) {
-  const razonSocial = String(readField(row, ["contribuyente_razon_social", "RAZON SOCIAL", "RAZON_SOCIAL"]) || "").trim();
+  const razonSocial = String(
+    readField(row, ["contribuyente_razon_social", "RAZON SOCIAL", "RAZON_SOCIAL"]) ||
+      sucursal?.razonSocial ||
+      ""
+  ).trim();
   const sucursalNombre = String(
     readField(row, ["sucursal_nombre_comercial", "SUCURSAL_NOMBRE_COMERCIAL", "sucursal_nombre", "SUCURSAL"]) ||
       sucursal?.nombre ||
@@ -883,10 +872,6 @@ export async function obtenerSolventacionesCompleto(query = {}) {
     municipio: String(query.municipio || query.MUNICIPIO || "").trim(),
   };
 
-  if (!APPSHEET_APP_ID || !APPSHEET_API_KEY) {
-    throw new Error("Faltan credenciales AppSheet para Solventaciones");
-  }
-
   const [rowsRaw, sucursalesMap] = await Promise.all([
     leerTablaAppSheet(APPSHEET_TABLE),
     mapaSucursales(),
@@ -1067,7 +1052,7 @@ export async function obtenerSolventacionesCompleto(query = {}) {
   }
 
   return {
-    source: "appsheet",
+    source: "sqlite-local",
     generatedAt: new Date().toISOString(),
     tableName: APPSHEET_TABLE,
     company: {

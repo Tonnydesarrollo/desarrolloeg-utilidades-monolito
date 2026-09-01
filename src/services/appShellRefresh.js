@@ -33,6 +33,21 @@ export async function refreshAppShellCaches({ scope = "all", runAsUserEmail = ""
         results,
       };
     }
+
+    return {
+      ok: true,
+      scope: normalizedScope,
+      mode: "audit",
+      skipped: true,
+      reason: auditResult?.reason || auditResult?.error || "audit_reconcile_not_available",
+      results: [
+        {
+          scope: normalizedScope,
+          mode: "audit",
+          ...(auditResult || {}),
+        },
+      ],
+    };
   }
 
   if (normalizedScope === "portal" || normalizedScope === "all") {

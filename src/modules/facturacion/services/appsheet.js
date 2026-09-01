@@ -8,6 +8,7 @@ import {
   getPersistentCacheEntry,
   setPersistentCacheEntry,
 } from "../../../services/platformCache.js";
+import { readLocalOperationalTable } from "../../../services/localOperationalRepository.js";
 
 const drive = crearDriveClient(auth);
 const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 60000);
@@ -93,8 +94,11 @@ function getTableCacheNamespace(nombreTabla) {
 }
 
 function readPersistentRows(nombreTabla) {
-  const entry = getPersistentCacheEntry(getTableCacheNamespace(nombreTabla), "shared", { allowStale: true });
-  return Array.isArray(entry?.payload?.rows) ? entry.payload.rows : [];
+  return readLocalOperationalTable(nombreTabla, {
+    source: ["CATALOGO", "PROVEEDORES", "COTIZACIONES_VARIOS_CT", "CONCEPTOS_VARIOS_CT"].includes(String(nombreTabla).toUpperCase())
+      ? "finance"
+      : "desarrolloeg",
+  });
 }
 
 function persistTableRows(nombreTabla, rows, ttlMs = APPSHEET_CACHE_TTL_MS) {
@@ -112,10 +116,8 @@ function persistTableRows(nombreTabla, rows, ttlMs = APPSHEET_CACHE_TTL_MS) {
 }
 
 function readPersistentCotizacion(cotizacionId) {
-  const wantedId = String(cotizacionId || "").trim();
-  if (!wantedId) return null;
-  const entry = getPersistentCacheEntry(COTIZACION_CACHE_NAMESPACE, wantedId, { allowStale: true });
-  return entry?.payload || null;
+  void cotizacionId;
+  return null;
 }
 
 function persistPersistentCotizacion(cotizacionId, payload, ttlMs = APPSHEET_CACHE_TTL_MS) {
@@ -146,37 +148,11 @@ async function fetchWithRetry(url, options) {
 }
 
 async function leerTablaAppSheet(nombreTabla) {
-  const APP_ID = process.env.APPSHEET_APP_ID;
-  const API_KEY = process.env.APPSHEET_API_KEY;
-
-  if (!APP_ID || !API_KEY) {
-    throw new Error("Variables de entorno AppSheet no disponibles");
-  }
-
-  const url = `https://api.appsheet.com/api/v2/apps/${APP_ID}/tables/${encodeURIComponent(nombreTabla)}/Action`;
-  const body = {
-    Action: "Find",
-    Properties: {
-      Locale: "es-MX",
-      Timezone: "Central Standard Time",
-      UserSettings: {}
-    },
-    Rows: []
-  };
-
-  const res = await withAppsheetConcurrency(() => fetchWithRetry(url, {
-    method: "POST",
-    headers: {
-      ApplicationAccessKey: API_KEY,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  }));
-
-  const text = await res.text();
-  if (!text) return [];
-  const data = JSON.parse(text);
-  return Array.isArray(data) ? data : (data.Rows || []);
+  return readLocalOperationalTable(nombreTabla, {
+    source: ["CATALOGO", "PROVEEDORES", "COTIZACIONES_VARIOS_CT", "CONCEPTOS_VARIOS_CT"].includes(String(nombreTabla).toUpperCase())
+      ? "finance"
+      : "desarrolloeg",
+  });
 }
 
 async function leerTablaAppSheetCacheada(nombreTabla, ttlMs = APPSHEET_CACHE_TTL_MS) {
@@ -398,7 +374,7 @@ export async function mapaSucursales(forceFresh = false) {
     map[r.ID] = {
       id: r.ID,
       nombre: r.NOMBRE || "",
-      domicilio: r.DOMICILIO || "",
+      domicilio: r.DOMICILIO || r.DIRECCION || r["DIRECCION GOOGLE"] || "",
       tienda: r.TIENDA || "",
       municipio: mun,
       estado: est
@@ -502,7 +478,9 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
 
     const empresa = findEmpresaFromCotizacion(cotizacion, empresas);
 
-    if (empresa.logo && !empresa.logoUrl) {
+    if (empresa.logo && !empresa.logoUrl && /^https?:\/\//i.test(empresa.logo)) {
+      empresa.logoUrl = empresa.logo;
+    } else if (empresa.logo && !empresa.logoUrl) {
       try {
         const logoUrl = await construirThumbnailDesdeLogoPath(drive, empresa.logo);
         if (logoUrl) {
@@ -518,9 +496,17 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
 
     const proveedor = proveedores[cotizacion.PROVEEDOR] || null;
     const titulo = cotizacion.TITULO || cotizacion["TITULO"] || "";
-    const centroDeTrabajoRaw = cotizacion.CENTRO_DE_TRABAJO || cotizacion["CENTRO_DE_TRABAJO"] || cotizacion["CENTRO DE TRABAJO"] || "";
+    const centroDeTrabajoRaw = cotizacion.CENTRO_DE_TRABAJO
+      || cotizacion.CENTROS_DE_TRABAJO
+      || cotizacion["CENTRO DE TRABAJO"]
+      || cotizacion["CENTROS DE TRABAJO"]
+      || "";
     const formaPago = cotizacion.formaPago || cotizacion["Forma pago"] || cotizacion["Forma Pago"] || cotizacion["FORMA PAGO"] || cotizacion.paymentTerms || "";
-    const centroDeTrabajoIds = Array.isArray(centroDeTrabajoRaw) ? centroDeTrabajoRaw : String(centroDeTrabajoRaw).split(/[,;]+/g).map(v => v.trim()).filter(Boolean);
+    const centrosDesdeCotizacion = Array.isArray(centroDeTrabajoRaw)
+      ? centroDeTrabajoRaw
+      : String(centroDeTrabajoRaw).split(/[,;]+/g).map(v => v.trim()).filter(Boolean);
+    const centrosDesdeConceptos = conceptos.map(c => String(c.CENTRO_DE_TRABAJO || "").trim()).filter(Boolean);
+    const centroDeTrabajoIds = [...new Set([...centrosDesdeCotizacion, ...centrosDesdeConceptos])];
     const centroDeTrabajoCount = centroDeTrabajoIds.length;
     const centroDeTrabajoUnicoId = centroDeTrabajoCount === 1 ? centroDeTrabajoIds[0] : "";
     const centroDeTrabajoUnico = centroDeTrabajoUnicoId ? (sucursales[centroDeTrabajoUnicoId] || {}) : {};
@@ -563,7 +549,7 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
       empresaId: empresa.id || cotizacion["RAZON SOCIAL"] || "",
       empresa,
       cotizacion: {
-        id: cotizacion["Row ID"],
+        id: cotizacion["Row ID"] || cotizacion.ID || cacheKey,
         fecha: cotizacion.FECHA,
         proveedor,
         titulo,

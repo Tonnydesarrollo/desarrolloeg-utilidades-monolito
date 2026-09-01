@@ -35,13 +35,22 @@ try {
     }
   }
 
+  function Write-Log {
+    param([string]$Message)
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -LiteralPath $applyLogPath -Value "[$timestamp] $Message"
+  }
+
   Ensure-Directory $TargetDir
 
   $extractDir = Join-Path $TargetDir "package"
+  $portableDataDir = Join-Path $TargetDir "data"
+  $seedDbPath = Join-Path $extractDir "seed-data\desarrolloeg.sqlite"
   if (Test-Path $extractDir) {
     Remove-Item -Recurse -Force $extractDir
   }
   Ensure-Directory $extractDir
+  Ensure-Directory $portableDataDir
 
   Expand-Archive -Path $PackagePath -DestinationPath $extractDir -Force
 
@@ -56,11 +65,17 @@ try {
     }
   }
 
-  function Write-Log {
-    param([string]$Message)
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -LiteralPath $applyLogPath -Value "[$timestamp] $Message"
+  if (-not (Test-Path (Join-Path $portableDataDir "desarrolloeg.sqlite"))) {
+    $seedDbDir = Split-Path -Parent $seedDbPath
+    if (-not (Test-Path $seedDbPath)) {
+      throw "No se encontro la BD semilla: $seedDbPath"
+    }
+    Ensure-Directory $seedDbDir
+    Copy-Item -LiteralPath $seedDbPath -Destination (Join-Path $portableDataDir "desarrolloeg.sqlite") -Force
+    Write-Log "BD local semilla copiada a $portableDataDir"
   }
+
+  $env:DESARROLLOEG_PORTABLE_DATA_DIR = ([System.IO.Path]::GetFullPath($portableDataDir) -replace '\\', '/')
 
   Write-Log "Cargando imagenes desde $imagesTarPath"
   & $dockerExe load -i $imagesTarPath
