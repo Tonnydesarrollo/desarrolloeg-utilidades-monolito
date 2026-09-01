@@ -2383,14 +2383,15 @@ async function bootWhatsAppService(config) {
   serviceState.sessionDir = config.sessionDir;
   serviceState.lastError = null;
 
-  try {
-    await getDriveClient();
-    runtime.logger.info("drive auth ready");
-  } catch (error) {
-    runtime.logger.error(error, "drive auth error");
-  }
+  // Drive OAuth can require interactive consent. It must never block creation of
+  // the WhatsApp client or the QR needed to establish the primary session.
+  void getDriveClient()
+    .then(() => runtime.logger.info("drive auth ready"))
+    .catch((error) => runtime.logger.error(error, "drive auth error"));
 
-  await refreshAuthorizedNumbers();
+  void refreshAuthorizedNumbers().catch((error) => {
+    runtime.logger.error(error, "initial authorized numbers refresh error");
+  });
   scheduleAuthorizedNumbersRefresh();
 
   const maxInitializeAttempts = 3;
@@ -2534,23 +2535,7 @@ export async function stopWhatsAppCapacitadoresService() {
 }
 
 export async function restartWhatsAppCapacitadoresForQr() {
-  const config = getConfig();
-  const sessionRoot = config.sessionDir;
-
   await stopWhatsAppCapacitadoresService();
-
-  try {
-    await fs.promises.rm(sessionRoot, { recursive: true, force: true, maxRetries: 5 });
-  } catch (error) {
-    getLogger().warn({ error, sessionRoot }, "failed to clear whatsapp session root");
-  }
-
-  try {
-    fs.mkdirSync(sessionRoot, { recursive: true });
-  } catch (error) {
-    getLogger().warn({ error, sessionRoot }, "failed to recreate whatsapp session root");
-  }
-
   return startWhatsAppCapacitadoresService();
 }
 

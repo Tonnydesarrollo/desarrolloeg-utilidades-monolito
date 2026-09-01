@@ -798,7 +798,7 @@ whatsappCapacitadoresRouter.get("/qr", async (_req, res) => {
           <a class="button" href="/whatsapp-capacitadores">Volver al inicio</a>
           <a class="button" href="/whatsapp-capacitadores/health">Ver health</a>
           <form method="post" action="/whatsapp-capacitadores/qr/restart" style="display:inline;">
-            <button class="button" type="submit">Reiniciar sesión</button>
+            <button class="button" type="submit">Reiniciar conexión</button>
           </form>
           ${qrAvailable ? `<a class="button" href="/whatsapp-capacitadores/qr.png?t=${Date.now()}" target="_blank" rel="noreferrer">Abrir PNG</a>` : ""}
         </div>
@@ -829,7 +829,7 @@ whatsappCapacitadoresRouter.post("/qr/restart", async (_req, res) => {
   </head>
   <body>
     <main style="font-family:system-ui,sans-serif;padding:24px;max-width:900px;margin:0 auto;">
-      <h1>No se pudo reiniciar la sesión QR</h1>
+      <h1>No se pudo reiniciar la conexión QR</h1>
       <p>Intenta de nuevo en unos segundos o revisa el health del bot.</p>
       <pre>${escapeHtml(error instanceof Error ? error.message : String(error))}</pre>
       <p><a href="/whatsapp-capacitadores/qr">Volver al QR</a></p>
