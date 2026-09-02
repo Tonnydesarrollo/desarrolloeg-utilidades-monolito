@@ -2433,13 +2433,13 @@ export function deleteMunicipalesLocalRows(keys = []) {
 export function getCapacitacionSucursalesLocalRows() {
   initSchema();
   if (!isRetryWindowOpen()) return [];
-  return getDb()?.prepare(`SELECT * FROM capacitacion_sucursales ORDER BY id`).all() || [];
+  return getDb()?.prepare(`SELECT * FROM capacitacion_sucursales ORDER BY capacitacion_id, orden, sucursal_id`).all() || [];
 }
 
 export function getCapacitacionCapacitadoresLocalRows() {
   initSchema();
   if (!isRetryWindowOpen()) return [];
-  return getDb()?.prepare(`SELECT * FROM capacitacion_capacitadores ORDER BY id`).all() || [];
+  return getDb()?.prepare(`SELECT * FROM capacitacion_capacitadores ORDER BY capacitacion_id, orden, empleado_id`).all() || [];
 }
 
 export function getEmpresasLocalRows() {
@@ -2523,7 +2523,7 @@ export function getCotizacionesLocalRows() {
 export function getCotizacionCentrosTrabajoLocalRows() {
   initSchema();
   if (!isRetryWindowOpen()) return [];
-  return getDb()?.prepare(`SELECT * FROM cotizacion_centros_trabajo ORDER BY id`).all() || [];
+  return getDb()?.prepare(`SELECT * FROM cotizacion_centros_trabajo ORDER BY cotizacion_id, orden, sucursal_id`).all() || [];
 }
 
 export function getConceptosCotizacionLocalRows() {

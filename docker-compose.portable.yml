@@ -17,7 +17,7 @@ services:
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
       FACTURAS_NATIVE_DUMP_DIR: /app/runtime/jobs/facturas
       FACTURAS_SYNC_RUN_ON_START: ${FACTURAS_SYNC_RUN_ON_START:-0}
-      DESARROLLOEG_LOCAL_DB_PATH: /app/runtime/jobs/pedidos-local.sqlite
+      DESARROLLOEG_LOCAL_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
       PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
       PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json
       PEDIDOS_OUTPUT_DIR: /app/runtime/jobs/pedidos
@@ -85,7 +85,7 @@ services:
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
       FACTURAS_NATIVE_DUMP_DIR: /app/runtime/jobs/facturas
       FACTURAS_SYNC_RUN_ON_START: ${FACTURAS_SYNC_RUN_ON_START:-0}
-      DESARROLLOEG_LOCAL_DB_PATH: /app/runtime/jobs/pedidos-local.sqlite
+      DESARROLLOEG_LOCAL_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
       PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
       PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json
       PEDIDOS_OUTPUT_DIR: /app/runtime/jobs/pedidos
