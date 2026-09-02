@@ -44,6 +44,7 @@ const QA_ACCESS_EMAIL = normalizeEmail(process.env.PORTAL_QA_ACCESS_EMAIL || "")
 const QA_ACCESS_NAME = String(process.env.PORTAL_QA_ACCESS_NAME || "QA Admin").trim();
 const QA_ACCESS_PUESTO = String(process.env.PORTAL_QA_ACCESS_PUESTO || "MEJORA CONTINUA").trim();
 const QA_ACCESS_ROW_ID = String(process.env.PORTAL_QA_ACCESS_ROW_ID || "qa-access").trim();
+const DEV_AUTH_BYPASS_ENABLED = parseBoolean(process.env.PORTAL_DEV_AUTH_BYPASS);
 const SESSION_SECRET =
   process.env.PORTAL_AUTH_SECRET ||
   process.env.PORTAL_SESSION_SECRET ||
@@ -1694,6 +1695,45 @@ export function buildQaAccessEmployee() {
   };
 }
 
+function getRequestHostname(req) {
+  const rawHost = String(req?.headers?.host || "").trim().toLowerCase();
+  if (rawHost.startsWith("[")) {
+    return rawHost.slice(1, rawHost.indexOf("]"));
+  }
+  return rawHost.split(":")[0];
+}
+
+export function isDevelopmentAuthBypassRequest(req) {
+  if (!DEV_AUTH_BYPASS_ENABLED) return false;
+  if (String(process.env.APP_ENVIRONMENT || "").trim().toLowerCase() !== "dev") return false;
+  return ["localhost", "127.0.0.1", "::1"].includes(getRequestHostname(req));
+}
+
+function buildDevelopmentAccessEmployee() {
+  const correo = normalizeEmail(process.env.PORTAL_DEV_AUTH_EMAIL || QA_ACCESS_EMAIL || "dev@localhost");
+  const nombre = String(process.env.PORTAL_DEV_AUTH_NAME || "Desarrollo Local").trim();
+  const puesto = String(process.env.PORTAL_DEV_AUTH_PUESTO || "MEJORA CONTINUA").trim();
+  const accessProfile = resolvePortalAccessProfile({ puesto, capacita: false });
+  return {
+    rowId: String(process.env.PORTAL_DEV_AUTH_ROW_ID || "local-development").trim(),
+    correo,
+    nombre,
+    puesto,
+    role: accessProfile.role,
+    initials: buildInitialsFromName(nombre),
+    color: "",
+    calendarColor: "",
+    permiso: "",
+    firma: "",
+    telefono: "",
+    telefono2: "",
+    capacita: false,
+    cumpleanos: "",
+    accessProfile,
+    raw: null,
+  };
+}
+
 function isSecureRequest(req) {
   const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
   return req.secure || forwardedProto === "https";
@@ -1718,6 +1758,10 @@ export async function authenticateEmployeeByEmail(email) {
 }
 
 export async function loadAuthenticatedEmployee(req) {
+  if (isDevelopmentAuthBypassRequest(req)) {
+    return buildDevelopmentAccessEmployee();
+  }
+
   const cookies = parseCookies(req);
   const token = cookies[getSessionCookieName({ portalBasePath: req?.portalBasePath })];
   const payload = verifySessionToken(token);

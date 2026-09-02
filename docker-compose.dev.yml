@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 20s
     ports:
-      - "8788:8787"
+      - "127.0.0.1:8788:8787"
     env_file:
       - .env.dev.docker
     environment:
@@ -46,7 +46,7 @@ services:
       desarrolloeg-sync-dev:
         condition: service_healthy
     ports:
-      - "7001:7001"
+      - "127.0.0.1:7001:7001"
     env_file:
       - .env.dev.docker
     environment:
@@ -55,10 +55,14 @@ services:
       PORT: 7001
       CLUSTER_ENABLED: 0
       CLOUDFLARED_ENABLED: 0
+      PORTAL_DEV_AUTH_BYPASS: 1
+      PORTAL_DEV_AUTH_NAME: Desarrollo Local
+      PORTAL_DEV_AUTH_PUESTO: MEJORA CONTINUA
       PORTAL_SESSION_COOKIE_NAME: desarrolloeg_portal_session_dev
       PORTAL_GOOGLE_REDIRECT_URI: http://localhost:7001/auth/google/callback
       BOLSA_SYNC_WEBHOOK_TARGET: http://desarrolloeg-sync-dev:8787
       PUBLICIMG_PATH: /app/publicimg
+      DESARROLLOEG_LOCAL_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
       DESARROLLOEG_SYNC_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
       FACTURACION_GOOGLE_CREDENTIALS_PATH: /app/secrets/facturacion/credentials.json
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json

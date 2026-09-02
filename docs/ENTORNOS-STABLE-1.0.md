@@ -20,8 +20,11 @@ No se debe ejecutar el Compose de desarrollo en PC B ni desplegar automaticament
 - Runtime aislado: `runtime-dev`.
 - Configuracion privada: `.env.dev.docker`.
 - Compose: `docker-compose.dev.yml`.
+- Login local: omitido automaticamente solo en `localhost:7001` mediante `PORTAL_DEV_AUTH_BYPASS=1` y `APP_ENVIRONMENT=dev`.
 
 El sincronizador consulta AppSheet cada minuto y notifica al portal local cuando cambia la revision. Los bots de AppSheet siguen enviando sus webhooks publicos a PC B; PC A recupera esos mismos cambios mediante auditoria y reconciliacion, sin exponer un segundo webhook productivo.
+
+El bypass no acepta el dominio productivo ni hosts de red. Produccion conserva OAuth aun si alguien copiara accidentalmente la variable del entorno local.
 
 Los jobs automaticos de Casa Ley, Club Factura, pedidos y WhatsApp estan desactivados en PC A para evitar duplicar procesos externos. Las vistas y operaciones interactivas siguen usando la configuracion de AppSheet del entorno.
 
