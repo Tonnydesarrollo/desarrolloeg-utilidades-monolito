@@ -158,7 +158,7 @@ test("reporte Casa Ley usa trabajos vigentes y fallback de PC Estatal", async ()
     pedidosData: {},
     dashboardData: { visible: [], programadas: [], finalizadasSinDiplomas: [], birthdayEvents: [], calendarCapacitaciones: [], calendarNotes: [] },
   });
-  assert.match(html, /data-dashboard-tab="reporte-ley"/);
+  assert.match(html, /data-dashboard-tab-panel="reporte-ley"/);
   assert.match(html, /1176 SUPER LEY LA CANTERA/);
   assert.match(html, /Carmen Maria Salazar Villa/);
   assert.match(html, /ID 14350/);
@@ -192,7 +192,7 @@ test("constancias integra controles y generador en un mismo workbench", async ()
     },
   });
   assert.match(html, /<div class="constancias-workbench">\s*<aside class="constancias-workbench__controls">/);
-  assert.match(html, /<\/aside>\s*<div class="calendar-frame constancias-workbench__canvas">/);
+  assert.match(html, /<\/aside>\s*<div class="constancias-workbench__canvas">/);
   assert.match(html, /data-integrated-url="\/CONSTANCIAS\/capacitaciones\/cap-1\/HTML\?embed=1"/);
 });
 
@@ -204,12 +204,12 @@ test("capacitaciones muestra el detalle dentro de la tarjeta sin cambiar de ruta
     cedeLabel: "Sucursal Centro",
     dateRaw: "08/28/2026",
     dateLabel: "28/8/2026",
-    horaInicio: "09:00",
-    horaFin: "13:00",
+    horaInicio: "09:00:00",
+    horaFin: "13:00:00",
     notas: "Llevar material",
     hasDiplomas: false,
     statusSuffix: "PROGRAMADA",
-    statusLabel: "PROGRAMADA",
+    statusLabel: "QT - PROGRAMADA",
     capacitadores: [{ key: "qa-test", nombre: "QA Test" }],
     sucursales: [{ key: "sucursal-1", label: "Sucursal Centro" }],
   };
@@ -230,15 +230,21 @@ test("capacitaciones muestra el detalle dentro de la tarjeta sin cambiar de ruta
   const end = html.indexOf('data-constancias-studio', start);
   const panel = html.slice(start, end > start ? end : undefined);
 
-  assert.match(panel, /<details class="capacitacion-card capacitacion-card--expandable" data-keep-after-diplomas>/);
+  assert.match(panel, /<details class="capacitacion-card capacitacion-card--expandable is-programada" data-keep-after-diplomas>/);
   assert.match(panel, /<details class="accordion-card capacitaciones-group" data-capacitacion-group/);
   assert.match(panel, /class="capacitaciones-filter-bar"/);
   assert.match(panel, /data-capacitaciones-filter-reset/);
   assert.match(panel, /class="capacitacion-card__section capacitacion-card__branches"/);
   assert.match(panel, /class="capacitacion-card__section capacitacion-card__notes"/);
+  assert.match(panel, /class="capacitacion-note-compose"/);
+  assert.doesNotMatch(panel, /<details class="capacitacion-note-compose" open/);
   assert.doesNotMatch(panel, /<strong>Horario<\/strong>/);
   assert.doesNotMatch(panel, /<strong>Capacitadores<\/strong>/);
   assert.match(panel, /Llevar material/);
+  assert.match(panel, /09:00 - 13:00/);
+  assert.doesNotMatch(panel, /09:00:00|13:00:00/);
+  assert.match(panel, /<span class="status-chip is-programada">PROGRAMADA<\/span>/);
+  assert.doesNotMatch(panel, /\[object Object\]/);
   assert.match(panel, /returnTo" value="\/dashboard\?tab=capacitaciones"/);
   assert.doesNotMatch(panel, /\/dashboard\/capacitacion\/row-cap-1/);
   assert.doesNotMatch(panel, /<details[^>]*\sopen(?:\s|>)/i);

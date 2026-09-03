@@ -387,7 +387,8 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       background:rgba(15,23,42,.03);
       color:var(--ink);
       border-radius:999px;
-      padding:9px 13px;
+      min-height:44px;
+      padding:10px 14px;
       cursor:pointer;
       font-weight:800;
       font-size:12px;
@@ -430,6 +431,15 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     }
     tbody tr:nth-child(even) td { background:rgba(15,23,42,.015); }
     tbody tr:hover td { background:rgba(29,78,216,.05); }
+    .table-pager {
+      display:flex;
+      align-items:center;
+      min-height:44px;
+      justify-content:space-between;
+      gap:12px;
+      padding:0 16px 16px;
+    }
+    .table-pager__actions { display:flex; gap:8px; }
     .pedido-title { font-weight:900; font-size:13px; }
     .pedido-subtitle, .muted { color:var(--muted); }
     .stack { display:grid; gap:4px; }
@@ -567,6 +577,79 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       .page { padding:18px 12px 40px; }
       .hero { padding:18px; }
       .coverage-fold { margin-left:12px; margin-right:12px; }
+      .orders-table { min-width:0; }
+      .orders-table thead { display:none; }
+      .orders-table tbody,
+      .orders-table tr,
+      .orders-table td { display:block; width:100%; }
+      .orders-table tr[data-order-row] {
+        margin-bottom:14px;
+        overflow:hidden;
+        border:1px solid var(--line);
+        border-radius:18px;
+        background:#fff;
+        box-shadow:0 8px 24px rgba(15,23,42,.06);
+      }
+      .orders-table tr[data-order-row] td {
+        display:grid;
+        grid-template-columns:minmax(92px, .7fr) minmax(0, 1.3fr);
+        gap:12px;
+        align-items:start;
+        border-top:1px solid var(--line);
+        background:transparent;
+      }
+      .orders-table tr[data-order-row] td:first-child { border-top:0; }
+      .orders-table tr[data-order-row] td::before {
+        color:var(--muted);
+        font-size:10px;
+        font-weight:900;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+      }
+      .orders-table tr[data-order-row] td:nth-child(1)::before { content:"Pedido"; }
+      .orders-table tr[data-order-row] td:nth-child(2)::before { content:"Tipo"; }
+      .orders-table tr[data-order-row] td:nth-child(3)::before { content:"Sucursal"; }
+      .orders-table tr[data-order-row] td:nth-child(4)::before { content:"Municipio"; }
+      .orders-table tr[data-order-row] td:nth-child(5)::before { content:"Importe"; }
+      .orders-table tr[data-order-row] td:nth-child(6)::before { content:"Trabajos"; }
+      .orders-table tr[data-order-row] td:nth-child(7)::before { content:"Acciones"; }
+      .orders-table .detail-row td { display:block; }
+      .table-pager { align-items:stretch; flex-direction:column; }
+      .table-pager__actions .btn { flex:1; }
+      .coverage-table { min-width:0 !important; }
+      .coverage-table thead { display:none; }
+      .coverage-table tbody,
+      .coverage-table tr,
+      .coverage-table td { display:block; width:100%; }
+      .coverage-table tr {
+        margin-bottom:12px;
+        overflow:hidden;
+        border:1px solid var(--line);
+        border-radius:16px;
+        background:#fff;
+      }
+      .coverage-table td {
+        display:grid;
+        grid-template-columns:minmax(92px, .7fr) minmax(0, 1.3fr);
+        gap:10px;
+        border-top:1px solid var(--line);
+      }
+      .coverage-table td:first-child { border-top:0; }
+      .coverage-table td::before {
+        color:var(--muted);
+        font-size:10px;
+        font-weight:900;
+        letter-spacing:.08em;
+        text-transform:uppercase;
+      }
+      .coverage-table td:nth-child(1)::before { content:"Sucursal"; }
+      .coverage-table td:nth-child(2)::before { content:"Municipio"; }
+      .coverage-table td:nth-child(3)::before { content:"Estado"; }
+      .coverage-table td:nth-child(4)::before { content:"Condición"; }
+      .coverage-table td:nth-child(5)::before { content:"Pedido"; }
+      .coverage-table td:nth-child(6)::before { content:"Estatus"; }
+      .coverage-table td:nth-child(7)::before { content:"Importe"; }
+      .coverage-table td:nth-child(8)::before { content:"Observación"; }
     }
   </style>
 </head>
@@ -889,6 +972,8 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         orderStatus: ["all", "sin-liberacion", "sin-liberacion-sin-trabajo", "sin-liberacion-no-enviados", "sin-liberacion-enviados", "liberados", "pendientes-pago", "pagados"].includes(url.orderStatus) ? url.orderStatus : "all",
         orderType: ["all", "estatal", "municipal"].includes(url.orderType) ? url.orderType : "all",
         search: url.search || "",
+        page: 1,
+        pageSize: window.matchMedia("(max-width: 640px)").matches ? 10 : 50,
       };
     }
 
@@ -1138,7 +1223,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
 
     function renderTabs(container, defs, activeId, onChange) {
       container.innerHTML = defs.map((tab) => (
-        '<button class="tab ' + (tab.id === activeId ? "active" : "") + '" data-tab="' + esc(tab.id) + '" type="button">' + esc(tab.label) + '</button>'
+        '<button class="tab ' + (tab.id === activeId ? "active" : "") + '" data-tab="' + esc(tab.id) + '" type="button" aria-pressed="' + (tab.id === activeId ? 'true' : 'false') + '">' + esc(tab.label) + '</button>'
       )).join("");
       container.querySelectorAll("[data-tab]").forEach((button) => {
         button.addEventListener("click", () => onChange(button.getAttribute("data-tab") || "all"));
@@ -1154,7 +1239,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       els.searchInput.value = state.search;
     }
 
-    function renderPedidosSection(rows = visibleOrderRows()) {
+    function renderPedidosSection(rows = visibleOrderRows(), displayedRows = rows) {
       const missingEstatal = missingCoverageEntries("estatal");
       const missingMunicipal = missingCoverageEntries("municipal");
       const missingTotal = missingEstatal.length + missingMunicipal.length;
@@ -1194,7 +1279,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         + '</div>'
         + '<div class="stats" style="padding:12px 16px 0;">Mostrando ' + esc(rows.length) + ' de ' + esc(state.rows.length) + ' pedidos del año ' + esc(state.year) + '</div>'
         + '<div class="table-shell">'
-        + '<table>'
+        + '<table class="orders-table">'
         + '<thead>'
         + '<tr>'
         + '<th>Pedido</th>'
@@ -1207,7 +1292,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         + '</tr>'
         + '</thead>'
         + '<tbody>'
-        + (rows.length ? rows.map((row) => {
+        + (displayedRows.length ? displayedRows.map((row) => {
           const flags = row._flags;
           const municipioLabel = row.tienda?.municipioNombre || row.tienda?.municipioLabel || row.municipio?.nombre || row.municipio?.displayLabel || "";
           const estadoLabel = row.tienda?.estadoNombre || row.tienda?.estadoLabel || row.estado?.nombre || row.estado?.displayLabel || "";
@@ -1232,6 +1317,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         + '</tbody>'
         + '</table>'
         + '</div>'
+        + '<div class="table-pager" data-orders-pager><span>Página ' + esc(state.page) + ' de ' + esc(Math.max(1, Math.ceil(rows.length / state.pageSize))) + ' · ' + esc(rows.length) + ' pedidos</span><div class="table-pager__actions"><button class="btn secondary" type="button" data-page-prev' + (state.page <= 1 ? ' disabled' : '') + '>Anterior</button><button class="btn secondary" type="button" data-page-next' + (state.page >= Math.ceil(rows.length / state.pageSize) ? ' disabled' : '') + '>Siguiente</button></div></div>'
         + '<details class="coverage-fold"' + (state.coverageOpen ? ' open' : '') + '>'
         + '<summary>Ver cobertura de sucursales</summary>'
         + '<div class="coverage-fold-body">'
@@ -1260,7 +1346,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           + '</tr>';
         const tableMarkup = (rows, emptyMessage, missing = false) => ''
           + '<div class="table-shell" style="padding-left:0;padding-right:0;margin-top:14px;">'
-          + '<table style="min-width:1200px;">'
+          + '<table class="coverage-table">'
           + '<thead><tr><th>Sucursal</th><th>Municipio</th><th>Estado</th><th>Condición</th><th>Pedido</th><th>Status</th><th>Importe</th><th>Observación</th></tr></thead>'
           + '<tbody>'
           + (rows.length ? rows.map((item) => rowMarkup(item, missing)).join("") : '<tr><td colspan="8" class="empty">' + esc(emptyMessage) + '</td></tr>')
@@ -1300,12 +1386,14 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         if (statusMount) {
           renderTabs(statusMount, ORDER_STATUS_TABS, state.orderStatus, (tabId) => {
             state.orderStatus = tabId;
+            state.page = 1;
             render();
           });
         }
         if (typeMount) {
           renderTabs(typeMount, ORDER_TYPE_TABS, state.orderType, (tabId) => {
             state.orderType = tabId;
+            state.page = 1;
             render();
           });
         }
@@ -1329,12 +1417,16 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         .filter((row) => !state.facturadorId || normalizeText(row.facturadorId) === normalizeText(state.facturadorId))
         .filter((row) => !Number.isFinite(selectedYear) || !row.fechaYear || Number(row.fechaYear) === selectedYear);
       const visibleRows = visibleOrderRows();
-      els.contentMount.innerHTML = renderPedidosSection(visibleRows);
+      const pageCount = Math.max(1, Math.ceil(visibleRows.length / state.pageSize));
+      state.page = Math.min(Math.max(1, state.page), pageCount);
+      const pageStart = (state.page - 1) * state.pageSize;
+      const displayedRows = visibleRows.slice(pageStart, pageStart + state.pageSize);
+      els.contentMount.innerHTML = renderPedidosSection(visibleRows, displayedRows);
       const visibleCount = visibleRows.length;
       els.statsLine.textContent = "Mostrando " + visibleCount + " de " + baseRows.length + " pedidos del año " + state.year;
       els.hintLine.textContent = state.coverageOpen
         ? "La cobertura está abierta para revisar sucursales con y sin pedido."
-        : "Los filtros de estado y tipo se basan primero en Status; si no hay coincidencia explícita, se clasifica por importe.";
+        : "Los estados se resuelven por liberación, factura, carga en Casa Ley y pago; el importe solo apoya la clasificación municipal o estatal.";
       const coverageFold = els.contentMount.querySelector(".coverage-fold");
       if (coverageFold && !coverageFold.dataset.bound) {
         coverageFold.dataset.bound = "true";
@@ -1343,6 +1435,16 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         });
       }
       renderSectionTabs();
+      els.contentMount.querySelector("[data-page-prev]")?.addEventListener("click", () => {
+        state.page = Math.max(1, state.page - 1);
+        render();
+        els.contentMount.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      els.contentMount.querySelector("[data-page-next]")?.addEventListener("click", () => {
+        state.page = Math.min(pageCount, state.page + 1);
+        render();
+        els.contentMount.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
       bindSendControls();
     }
 
@@ -1581,17 +1683,20 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
 
     els.searchInput.addEventListener("input", (event) => {
       state.search = String(event.target.value || "");
+      state.page = 1;
       render();
     });
     els.yearInput.addEventListener("change", (event) => {
       const next = Number.parseInt(event.target.value || "", 10);
       if (Number.isFinite(next)) {
         state.year = next;
+        state.page = 1;
         render();
       }
     });
     els.facturadorInput?.addEventListener("change", (event) => {
       state.facturadorId = String(event.target.value || "").trim();
+      state.page = 1;
       render();
     });
     els.estatalMinInput.addEventListener("change", (event) => {

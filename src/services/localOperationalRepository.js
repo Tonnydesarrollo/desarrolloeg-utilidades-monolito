@@ -58,13 +58,21 @@ function mapEmpresa(row) {
     LOGO: text(row.logo),
     LOGOURL: text(row.logo_url),
     LOGOCALCULADO: text(row.logo_url || row.logo),
+    RFC: text(row.rfc),
     LABEL: nombreMostrado,
   };
 }
 
 function mapCatalogRow(row) {
   const id = text(row.id || row.row_id);
-  return { ID: id, "Row ID": text(row.row_id || id), NOMBRE: text(row.nombre), ESCUDO: text(row.escudo) };
+  return {
+    ID: id,
+    "Row ID": text(row.row_id || id),
+    NOMBRE: text(row.nombre),
+    ESCUDO: text(row.escudo),
+    "ENCARGADO PC": text(row.encargado_pc),
+    PUESTO: text(row.puesto),
+  };
 }
 
 function mapSucursal(row) {
@@ -74,7 +82,8 @@ function mapSucursal(row) {
   const razonSocial = text(row.empresa_nombre);
   const municipio = text(row.municipio_nombre);
   const estado = text(row.estado_nombre);
-  const label = joinLabel(tienda, nombre) || id;
+  const label = text(row.label) || joinLabel(tienda, nombre) || id;
+  const label2 = text(row.label2) || label;
   const direccion = text(row.direccion || row.domicilio || row.street);
   const address = direccion || [label, municipio, estado, "Mexico"].filter(Boolean).join(", ");
   const latLng = row.lat !== null && row.lat !== undefined && row.lng !== null && row.lng !== undefined
@@ -114,7 +123,7 @@ function mapSucursal(row) {
     PEDIDO: text(row.pedido),
     STATUS: text(row.planeacion_status),
     LABEL: label,
-    LABEL2: label,
+    LABEL2: label2,
     address,
   };
 }

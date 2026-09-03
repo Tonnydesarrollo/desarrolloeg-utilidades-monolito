@@ -2,7 +2,7 @@ import express from "express";
 import fetch from "node-fetch";
 import driveRoutes from "./routes/drive.js";
 import { construirDataHTML } from "./services/construirDataHTML.js";
-import { obtenerCotizacionCompleta, mapaSucursales, mapaProveedores, prewarmCotizacionesCaches } from "./services/appsheet.js";
+import { listarCotizaciones, obtenerCotizacionCompleta, mapaEmpresas, mapaSucursales, mapaProveedores, prewarmCotizacionesCaches } from "./services/appsheet.js";
 
 export const cotizacionesRouter = express.Router();
 export const facturacionRouter = cotizacionesRouter;
@@ -98,7 +98,12 @@ cotizacionesRouter.get("/pruebas", async (_req, res) => {
 
 cotizacionesRouter.get("/cotizacion/html", async (_req, res) => {
   try {
-    const [sucursalesMap, proveedoresMap] = await Promise.all([mapaSucursales(), mapaProveedores()]);
+    const [empresasMap, sucursalesMap, proveedoresMap, cotizacionesRows] = await Promise.all([
+      mapaEmpresas(),
+      mapaSucursales(),
+      mapaProveedores(),
+      listarCotizaciones(),
+    ]);
 
     const wrapDriveUrl = (url) => {
       if (!url) return "";
@@ -114,7 +119,21 @@ cotizacionesRouter.get("/cotizacion/html", async (_req, res) => {
       firmaUrl: wrapDriveUrl(p.firmaUrl || "")
     }));
 
-    res.render("cotizacion_editable", { sucursales, firmas });
+    const cotizaciones = cotizacionesRows
+      .map((row) => {
+        const empresaId = String(row.empresa_id || row.EMPRESA || row["ID EMPRESA"] || "").trim();
+        const empresa = empresasMap?.[empresaId] || {};
+        return {
+          id: String(row["Row ID"] || row.ID || "").trim(),
+          fecha: String(row.FECHA || row.Fecha || "").trim(),
+          titulo: String(row.TITULO || row.Titulo || row.DESCRIPCION || "Cotizacion").trim(),
+          cliente: String(row["NOMBRE COMERCIAL"] || empresa.nombreComercial || row["RAZON SOCIAL"] || empresa.razonSocial || row.CLIENTE || "Cliente sin nombre").trim(),
+        };
+      })
+      .filter((row) => row.id)
+      .reverse();
+
+    res.render("cotizacion_editable", { sucursales, firmas, cotizaciones });
   } catch (err) {
     console.error(err);
     res.status(500).send("Error");

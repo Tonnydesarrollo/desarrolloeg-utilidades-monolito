@@ -3,6 +3,7 @@
   <head>
     <base target="_top">
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
     <link rel="shortcut icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png" />
     <title>Cotización Editable</title>
@@ -11,7 +12,7 @@
       body {
         margin: 0;
         padding: 20px;
-        font-family: Arial, Helvetica, sans-serif;
+        font-family: "Avenir Next", "Trebuchet MS", sans-serif;
         color: #1f2937;
         background: #f3f4f6;
       }
@@ -42,6 +43,63 @@
         grid-template-columns: 1fr 1fr;
         gap: 20px;
       }
+      .quote-directory {
+        margin: 0 0 20px;
+        padding: 18px;
+        border: 1px solid rgba(31,41,55,.10);
+        border-radius: 18px;
+        background: rgba(249,250,251,.78);
+      }
+      .quote-directory__header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+      .quote-directory__header h2 { margin: 0 0 4px; font-size: 18px; }
+      .quote-directory__header p { margin: 0; color: #6b7280; font-size: 13px; }
+      .quote-directory__search { width: min(360px, 100%); }
+      .quote-directory__list {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        max-height: 310px;
+        overflow: auto;
+      }
+      .quote-link {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        padding: 14px;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        background: #fff;
+        color: #1f2937;
+        text-decoration: none;
+      }
+      .quote-link:hover { border-color: #c0392b; box-shadow: 0 8px 20px rgba(31,41,55,.08); }
+      .quote-link strong, .quote-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .quote-link small { color: #6b7280; }
+      .quote-directory__empty { padding: 22px; color: #6b7280; text-align: center; }
+      .quote-mode-tabs {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+      .quote-mode-tab {
+        min-height: 46px;
+        border: 1px solid #d9e1e8;
+        border-radius: 12px;
+        background: rgba(255,255,255,.82);
+        color: #263548;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .quote-mode-tab[aria-pressed="true"] { border-color: #17374c; background: #17374c; color: #fff; }
+      [data-quote-panel][hidden], .quote-link[hidden] { display: none !important; }
+      .quote-directory__more { display: flex; margin: 14px auto 0; }
       .card {
         background: #f9fafb;
         border: 1px solid #e5e7eb;
@@ -165,6 +223,9 @@
       }
       @media (max-width: 860px) {
         .grid { grid-template-columns: 1fr; }
+        .quote-directory__header { align-items: stretch; flex-direction: column; }
+        .quote-directory__search { width: 100%; }
+        .quote-directory__list { grid-template-columns: 1fr; max-height: 380px; }
       }
       @media print {
         body { background: #fff; padding: 0; }
@@ -178,12 +239,40 @@
   <body class="portal-shell portal-cotizaciones portal-facturacion">
     <a class="skip-link" href="#cotizaciones-main">Saltar al contenido principal</a>
     <main id="cotizaciones-main" class="page" role="main" aria-label="Cotizacion editable">
-      <div class="actions" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
-        <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
-        <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      <div class="actions" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" type="button" data-draft-action hidden onclick="window.print()">Imprimir / Guardar PDF</button>
       </div>
       <h1>Cotización Editable</h1>
-      <div class="subtitle">Todos los campos editables</div>
+      <div class="subtitle">Consulta cotizaciones o crea un nuevo borrador</div>
+
+      <div class="quote-mode-tabs no-print" role="group" aria-label="Modo de cotizaciones">
+        <button class="quote-mode-tab" type="button" data-quote-mode="list" aria-pressed="true">Consultar cotizaciones</button>
+        <button class="quote-mode-tab" type="button" data-quote-mode="draft" aria-pressed="false">Nueva cotización</button>
+      </div>
+
+      <section class="quote-directory no-print" aria-labelledby="quote-directory-title" data-quote-panel="list">
+        <div class="quote-directory__header">
+          <div><h2 id="quote-directory-title">Cotizaciones existentes</h2><p>Abre una cotización guardada para consultarla o imprimirla.</p></div>
+          <label class="quote-directory__search"><span>Buscar</span><input type="search" data-quote-search placeholder="Cliente, título, fecha o folio"></label>
+        </div>
+        <div class="quote-directory__list" data-quote-list>
+          <% if ((cotizaciones || []).length) { %>
+            <% cotizaciones.forEach(function(cotizacion){ %>
+              <a class="quote-link" href="/cotizaciones/cotizacion/<%= encodeURIComponent(cotizacion.id) %>/html" data-quote-item data-search="<%= [cotizacion.id, cotizacion.fecha, cotizacion.titulo, cotizacion.cliente].join(' ') %>">
+                <small><%= cotizacion.fecha || 'Sin fecha' %> · <%= cotizacion.id %></small>
+                <strong><%= cotizacion.cliente %></strong>
+                <span><%= cotizacion.titulo %></span>
+              </a>
+            <% }) %>
+          <% } else { %>
+            <div class="quote-directory__empty">No hay cotizaciones guardadas en la réplica local.</div>
+          <% } %>
+        </div>
+        <% if ((cotizaciones || []).length > 12) { %><button class="btn quote-directory__more" type="button" data-quote-more>Mostrar más cotizaciones</button><% } %>
+      </section>
+
+      <section data-quote-panel="draft" hidden>
+      <h2>Nuevo borrador</h2>
 
       <div class="grid">
         <div class="card">
@@ -303,7 +392,7 @@
 
       <div class="desglose-preview" id="desglosePreview"></div>
       <div class="condiciones-preview" id="condicionesPreview"></div>
-    </div>
+      </section>
 
     <script>
       (function() {
@@ -320,6 +409,18 @@
         var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
         var desglosePreview = document.getElementById('desglosePreview');
         var condicionesPreview = document.getElementById('condicionesPreview');
+        var quoteSearch = document.querySelector('[data-quote-search]');
+        var quoteItems = Array.from(document.querySelectorAll('[data-quote-item]'));
+        var quoteMore = document.querySelector('[data-quote-more]');
+        var quoteLimit = 12;
+        var applyQuoteDirectory = function() {
+          var query = String(quoteSearch && quoteSearch.value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+          var matches = quoteItems.filter(function(item) {
+            return !query || String(item.getAttribute('data-search') || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().includes(query);
+          });
+          quoteItems.forEach(function(item) { item.hidden = matches.indexOf(item) === -1 || matches.indexOf(item) >= quoteLimit; });
+          if (quoteMore) quoteMore.hidden = matches.length <= quoteLimit;
+        };
         var preselectedDesglose = <%- JSON.stringify((typeof desglose !== 'undefined' && Array.isArray(desglose)) ? desglose : []) %>;
         var desgloseCatalogo = {
     pipc: {
@@ -348,6 +449,18 @@
           if (!isFinite(n)) n = 0;
           return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
         }
+
+        quoteSearch && quoteSearch.addEventListener('input', function() { quoteLimit = 12; applyQuoteDirectory(); });
+        quoteMore && quoteMore.addEventListener('click', function() { quoteLimit += 12; applyQuoteDirectory(); });
+        document.querySelectorAll('[data-quote-mode]').forEach(function(button) {
+          button.addEventListener('click', function() {
+            var mode = button.getAttribute('data-quote-mode');
+            document.querySelectorAll('[data-quote-mode]').forEach(function(tab) { tab.setAttribute('aria-pressed', tab === button ? 'true' : 'false'); });
+            document.querySelectorAll('[data-quote-panel]').forEach(function(panel) { panel.hidden = panel.getAttribute('data-quote-panel') !== mode; });
+            document.querySelectorAll('[data-draft-action]').forEach(function(action) { action.hidden = mode !== 'draft'; });
+          });
+        });
+        applyQuoteDirectory();
 
         function hasDesglose(key) {
           return preselectedDesglose.indexOf(key) !== -1;

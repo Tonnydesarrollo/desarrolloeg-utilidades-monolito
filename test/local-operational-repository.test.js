@@ -10,11 +10,11 @@ test("normaliza sucursales y calcula razon social y label desde SQLite", async (
   const dbPath = path.join(dir, "test.sqlite");
   const db = new DatabaseSync(dbPath);
   db.exec(`
-    CREATE TABLE empresas (id TEXT PRIMARY KEY, row_id TEXT, razon_social TEXT, nombre_comercial TEXT, logo TEXT, logo_url TEXT);
-    CREATE TABLE municipios (id TEXT PRIMARY KEY, nombre TEXT, escudo TEXT);
+    CREATE TABLE empresas (id TEXT PRIMARY KEY, row_id TEXT, razon_social TEXT, nombre_comercial TEXT, logo TEXT, logo_url TEXT, rfc TEXT);
+    CREATE TABLE municipios (id TEXT PRIMARY KEY, nombre TEXT, escudo TEXT, encargado_pc TEXT, puesto TEXT);
     CREATE TABLE estados (id TEXT PRIMARY KEY, nombre TEXT, escudo TEXT);
     CREATE TABLE sucursales (
-      id TEXT PRIMARY KEY, row_id TEXT, tienda TEXT, nombre TEXT, empresa_id TEXT,
+      id TEXT PRIMARY KEY, row_id TEXT, tienda TEXT, label TEXT, label2 TEXT, nombre TEXT, empresa_id TEXT,
       municipio_id TEXT, estado_id TEXT, direccion TEXT, lat REAL, lng REAL, drive TEXT,
       mes_planeacion INTEGER, capacitadores TEXT
     );
@@ -28,10 +28,10 @@ test("normaliza sucursales y calcula razon social y label desde SQLite", async (
     CREATE TABLE cotizacion_centros_trabajo (cotizacion_id TEXT, sucursal_id TEXT, orden INTEGER);
     CREATE TABLE conceptos_cotizacion (id TEXT PRIMARY KEY, row_id TEXT, cotizacion_id TEXT, centro_trabajo_id TEXT, concepto_id TEXT, cantidad REAL, precio REAL, iva REAL);
     CREATE TABLE operational_rows (source TEXT, table_name TEXT, row_id TEXT, data_json TEXT, content_hash TEXT, updated_at TEXT, PRIMARY KEY (source, table_name, row_id));
-    INSERT INTO empresas VALUES ('1', '1', 'CASA LEY S.A.P.I. DE C.V.', 'CASA LEY', '', '');
-    INSERT INTO municipios VALUES ('10', 'Culiacan', '');
+    INSERT INTO empresas VALUES ('1', '1', 'CASA LEY S.A.P.I. DE C.V.', 'CASA LEY', '', '', 'CLE123456ABC');
+    INSERT INTO municipios VALUES ('10', 'Culiacan', '', 'LIC. JESUS BILL MENDOZA ONTIVEROS', 'COORDINADOR MUNICIPAL DE PROTECCION CIVIL CULIACAN');
     INSERT INTO estados VALUES ('25', 'Sinaloa', '');
-    INSERT INTO sucursales VALUES ('98', '98', '1362', 'LA CONQUISTA', '1', '10', '25', '', 24.8, -107.4, '', 4, 'EMP-1');
+    INSERT INTO sucursales VALUES ('98', '98', '1362', '1362 LA CONQUISTA', 'FARMASI LA CONQUISTA', 'LA CONQUISTA', '1', '10', '25', '', 24.8, -107.4, '', 4, 'EMP-1');
     INSERT INTO cotizaciones VALUES ('COT-1', 'COT-1', '1', '2026-08-31', 'PROV-1', 'Cotizacion de prueba');
     INSERT INTO cotizacion_centros_trabajo VALUES ('COT-1', '98', 1);
     INSERT INTO conceptos_cotizacion VALUES ('CON-1', 'CON-1', 'COT-1', '98', 'CAT-1', 2, 100, 0.16);
@@ -45,10 +45,17 @@ test("normaliza sucursales y calcula razon social y label desde SQLite", async (
   assert.equal(row.EMPRESA, "1");
   assert.equal(row["RAZON SOCIAL"], "CASA LEY S.A.P.I. DE C.V.");
   assert.equal(row.LABEL, "1362 LA CONQUISTA");
+  assert.equal(row.LABEL2, "FARMASI LA CONQUISTA");
   assert.equal(row.MUNICIPIO_NOMBRE, "Culiacan");
   assert.equal(row.ESTADO_NOMBRE, "Sinaloa");
   assert.equal(row.DOMICILIO, row.DIRECCION);
   assert.equal(row["MES PLANEACION"], 4);
+
+  const empresa = repository.readLocalOperationalTable("EMPRESAS")[0];
+  assert.equal(empresa.RFC, "CLE123456ABC");
+  const municipio = repository.readLocalOperationalTable("MUNICIPIOS")[0];
+  assert.equal(municipio["ENCARGADO PC"], "LIC. JESUS BILL MENDOZA ONTIVEROS");
+  assert.equal(municipio.PUESTO, "COORDINADOR MUNICIPAL DE PROTECCION CIVIL CULIACAN");
 
   const cotizacion = repository.readLocalOperationalTable("COTIZACIONES_VARIOS_CT", { source: "finance" })[0];
   assert.equal(cotizacion.CENTRO_DE_TRABAJO, "98");

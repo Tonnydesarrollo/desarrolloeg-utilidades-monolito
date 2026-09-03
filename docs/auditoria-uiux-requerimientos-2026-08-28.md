@@ -84,7 +84,7 @@ Debe mostrar las tiendas Casa Ley que tengan trabajo municipal o estatal, incluy
 - `DIPLOMAS` es un control vivo `SI/NO`, visible y modificable en contexto.
 - El generador integrado debe usar sucursales, razon social y logo del cliente.
 
-El criterio indicado durante el desarrollo para el estado calculado es `fecha > TODAY() => FINALIZADA`, en otro caso `PROGRAMADA`. Los nombres son semanticamente inversos a la convencion habitual; debe conservarse como regla de negocio mientras no se autorice su correccion.
+El estado calculado sigue la regla de negocio `TODAY() > FECHA => FINALIZADA`; una capacitacion con fecha de hoy o futura permanece `PROGRAMADA`.
 
 ### Empresas y sucursales
 

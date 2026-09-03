@@ -249,6 +249,13 @@ export async function obtenerCotizacion(cotizacionId, forceFresh = false) {
   return found;
 }
 
+export async function listarCotizaciones(forceFresh = false) {
+  const rows = forceFresh
+    ? await leerTablaAppSheetFresca("COTIZACIONES_VARIOS_CT")
+    : await leerTablaAppSheetCacheada("COTIZACIONES_VARIOS_CT");
+  return Array.isArray(rows) ? rows : [];
+}
+
 export async function buscarConceptosPorCotizacion(cotizacionId, forceFresh = false) {
   const wantedId = String(cotizacionId || "").trim();
   if (!forceFresh) {

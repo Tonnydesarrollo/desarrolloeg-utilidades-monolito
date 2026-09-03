@@ -100,6 +100,53 @@
       padding: 0.25in !important;
       box-sizing: border-box !important;
     }
+    .constancias-drive-button {
+      width: 100%;
+      min-height: 58px;
+      border: 1px solid rgba(15, 118, 110, 0.24);
+      border-radius: 2rem;
+      background: linear-gradient(135deg, #0f766e, #115e59);
+      color: #fff;
+      box-shadow: 0 16px 34px rgba(15, 118, 110, 0.22);
+      cursor: pointer;
+      font: 900 0.82rem/1.25 'Inter', sans-serif;
+      letter-spacing: 0.06em;
+      padding: 16px 22px;
+      transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+    }
+    .constancias-drive-button:hover:not(:disabled) {
+      box-shadow: 0 20px 42px rgba(15, 118, 110, 0.30);
+      transform: translateY(-2px);
+    }
+    .constancias-drive-button:disabled { cursor: wait; opacity: 0.62; }
+    .constancias-drive-notice {
+      position: fixed;
+      z-index: 9999;
+      right: 20px;
+      bottom: 20px;
+      display: flex;
+      max-width: min(440px, calc(100vw - 40px));
+      align-items: center;
+      gap: 14px;
+      border: 1px solid rgba(255,255,255,0.55);
+      border-radius: 20px;
+      padding: 15px 18px;
+      color: #fff;
+      background: rgba(15, 118, 110, 0.96);
+      box-shadow: 0 22px 54px rgba(15, 23, 42, 0.28);
+      font: 700 0.82rem/1.45 'Inter', sans-serif;
+      backdrop-filter: blur(14px);
+    }
+    .constancias-drive-notice--error { background: rgba(153, 27, 27, 0.96); }
+    .constancias-drive-notice a {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 8px 11px;
+      color: inherit;
+      background: rgba(255,255,255,0.16);
+      font-size: 0.68rem;
+      text-decoration: none;
+    }
   </style>
 
 <script type="importmap">
@@ -113,6 +160,7 @@
 }
 </script>
   <script type="module" crossorigin src="/assets/index-g65tEUxt.js"></script>
+  <script defer src="/constancias/drive-pdf.js"></script>
 </head>
 <body>
   <div id="root"></div>

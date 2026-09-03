@@ -691,7 +691,7 @@ function renderCapacitacionesCalendar(calendarCapacitaciones, {
       <div class="calendar-header">
         <div class="calendar-header-copy">
           <span class="calendar-month">${formatCalendarMonthLabel(anchorDate)}</span>
-          <h2>Calendario</h2>
+          <h1>Calendario</h1>
           <p class="calendar-subtitle">Capacitaciones, cumpleaños y notas en una sola vista, con filtros por capacitador y detalle lateral.</p>
         </div>
       </div>
@@ -753,13 +753,29 @@ function getCapacitacionSucursalesItems(capacitacion) {
   if (Array.isArray(capacitacion?.sucursalesLabels) && capacitacion.sucursalesLabels.length > 0) {
     return capacitacion.sucursalesLabels.map((item) => String(item || "").trim()).filter(Boolean);
   }
+  if (Array.isArray(capacitacion?.sucursales)) {
+    return capacitacion.sucursales
+      .map((item) => typeof item === "object" && item !== null
+        ? (item.label || item.nombre || item.name || item.key || item.id || "")
+        : item)
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+  }
   const fallback = String(capacitacion?.sucursales || "").trim();
   return fallback ? [fallback] : [];
 }
 
 function getCapacitacionHoraLabel(capacitacion) {
-  const start = String(capacitacion?.horaInicio || "").trim();
-  const end = String(capacitacion?.horaFin || "").trim();
+  const formatTime = (value) => {
+    const raw = String(value || "").trim();
+    const match = raw.match(/(?:^|\s)(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (!match) return raw;
+    const hour = match[1].padStart(2, "0");
+    const period = match[3] ? ` ${match[3].toUpperCase()}` : "";
+    return `${hour}:${match[2]}${period}`;
+  };
+  const start = formatTime(capacitacion?.horaInicio);
+  const end = formatTime(capacitacion?.horaFin);
   if (start && end) return `${start} - ${end}`;
   if (start) return `Inicio ${start}`;
   if (end) return `Fin ${end}`;
@@ -1005,18 +1021,20 @@ function renderCapacitacionCard(
   `;
 
   if (inlineDetails) {
+    const statusText = capacitacion.statusSuffix || capacitacion.statusLabel || "Sin estado";
     return `
-      <details class="capacitacion-card capacitacion-card--expandable" data-keep-after-diplomas>
+      <details class="capacitacion-card capacitacion-card--expandable ${statusClass}" data-keep-after-diplomas>
         <summary class="capacitacion-card__summary">
           <div class="capacitacion-card__summary-main">
             <div class="capacitacion-head">
-              <span class="chip">${escapeHtml(capacitacion.dateLabel || "")}</span>
-              <span class="status-chip ${statusClass}">${escapeHtml(capacitacion.statusLabel || "Sin estado")}</span>
+              <span class="status-chip ${statusClass}">${escapeHtml(statusText)}</span>
+              <time class="capacitacion-card__date">${escapeHtml(capacitacion.dateLabel || "Sin fecha")}</time>
             </div>
+            <span class="capacitacion-card__eyebrow">Sede</span>
             <h3>${escapeHtml(sedeLabel)}</h3>
             <div class="capacitacion-card__summary-meta">
-              <span>${escapeHtml(hourLabel)}</span>
-              <span>${capacitadoresLabel}</span>
+              <span class="capacitacion-summary-fact"><small>Horario</small><strong>${escapeHtml(hourLabel)}</strong></span>
+              <span class="capacitacion-summary-fact"><small>Capacitador</small><strong>${capacitadoresLabel}</strong></span>
               <span class="diploma-summary" aria-label="Diplomas ${capacitacion.hasDiplomas ? "si" : "no"}">
                 <span>Diplomas</span>
                 <span class="status-button ${capacitacion.hasDiplomas ? "active" : ""}">SI</span>
@@ -1024,29 +1042,34 @@ function renderCapacitacionCard(
               </span>
             </div>
           </div>
-          <span class="accordion-chevron capacitacion-card__chevron" aria-hidden="true">&#8250;</span>
+          <span class="accordion-chevron capacitacion-card__chevron" aria-hidden="true"></span>
         </summary>
         <div class="capacitacion-card__body">
-          <section class="capacitacion-card__section capacitacion-card__branches">
-            <strong>Sucursales a capacitar</strong>
-            <div class="tag-row">
-              ${sucursalesItems.length ? sucursalesItems.map((item) => `<span class="tag-pill">${escapeHtml(item)}</span>`).join("") : `<span class="calendar-empty">Sin sucursales</span>`}
-            </div>
-          </section>
-          <section class="capacitacion-card__section capacitacion-card__notes">
-            <strong>Notas</strong>
-            ${notesThreadMarkup}
-            ${canEditNotes ? `
-              <form class="notes-form js-async-notes" method="post" action="/dashboard/capacitaciones/${encodeURIComponent(capacitacion.rowId)}/notas">
-                <input type="hidden" name="returnTo" value="${returnValue}" />
-                <textarea name="notas" rows="2" class="notes-textarea" placeholder="Agregar una entrada al hilo..." required></textarea>
-                <div class="notes-actions">
-                  <button type="submit" class="status-button">Agregar nota</button>
-                  <span class="notes-state">${noteEntries.length} entrada(s)</span>
-                </div>
-              </form>
-            ` : ""}
-          </section>
+          <div class="capacitacion-card__content">
+            <section class="capacitacion-card__section capacitacion-card__branches">
+              <strong>Sucursales a capacitar</strong>
+              <div class="tag-row">
+                ${sucursalesItems.length ? sucursalesItems.map((item) => `<span class="tag-pill">${escapeHtml(item)}</span>`).join("") : `<span class="calendar-empty">Sin sucursales</span>`}
+              </div>
+            </section>
+            <section class="capacitacion-card__section capacitacion-card__notes">
+              <strong>Notas</strong>
+              ${notesThreadMarkup}
+              ${canEditNotes ? `
+                <details class="capacitacion-note-compose">
+                  <summary>Agregar nota</summary>
+                  <form class="notes-form js-async-notes" method="post" action="/dashboard/capacitaciones/${encodeURIComponent(capacitacion.rowId)}/notas">
+                    <input type="hidden" name="returnTo" value="${returnValue}" />
+                    <textarea name="notas" rows="2" class="notes-textarea" placeholder="Escribe una nueva entrada..." required></textarea>
+                    <div class="notes-actions">
+                      <button type="submit" class="status-button">Guardar nota</button>
+                      <span class="notes-state">${noteEntries.length} entrada(s)</span>
+                    </div>
+                  </form>
+                </details>
+              ` : ""}
+            </section>
+          </div>
           <div class="capacitacion-card__actions">
             ${diplomaChoiceMarkup}
             ${linkHref ? `<a class="button primary" href="${escapeAttr(linkHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>` : ""}
@@ -1132,7 +1155,7 @@ function renderCapacitacionesPlatformPanel({
     <div class="panel accolades-panel" style="margin-top:20px;">
       <div class="section-head">
         <div>
-          <h2>Capacitaciones</h2>
+          <h1>Capacitaciones</h1>
           <p>Listado operativo integrado al dashboard. Aqui se revisan fechas, sedes, sucursales, capacitadores, notas y estado de diplomas.</p>
         </div>
       </div>
@@ -1213,7 +1236,7 @@ function renderCapacitacionesPlatformPanelV2({
       <div class="section-head">
         <div>
           <span class="eyebrow">Capacitaciones</span>
-          <h2>Capacitaciones</h2>
+          <h1>Capacitaciones</h1>
           <p>Vista operativa agrupada por programadas y finalizadas, con filtros vivos sin salir del dashboard.</p>
         </div>
       </div>
@@ -1271,6 +1294,7 @@ function renderCapacitacionesPlatformPanelV2({
               <div class="capacitacion-grid">
                 ${group.rows.length ? group.rows.map(renderItem).join("") : `<div class="empty-state">No hay capacitaciones ${escapeHtml(group.title.toLowerCase())}.</div>`}
               </div>
+              ${group.rows.length > 12 ? `<button class="button secondary capacitaciones-load-more" type="button" data-capacitaciones-more>Mostrar más capacitaciones</button>` : ""}
             </div>
           </details>
         `).join("")}
@@ -1457,53 +1481,87 @@ function renderNotasThreadPanel({ calendarNotes = [], capacitaciones = [], emplo
       })) : []),
     ]),
   ].filter((item) => String(item.body || "").trim());
+  const noteThreads = Array.from(noteItems.reduce((threads, item) => {
+    const key = `${item.type || "Nota"}::${item.title || "General"}`;
+    if (!threads.has(key)) threads.set(key, { key, type: item.type || "Nota", title: item.title || "General", items: [] });
+    threads.get(key).items.push(item);
+    return threads;
+  }, new Map()).values());
 
   return `
     <div class="panel accolades-panel" style="margin-top:20px;">
       <div class="section-head">
         <div>
-          <h2>Notas</h2>
+          <h1>Notas</h1>
           <p>Lectura tipo hilo para notas y observaciones visibles en el dashboard. El formato objetivo es usuario - fecha: nota.</p>
         </div>
       </div>
-      ${canEditNotes ? renderCalendarNoteForm({
-        employees,
-        selectedEmployeeId: user?.rowId || "",
-        returnTo: "/dashboard",
-        canEditNotes,
-        action: portalPath("/dashboard/calendario/notas"),
-        submitLabel: "Crear nota",
-      }) : ""}
-      <div class="accordion-list" style="margin-top:14px;">
-        ${noteItems.length ? noteItems.map((item) => {
-          const currentUserKeys = [user?.rowId, user?.correo].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean);
-          const authorKeys = [item.authorId, item.authorEmail].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean);
-          const canManageEntry = Boolean(item.id && canEditNotes && (canEditAllNotes || authorKeys.some((key) => currentUserKeys.includes(key))));
-          return `
-          <article class="accordion-card"${item.id ? ` data-thread-note-id="${escapeAttr(item.id)}"` : ""}>
-            <div class="accordion-body">
-              <div class="detail-grid">
-                <div class="detail-block detail-block-wide">
-                  <strong>${escapeHtml(item.author || "Sistema")} - ${escapeHtml(item.date || "Sin fecha")}: <span class="thread-note-body">"${escapeHtml(item.body)}"</span></strong>
-                  <span>${escapeHtml(item.type)} - ${escapeHtml(item.title)}</span>
-                  ${canManageEntry ? `
-                    <details class="note-entry-actions">
-                      <summary>Editar o eliminar</summary>
-                      <form class="notes-form js-edit-thread-note" method="post" action="${portalPath(`/dashboard/notas/${encodeURIComponent(item.id)}/editar`)}">
-                        <textarea name="notas" rows="3" required>${escapeHtml(item.body)}</textarea>
-                        <div class="notes-actions">
-                          <button type="submit" class="status-button">Guardar cambio</button>
-                          <button type="button" class="status-button secondary js-delete-thread-note" data-action="${portalPath(`/dashboard/notas/${encodeURIComponent(item.id)}/eliminar`)}">Eliminar</button>
-                        </div>
-                      </form>
-                    </details>
-                  ` : ""}
-                </div>
-              </div>
-            </div>
-          </article>
-        `;}).join("") : `<div class="empty-state">No hay notas visibles.</div>`}
+      ${canEditNotes ? `<details class="accordion-card note-compose-card">
+        <summary class="accordion-summary">
+          <div class="accordion-summary-main"><strong>Nueva nota</strong><span>Crear una observacion y etiquetar empleados</span></div>
+          <div class="accordion-summary-meta"><span class="accordion-chevron" aria-hidden="true">+</span></div>
+        </summary>
+        <div class="accordion-body">${renderCalendarNoteForm({
+          employees,
+          selectedEmployeeId: user?.rowId || "",
+          returnTo: "/dashboard",
+          canEditNotes,
+          action: portalPath("/dashboard/calendario/notas"),
+          submitLabel: "Crear nota",
+        })}</div>
+      </details>` : ""}
+      <div class="ui-filter-bar notes-filter-bar" data-notes-toolbar>
+        <label class="calendar-note-field"><span>Buscar notas</span><input type="search" data-notes-search placeholder="Usuario, fecha, sede o contenido..." /></label>
+        <div class="capacitaciones-filter-bar__meta"><span data-notes-count>${escapeHtml(String(noteItems.length))} notas</span><button class="button secondary" type="button" data-notes-clear>Limpiar</button></div>
       </div>
+      <div class="accordion-list" style="margin-top:14px;" data-notes-list>
+        ${noteThreads.length ? noteThreads.map((thread) => `
+          <details class="accordion-card note-thread-card" data-note-thread data-note-count="${thread.items.length}" data-search="${escapeAttr(thread.items.map((item) => `${item.author || ""} ${item.date || ""} ${item.body || ""}`).join(" ") + ` ${thread.type} ${thread.title}`)}">
+            <summary class="accordion-summary">
+              <div class="accordion-summary-main"><strong>${escapeHtml(thread.title)}</strong><span>${escapeHtml(thread.type)}</span></div>
+              <div class="accordion-summary-meta"><span class="status-chip">${thread.items.length}</span><span class="accordion-chevron" aria-hidden="true">+</span></div>
+            </summary>
+            <div class="accordion-body note-thread-body">
+              ${thread.items.map((item) => {
+                const currentUserKeys = [user?.rowId, user?.correo].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean);
+                const authorKeys = [item.authorId, item.authorEmail].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean);
+                const canManageEntry = Boolean(item.id && canEditNotes && (canEditAllNotes || authorKeys.some((key) => currentUserKeys.includes(key))));
+                return `<article class="detail-block detail-block-wide note-thread-entry"${item.id ? ` data-thread-note-id="${escapeAttr(item.id)}"` : ""}>
+                  <strong>${escapeHtml(item.author || "Sistema")} - ${escapeHtml(item.date || "Sin fecha")}</strong>
+                  <span class="thread-note-body">${escapeHtml(item.body)}</span>
+                  ${canManageEntry ? `<details class="note-entry-actions"><summary>Editar o eliminar</summary><form class="notes-form js-edit-thread-note" method="post" action="${portalPath(`/dashboard/notas/${encodeURIComponent(item.id)}/editar`)}"><textarea name="notas" rows="3" required>${escapeHtml(item.body)}</textarea><div class="notes-actions"><button type="submit" class="status-button">Guardar cambio</button><button type="button" class="status-button secondary js-delete-thread-note" data-action="${portalPath(`/dashboard/notas/${encodeURIComponent(item.id)}/eliminar`)}">Eliminar</button></div></form></details>` : ""}
+                </article>`;
+              }).join("")}
+            </div>
+          </details>
+        `).join("") : `<div class="empty-state">No hay notas visibles.</div>`}
+      </div>
+      ${noteThreads.length > 12 ? `<button class="button secondary notes-load-more" type="button" data-notes-more>Mostrar más hilos</button>` : ""}
+      <script>(() => {
+        const script = document.currentScript;
+        const root = script?.closest('.accolades-panel');
+        if (!root || root.dataset.notesReady === '1') return;
+        root.dataset.notesReady = '1';
+        const search = root.querySelector('[data-notes-search]');
+        const count = root.querySelector('[data-notes-count]');
+        const more = root.querySelector('[data-notes-more]');
+        const rows = Array.from(root.querySelectorAll('[data-note-thread]'));
+        let limit = 12;
+        const normalize = (value) => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
+        const apply = () => {
+          const query = normalize(search?.value);
+          const matches = rows.filter((row) => !query || normalize(row.dataset.search).includes(query));
+          rows.forEach((row) => { row.hidden = !matches.includes(row) || matches.indexOf(row) >= limit; });
+          const visibleNotes = matches.slice(0, limit).reduce((total, row) => total + Number(row.dataset.noteCount || 0), 0);
+          const totalNotes = matches.reduce((total, row) => total + Number(row.dataset.noteCount || 0), 0);
+          if (count) count.textContent = visibleNotes + ' de ' + totalNotes + ' notas en ' + matches.length + ' hilos';
+          if (more) more.hidden = matches.length <= limit;
+        };
+        search?.addEventListener('input', () => { limit = 12; apply(); });
+        root.querySelector('[data-notes-clear]')?.addEventListener('click', () => { if (search) search.value = ''; limit = 12; apply(); search?.focus(); });
+        more?.addEventListener('click', () => { limit += 12; apply(); });
+        apply();
+      })();</script>
     </div>
   `;
 }
@@ -1555,7 +1613,7 @@ function renderConstanciasWorkspacePanelV2({
       <div class="section-head">
         <div>
           <span class="eyebrow">Generador de Constancias</span>
-          <h2>Generador de Constancias</h2>
+          <h1>Generador de Constancias</h1>
           <p>Selecciona capacitador y capacitacion sin salir del dashboard. La vista de constancias se precarga con sede, fecha y sucursales.</p>
         </div>
       </div>
@@ -1615,14 +1673,11 @@ function renderConstanciasWorkspacePanelV2({
             ${(getCapacitacionSucursalesItems(active).map((item) => `<span class="tag-pill">${escapeHtml(item)}</span>`).join("")) || `<span class="calendar-empty">Sin sucursales</span>`}
           </div>
         </div>
+        <a class="button secondary button--compact constancias-open" href="${escapeAttr(getCapacitacionConstanciasUrlFromCapacitacion(active))}" target="_blank" rel="noopener noreferrer" data-constancias-open>Abrir versión independiente</a>
       </div>
       </aside>
       ${active ? `
-        <div class="calendar-frame constancias-workbench__canvas">
-          <div class="calendar-frame-top">
-            <span class="calendar-frame-label">Vista integrada</span>
-            <a class="button secondary button--compact" href="${escapeAttr(getCapacitacionConstanciasUrlFromCapacitacion(active))}" target="_blank" rel="noopener noreferrer" data-constancias-open>Abrir en pestaña</a>
-          </div>
+        <div class="constancias-workbench__canvas">
           <iframe title="Generador de Constancias" data-src="${escapeAttr(getIntegratedConstanciasUrlFromCapacitacion(active))}" loading="lazy" data-constancias-frame></iframe>
         </div>
       ` : `<div class="empty-state">No hay capacitaciones para generar constancias.</div>`}
@@ -1816,7 +1871,7 @@ function renderSucursalesInfoPanelV2({ sucursales = [], empresas = [], selectedE
       <div class="section-head">
         <div>
           <span class="eyebrow">Información de sucursales</span>
-          <h2>Empresas y sucursales</h2>
+          <h1>Empresas y sucursales</h1>
           <p>${selectedCompany ? "Perfil empresarial y sucursales agrupadas por estado y municipio." : "Selecciona una empresa para abrir su perfil y consultar sus sucursales."}</p>
         </div>
       </div>
@@ -1829,17 +1884,18 @@ function renderSucursalesInfoPanelV2({ sucursales = [], empresas = [], selectedE
         ${companies.length ? companies.map((company) => `
           <a class="company-card" href="${portalPath(`/dashboard/empresas/${encodeURIComponent(company.key)}`)}" data-company-directory-card data-search="${escapeAttr(`${company.nombreComercial} ${company.razonSocial}`)}">
             <span class="company-card__media">
-              ${company.logo ? `<img src="${portalPath(`/dashboard/empresas/${encodeURIComponent(company.key)}/logo`)}" alt="" />` : `<span>${escapeHtml(company.nombreComercial.slice(0, 2).toUpperCase())}</span>`}
+              ${company.logo ? `<img src="${portalPath(`/dashboard/empresas/${encodeURIComponent(company.key)}/logo`)}" alt="Logo de ${escapeAttr(company.nombreComercial)}" />` : `<span>${escapeHtml(company.nombreComercial.slice(0, 2).toUpperCase())}</span>`}
             </span>
             <span class="company-card__copy">
               <strong>${escapeHtml(company.nombreComercial)}</strong>
               <small>${escapeHtml(company.razonSocial)}</small>
-              <em>${escapeHtml(String(company.rows.length))} sucursales</em>
+              <em>${escapeHtml(String(company.rows.length))} ${company.rows.length === 1 ? "sucursal" : "sucursales"}</em>
             </span>
             <span class="company-card__arrow">→</span>
           </a>
         `).join("") : `<div class="empty-state">No hay empresas para mostrar.</div>`}
       </div>
+      ${companies.length > 24 ? `<button class="button secondary company-directory-more" type="button" data-company-directory-more>Mostrar más empresas</button>` : ""}
       `}
     </div>
   `;
@@ -1891,15 +1947,39 @@ function renderCasaLeyStoresReport({ sucursales = [] } = {}) {
   }).join("");
   return `<section class="pedidos-native pedidos-surface" data-casa-ley-report>
     <div class="pedidos-header">
-      <div><span class="detail-kicker">Operacion Casa Ley · ${currentYear}</span><h2>Reporte de tiendas</h2><p>Seguimiento anual de trabajos, capacitacion y Proteccion Civil desde la base local persistente.</p></div>
+      <div><span class="detail-kicker">Operacion Casa Ley · ${currentYear}</span><h1>Reporte de tiendas</h1><p>Seguimiento anual de trabajos, capacitacion y Proteccion Civil desde la base local persistente.</p></div>
       <span class="pill strong" data-casa-ley-count>${rows.length} tiendas</span>
     </div>
-    <div class="pedidos-advanced-grid" style="margin:18px 0;">
+    <div class="pedidos-filter-grid">
       <label class="pedidos-field"><span>Buscar</span><input type="search" data-casa-ley-search placeholder="Tienda, municipio, estado o capacitador..."></label>
       <label class="pedidos-field"><span>Trabajo vigente</span><select data-casa-ley-work><option value="">Todos</option><option value="ESTATAL">Estatal</option><option value="MUNICIPAL">Municipal</option></select></label>
     </div>
-    <div class="pedidos-table-shell"><table><thead><tr><th>Tienda</th><th>Capacitacion</th><th>Capacitador</th><th>Municipal ${currentYear}</th><th>Estatal ${currentYear}</th><th>PC Estatal</th></tr></thead><tbody>${rowMarkup || `<tr><td colspan="6">No hay tiendas Casa Ley con trabajos configurados.</td></tr>`}</tbody></table></div>
-    <script>(() => { const root = document.currentScript.closest('[data-casa-ley-report]'); if (!root) return; const search = root.querySelector('[data-casa-ley-search]'); const work = root.querySelector('[data-casa-ley-work]'); const count = root.querySelector('[data-casa-ley-count]'); const apply = () => { const q = (search.value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase(); const kind = work.value; let visible = 0; root.querySelectorAll('[data-casa-ley-row]').forEach((row) => { const hay = (!q || row.dataset.search.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().includes(q)) && (!kind || row.dataset.work.includes(kind)); row.hidden = !hay; if (hay) visible += 1; }); count.textContent = visible + ' tiendas'; }; search.addEventListener('input', apply); work.addEventListener('change', apply); })();</script>
+    <div class="pedidos-table-shell casa-ley-table-shell"><table><thead><tr><th>Tienda</th><th>Capacitacion</th><th>Capacitador</th><th>Municipal ${currentYear}</th><th>Estatal ${currentYear}</th><th>PC Estatal</th></tr></thead><tbody>${rowMarkup || `<tr><td colspan="6">No hay tiendas Casa Ley con trabajos configurados.</td></tr>`}</tbody></table></div>
+    ${rows.length > 30 ? `<button class="button secondary casa-ley-more" type="button" data-casa-ley-more>Mostrar más tiendas</button>` : ""}
+    <script>(() => {
+      const root = document.currentScript.closest('[data-casa-ley-report]');
+      if (!root) return;
+      const search = root.querySelector('[data-casa-ley-search]');
+      const work = root.querySelector('[data-casa-ley-work]');
+      const count = root.querySelector('[data-casa-ley-count]');
+      const more = root.querySelector('[data-casa-ley-more]');
+      const rows = Array.from(root.querySelectorAll('[data-casa-ley-row]'));
+      let limit = window.matchMedia('(max-width: 720px)').matches ? 8 : 30;
+      const pageSize = limit;
+      const normalize = (value) => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
+      const apply = () => {
+        const query = normalize(search?.value);
+        const kind = work?.value || '';
+        const matches = rows.filter((row) => (!query || normalize(row.dataset.search).includes(query)) && (!kind || row.dataset.work.includes(kind)));
+        rows.forEach((row) => { row.hidden = !matches.includes(row) || matches.indexOf(row) >= limit; });
+        if (count) count.textContent = Math.min(limit, matches.length) + ' de ' + matches.length + ' tiendas';
+        if (more) more.hidden = matches.length <= limit;
+      };
+      search?.addEventListener('input', () => { limit = 30; apply(); });
+      work?.addEventListener('change', () => { limit = 30; apply(); });
+      more?.addEventListener('click', () => { limit += pageSize; apply(); });
+      apply();
+    })();</script>
   </section>`;
 }
 
@@ -2571,7 +2651,7 @@ function getHomeStyles() {
         gap: 12px;
         align-items: center;
       }
-      .hero-callout h2, .section-head h2 {
+      .hero-callout h2, .section-head h1, .section-head h2, .pedidos-header h1 {
         margin: 0;
         letter-spacing: -0.03em;
         font-family: "Cinzel", serif;
@@ -4762,7 +4842,7 @@ function getHomeStyles() {
         font-weight: 900;
         transition: transform 180ms ease, background 180ms ease;
       }
-      .accordion-card[open] .accordion-chevron {
+      .accordion-card[open] > .accordion-summary .accordion-chevron {
         transform: rotate(45deg);
         background: rgba(192,57,43,0.10);
       }
@@ -4876,9 +4956,9 @@ function getHomeStyles() {
         box-shadow: 0 24px 64px rgba(20,32,43,0.13);
       }
       .capacitacion-card__summary {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 42px;
+        align-items: center;
         gap: 16px;
         padding: 18px;
         cursor: pointer;
@@ -4894,17 +4974,37 @@ function getHomeStyles() {
         flex: 1 1 auto;
       }
       .capacitacion-card__summary-meta {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px 12px;
+        display: grid;
+        grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 10px 16px;
         color: var(--muted);
         font: 700 0.78rem "Montserrat", sans-serif;
+      }
+      .capacitacion-summary-fact {
+        display: grid;
+        min-width: 0;
+        gap: 3px;
+      }
+      .capacitacion-summary-fact small {
+        color: var(--crimson);
+        font-size: 0.62rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .capacitacion-summary-fact strong {
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 0.76rem;
+        line-height: 1.35;
+        text-overflow: ellipsis;
       }
       .diploma-summary {
         display: inline-flex;
         align-items: center;
         gap: 5px;
+        justify-self: end;
       }
       .diploma-summary > span:first-child {
         color: var(--crimson);
@@ -4939,6 +5039,33 @@ function getHomeStyles() {
         justify-content: space-between;
         gap: 12px;
       }
+      .capacitacion-note-compose {
+        margin-top: 10px;
+        border-top: 1px solid rgba(26,42,58,0.08);
+        padding-top: 10px;
+      }
+      .capacitacion-note-compose > summary {
+        width: fit-content;
+        cursor: pointer;
+        color: var(--navy);
+        font: 900 0.72rem/1.2 "Montserrat", sans-serif;
+        letter-spacing: 0.04em;
+        list-style: none;
+        text-transform: uppercase;
+      }
+      .capacitacion-note-compose > summary::before {
+        content: "+";
+        display: inline-grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        margin-right: 7px;
+        border-radius: 50%;
+        background: rgba(20,42,61,0.07);
+      }
+      .capacitacion-note-compose[open] > summary::before { content: "−"; }
+      .capacitacion-note-compose > summary::-webkit-details-marker { display: none; }
+      .capacitacion-note-compose .notes-form { margin-top: 12px; }
       .capacitacion-card-link {
         text-decoration: none;
         color: inherit;
@@ -5019,9 +5146,10 @@ function getHomeStyles() {
           padding: 15px;
         }
         .capacitacion-card__summary-meta {
-          align-items: flex-start;
-          flex-direction: column;
+          grid-template-columns: 1fr;
+          align-items: start;
         }
+        .diploma-summary { justify-self: start; }
         .capacitacion-card__detail-grid {
           grid-template-columns: 1fr;
         }
@@ -5131,72 +5259,97 @@ function getHomeStyles() {
         gap: 12px;
       }
       .capacitaciones-studio .capacitacion-card {
-        border: 1px solid rgba(255,255,255,0.86);
-        border-top: 1px solid rgba(255,255,255,0.86);
-        border-radius: 24px;
-        background:
-          linear-gradient(145deg, rgba(255,255,255,0.76), rgba(247,250,252,0.46)),
-          linear-gradient(320deg, rgba(20,44,66,0.035), transparent 44%);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.96), 0 14px 34px rgba(20,32,43,0.08);
+        position: relative;
+        border: 1px solid rgba(20,42,61,0.11);
+        border-left: 4px solid var(--blue);
+        border-radius: 20px;
+        background: linear-gradient(145deg, rgba(255,255,255,0.98), rgba(246,249,252,0.94));
+        box-shadow: 0 12px 28px rgba(20,32,43,0.07);
         transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
       }
+      .capacitaciones-studio .capacitacion-card.is-finalizada { border-left-color: var(--green); }
+      .capacitaciones-studio .capacitacion-card.is-programada { border-left-color: var(--blue); }
       .capacitaciones-studio .capacitacion-card:hover {
-        transform: translateY(-2px);
-        border-color: rgba(255,255,255,0.98);
-        box-shadow: inset 0 1px 0 #fff, 0 22px 48px rgba(20,32,43,0.12);
+        border-color: rgba(20,42,61,0.18);
+        box-shadow: 0 18px 38px rgba(20,32,43,0.10);
       }
       .capacitaciones-studio .capacitacion-card__summary {
-        min-height: 118px;
-        padding: 17px;
+        min-height: 154px;
+        padding: 18px 18px 18px 20px;
+      }
+      .capacitaciones-studio .capacitacion-card--expandable[open] > .capacitacion-card__summary {
+        background: rgba(240,245,249,0.48);
       }
       .capacitaciones-studio .capacitacion-card__summary-main {
         align-content: start;
-        gap: 9px;
+        gap: 6px;
       }
       .capacitaciones-studio .capacitacion-card h3 {
         color: var(--navy);
-        font-size: 1rem;
-        line-height: 1.22;
+        font-size: 1.08rem;
+        line-height: 1.2;
       }
       .capacitaciones-studio .capacitacion-head {
         align-items: center;
-        justify-content: flex-start;
-        gap: 7px;
+        justify-content: space-between;
+        gap: 10px;
       }
-      .capacitaciones-studio .capacitacion-head .chip,
       .capacitaciones-studio .status-chip {
-        padding: 5px 8px;
-        font-size: 0.62rem;
+        padding: 6px 9px;
+        font-size: 0.64rem;
+      }
+      .capacitaciones-studio .capacitacion-card__date {
+        color: var(--muted);
+        font: 800 0.72rem/1 "Montserrat", sans-serif;
+        white-space: nowrap;
+      }
+      .capacitaciones-studio .capacitacion-card__eyebrow {
+        margin-top: 6px;
+        color: var(--crimson);
+        font: 900 0.6rem/1 "Montserrat", sans-serif;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
       }
       .capacitaciones-studio .capacitacion-card__summary-meta {
-        gap: 7px 12px;
+        margin-top: 7px;
+        gap: 10px 16px;
         font-size: 0.73rem;
       }
       .capacitaciones-studio .diploma-summary {
-        flex-basis: 100%;
+        margin: 0;
       }
       .capacitaciones-studio .capacitacion-card__body {
-        gap: 0;
-        padding: 0 17px 17px;
-        background: linear-gradient(180deg, rgba(238,244,248,0.22), rgba(255,255,255,0.28));
+        gap: 14px;
+        padding: 0 16px 16px;
+        background: rgba(247,250,252,0.76);
       }
       .capacitaciones-studio .capacitacion-card__chevron {
         flex: 0 0 auto;
-        transform: rotate(90deg);
-        font-size: 1.25rem;
+        transform: none;
+        font-size: 1rem;
       }
+      .capacitaciones-studio .capacitacion-card__chevron::before { content: "+"; }
       .capacitaciones-studio .capacitacion-card--expandable[open] > .capacitacion-card__summary .capacitacion-card__chevron {
-        transform: rotate(-90deg);
+        transform: none;
+      }
+      .capacitaciones-studio .capacitacion-card--expandable[open] > .capacitacion-card__summary .capacitacion-card__chevron::before { content: "-"; }
+      .capacitaciones-studio .capacitacion-card__content {
+        display: grid;
+        grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+        gap: 12px;
+        padding-top: 16px;
       }
       .capacitaciones-studio .capacitacion-card__section {
-        display: grid;
-        grid-template-columns: 150px minmax(0, 1fr);
-        gap: 14px;
-        align-items: center;
-        padding: 14px 0;
-        border-top: 1px solid rgba(26,42,58,0.07);
+        display: block;
+        min-width: 0;
+        padding: 15px;
+        border: 1px solid rgba(20,42,61,0.08);
+        border-radius: 17px;
+        background: rgba(255,255,255,0.76);
       }
       .capacitaciones-studio .capacitacion-card__section > strong {
+        display: block;
+        margin-bottom: 10px;
         color: var(--crimson);
         font: 900 0.7rem "Montserrat", sans-serif;
         letter-spacing: 0.07em;
@@ -5263,7 +5416,7 @@ function getHomeStyles() {
       }
       @media (max-width: 620px) {
         .capacitaciones-studio {
-          padding: 16px;
+          padding: 12px;
           border-radius: 24px;
         }
         .capacitaciones-filter-bar .calendar-note-grid {
@@ -5278,14 +5431,21 @@ function getHomeStyles() {
           padding: 14px;
         }
         .capacitaciones-group > .accordion-body {
-          padding: 0 10px 10px;
+          padding: 0 6px 6px;
         }
         .capacitaciones-studio .capacitacion-card__summary {
           min-height: 0;
+          grid-template-columns: minmax(0, 1fr) 38px;
+          padding: 16px 13px 16px 15px;
+        }
+        .capacitaciones-studio .capacitacion-card__summary-meta { grid-template-columns: 1fr; }
+        .capacitaciones-studio .capacitacion-card__chevron { align-self: start; }
+        .capacitaciones-studio .capacitacion-card__content {
+          grid-template-columns: 1fr;
+          gap: 10px;
         }
         .capacitaciones-studio .capacitacion-card__section {
-          grid-template-columns: 1fr;
-          gap: 8px;
+          padding: 13px;
         }
         .capacitaciones-studio .capacitacion-card__notes .notes-form {
           grid-template-columns: 1fr;
@@ -5294,6 +5454,13 @@ function getHomeStyles() {
           grid-template-columns: 1fr auto;
           align-items: center;
           width: 100%;
+        }
+        .capacitaciones-studio .capacitacion-card__actions .diploma-choice,
+        .capacitaciones-studio .capacitacion-card__actions .button {
+          width: 100%;
+        }
+        .capacitaciones-studio .capacitacion-card__actions .diploma-choice {
+          justify-content: space-between;
         }
       }
       .status-actions {
@@ -5390,14 +5557,15 @@ function getHomeStyles() {
         background: rgba(255,255,255,0.82);
       }
       .constancias-workbench__controls .detail-grid { grid-template-columns: 1fr; }
-      .constancias-workbench__canvas { min-width: 0; overflow: hidden; }
+      .constancias-workbench__canvas { min-width: 0; overflow: hidden; border-radius: 22px; }
       .constancias-studio iframe {
         width: 100%;
         min-height: 780px;
         border: 0;
-        border-radius: 12px;
+        border-radius: 22px;
         background: transparent;
       }
+      .constancias-open { width: 100%; margin-top: 12px; }
       .company-directory-tools {
         display: flex;
         align-items: end;
@@ -5435,6 +5603,7 @@ function getHomeStyles() {
         color: var(--ink);
         cursor: pointer;
         text-align: left;
+        text-decoration: none;
         transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
       }
       .company-card:hover {
@@ -5568,6 +5737,7 @@ function getHomeStyles() {
       .company-filter-bar :is(input, select) { width: 100%; min-height: 44px; padding: 0 12px; }
       .company-filter-reset { min-height: 44px; white-space: nowrap; }
       .company-results { margin: -4px 0 0; font-size: 0.82rem; font-weight: 800; }
+      .company-directory-more { display: flex; width: fit-content; margin: 18px auto 0; }
       .territory-list { display: grid; gap: 12px; }
       .territory-card > .accordion-summary { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; }
       .territory-crest {
@@ -5920,72 +6090,6 @@ function getHomeStyles() {
         font-size: 0.92rem;
         font-family: "Montserrat", sans-serif;
       }
-      .page-loader {
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        display: grid;
-        place-items: center;
-        background: radial-gradient(circle at top, rgba(255,255,255,0.98), rgba(247,249,251,0.94));
-        backdrop-filter: blur(16px);
-        transition: opacity 260ms ease, visibility 260ms ease;
-      }
-      .page-loader.is-hidden {
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-      }
-      .page-loader-card {
-        display: grid;
-        justify-items: center;
-        gap: 14px;
-        padding: 28px 32px;
-        border-radius: 28px;
-        background: rgba(255,255,255,0.9);
-        border: 1px solid rgba(26,42,58,0.08);
-        box-shadow: 0 24px 60px rgba(26,42,58,0.12);
-      }
-      .page-loader-logo-wrap {
-        position: relative;
-        width: 92px;
-        height: 92px;
-        display: grid;
-        place-items: center;
-      }
-      .page-loader-logo {
-        width: 72px;
-        height: 72px;
-        object-fit: contain;
-        filter: drop-shadow(0 10px 18px rgba(26,42,58,0.14));
-        animation: pageLoaderPulse 1.4s ease-in-out infinite;
-      }
-      .page-loader-spinner {
-        position: absolute;
-        inset: 0;
-        width: 92px;
-        height: 92px;
-        border-radius: 999px;
-        border: 4px solid rgba(198, 59, 34, 0.12);
-        border-top-color: var(--crimson);
-        border-right-color: rgba(26,42,58,0.18);
-        animation: pageLoaderSpin 0.85s linear infinite;
-      }
-      .page-loader-text {
-        margin: 0;
-        font-family: "Montserrat", sans-serif;
-        font-weight: 800;
-        font-size: 0.88rem;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--ink);
-      }
-      @keyframes pageLoaderSpin {
-        to { transform: rotate(360deg); }
-      }
-      @keyframes pageLoaderPulse {
-        0%, 100% { transform: scale(1); filter: drop-shadow(0 10px 18px rgba(26,42,58,0.14)); }
-        50% { transform: scale(0.96); filter: drop-shadow(0 14px 22px rgba(26,42,58,0.18)); }
-      }
       @media (max-width: 980px) {
         .hero-grid {
           grid-template-columns: 1fr;
@@ -6254,6 +6358,7 @@ function getHomeStyles() {
         .calendar-filter-clear {
           flex: 1 1 auto;
           min-width: 0;
+          min-height: 44px;
           white-space: normal;
         }
         .calendar-frame {
@@ -6261,6 +6366,7 @@ function getHomeStyles() {
           border-radius: 22px;
           overflow: visible;
         }
+        .dashboard-calendar { min-height: 0; }
         .calendar-frame-actions {
           justify-content: flex-start;
           width: 100%;
@@ -6314,8 +6420,16 @@ function getHomeStyles() {
           width: 100%;
         }
         .calendar-panel .fc .fc-button {
+          min-height: 44px;
           padding: 8px 10px;
           font-size: 0.76rem;
+        }
+        .calendar-panel .fc .fc-daygrid-day-number {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 44px;
+          min-height: 44px;
         }
         .calendar-panel .fc .fc-daygrid-day-frame {
           min-height: 66px;
@@ -6409,19 +6523,20 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
     <title>${escapeHtml(title)}</title>
     <link rel="icon" type="image/png" href="${HOME_FAVICON_PATH}" />
     <link rel="shortcut icon" type="image/png" href="${HOME_FAVICON_PATH}" />
-    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260903a" />
     ${getHomeStyles()}
     ${headExtra}
   </head>
   <body class="portal-shell portal-dashboard">
     <a class="skip-link" href="#contenido-principal">Saltar al contenido principal</a>
-    <div class="page-loader" id="page-loader" aria-hidden="true">
+    <div class="page-loader" id="page-loader">
       <div class="page-loader-card" role="status" aria-live="polite" aria-label="Cargando">
-        <div class="page-loader-logo-wrap" aria-hidden="true">
+        <div class="page-loader-brand" aria-hidden="true">
           <img class="page-loader-logo" src="${loaderLogoPath}" alt="" />
-          <div class="page-loader-spinner"></div>
+          <div><span>Plataforma operativa</span><strong>Desarrollo EG</strong></div>
         </div>
-        <p class="page-loader-text">Cargando Desarrollo EG</p>
+        <div class="page-loader-progress" aria-hidden="true"><span></span></div>
+        <p class="page-loader-text">Preparando tu espacio de trabajo</p>
       </div>
     </div>
     <main id="contenido-principal" role="main" aria-label="Contenido principal" class="${escapeAttr(mainClass || "")}">
@@ -6460,19 +6575,19 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
         const loader = document.getElementById("page-loader");
         if (!loader) return;
         let hidden = false;
+        const startedAt = performance.now();
         const hide = () => {
           if (hidden) return;
           hidden = true;
-          loader.classList.add("is-hidden");
-          window.setTimeout(() => loader.remove(), 320);
+          const remaining = Math.max(0, 320 - (performance.now() - startedAt));
+          window.setTimeout(() => {
+            loader.classList.add("is-hidden");
+            window.setTimeout(() => loader.remove(), 320);
+          }, remaining);
         };
-        if (document.readyState === "complete" || document.readyState === "interactive") {
-          requestAnimationFrame(hide);
-        } else {
-          window.addEventListener("DOMContentLoaded", () => requestAnimationFrame(hide), { once: true });
-        }
-        window.addEventListener("load", hide, { once: true });
-        window.setTimeout(hide, 1800);
+        document.addEventListener("desarrolloeg:shell-ready", hide, { once: true });
+        window.addEventListener("load", () => window.setTimeout(hide, 250), { once: true });
+        window.setTimeout(hide, 2200);
       })();
     </script>
     <script>
@@ -7408,18 +7523,6 @@ export async function renderDashboardPage({
         diplomas: "Diplomas faltantes",
         ley: "Faltantes Ley",
       }[String(initialTabId || "").trim()] || "Calendario");
-  const getDashboardTabIcon = (tabId) => ({
-    calendar: "📅",
-    gestion: "⚙️",
-    pedidos: "🧾",
-    faltantes: "⚠️",
-    diplomas: "🎓",
-    ley: "⚖️",
-  })[String(tabId || "").trim()] || "•";
-  const floatingMenuButton = showRoutes
-    ? `<button class="dashboard-fab button primary" type="button" data-dashboard-drawer-open aria-label="Abrir menu">☰ Menú</button>`
-    : "";
-
   const sideContent = `
     <div class="hero-side-row">
       <div class="hero-session-card hero-brand-card">
@@ -7509,7 +7612,7 @@ export async function renderDashboardPage({
     capacitaciones: visible,
     employees,
     showStatusControls,
-    selectedEmployeeId,
+    selectedEmployeeId: selectedEmployeeRole === "capacitador" ? selectedEmployeeId : "",
     detailReturnPath,
   });
   const constanciasPanel = renderConstanciasWorkspacePanelV2({
@@ -7686,92 +7789,6 @@ export async function renderDashboardPage({
   const sucursalesTabPath = selectedEmpresaId
     ? portalPath(`/dashboard/empresas/${encodeURIComponent(selectedEmpresaId)}`)
     : dashboardTabBasePath;
-  const dashboardPrimaryLinks = showRoutes
-    ? Array.from(new Map((groupedRouteCards?.primary || routeCards.slice(0, 5))
-        .slice(0, 6)
-        .map((card) => [String(card.label || card.title || "").trim().toLowerCase(), card])).values())
-    : [];
-  const renderDashboardTabButton = (tab, { compact = false, drawer = false } = {}) => `
-    <button
-      type="button"
-      class="dashboard-nav-link${tab.id === activeTabId ? " active" : ""}${compact ? " dashboard-nav-link--compact" : ""}${drawer ? " dashboard-nav-link--drawer" : ""}"
-      role="tab"
-      aria-selected="${tab.id === activeTabId ? "true" : "false"}"
-      aria-controls="dashboard-tab-${tab.id}"
-      data-dashboard-tab="${escapeAttr(tab.id)}"
-    >
-      <span class="dashboard-nav-link__leading">
-        <span class="dashboard-nav-link__icon" aria-hidden="true">${escapeHtml(getDashboardTabIcon(tab.id))}</span>
-        <span class="dashboard-nav-link__label">${escapeHtml(tab.label)}</span>
-      </span>
-      ${typeof tab.count === "number" ? `<span class="dashboard-nav-link__count">${escapeHtml(String(tab.count))}</span>` : ""}
-    </button>
-  `;
-  const dashboardSidebarContent = `
-      <div class="dashboard-sidebar__content">
-      <div class="dashboard-sidebar__header">
-        <span class="eyebrow">Navegación</span>
-      </div>
-      <div class="dashboard-sidebar__groups">
-        <section class="dashboard-nav-group">
-          <h2>Secciones</h2>
-          <div class="dashboard-nav-group__links">
-            ${dashboardTabs.map((tab) => renderDashboardTabButton(tab)).join("")}
-          </div>
-        </section>
-        ${showRoutes ? `
-        <section class="dashboard-nav-group">
-          <h2>Herramientas legacy</h2>
-          <div class="dashboard-nav-group__links">
-            ${dashboardPrimaryLinks.map((card) => `
-              <a class="dashboard-nav-link dashboard-nav-link--compact" href="${escapeAttr(card.href)}">
-                <span class="dashboard-nav-link__label">${escapeHtml(card.label || card.title || "")}</span>
-              </a>
-            `).join("")}
-          </div>
-        </section>
-        ` : ""}
-      </div>
-    </div>
-  `;
-  const dashboardDrawer = `
-    <div class="dashboard-drawer" data-dashboard-drawer hidden>
-      <button class="dashboard-drawer__backdrop" type="button" aria-label="Cerrar menu" data-dashboard-drawer-close></button>
-      <aside class="dashboard-drawer__panel" data-dashboard-drawer-panel tabindex="-1">
-        <div class="dashboard-drawer__top">
-          <strong>Menú</strong>
-          <button class="button ghost button--compact" type="button" data-dashboard-drawer-close>Cerrar</button>
-        </div>
-        ${dashboardSidebarContent}
-      </aside>
-    </div>
-  `;
-  const dashboardMobileDock = `
-    <nav class="dashboard-mobile-dock" aria-label="Navegacion movil">
-      <button
-        class="dashboard-nav-link dashboard-nav-link--compact dashboard-mobile-dock__menu"
-        type="button"
-        aria-label="Abrir menu"
-        aria-expanded="false"
-        data-dashboard-drawer-open
-      >
-        ☰ <span class="dashboard-nav-link__label">Menú</span>
-      </button>
-      <div class="dashboard-mobile-dock__track">
-        ${dashboardTabs.map((tab) => renderDashboardTabButton(tab, { compact: true, drawer: true })).join("")}
-        ${showRoutes ? `
-          ${dashboardPrimaryLinks.map((card) => `
-            <a class="dashboard-nav-link dashboard-nav-link--compact dashboard-nav-link--drawer" href="${escapeAttr(card.href)}">
-              <span class="dashboard-nav-link__leading">
-                <span class="dashboard-nav-link__icon" aria-hidden="true">↗</span>
-                <span class="dashboard-nav-link__label">${escapeHtml(card.label || card.title || "")}</span>
-              </span>
-            </a>
-          `).join("")}
-        ` : ""}
-      </div>
-    </nav>
-  `;
   const dashboardTabPanels = dashboardTabs.map((tab) => `
     <section
       id="dashboard-tab-${escapeAttr(tab.id)}"
@@ -8664,6 +8681,7 @@ export async function renderDashboardPage({
               const currentUrl = window.location.pathname + window.location.search;
               if (nextUrl !== currentUrl) {
                 window.history[historyMode === "replace" ? "replaceState" : "pushState"]({ dashboardTab: nextTab }, "", nextUrl);
+                window.dispatchEvent(new CustomEvent("desarrolloeg:navigation-changed", { detail: { tab: nextTab } }));
               }
             }
           };
@@ -8853,6 +8871,7 @@ export async function renderDashboardPage({
           if (hasFullCalendar) {
             calendarInstance = new FullCalendar.Calendar(mount, {
             locale: "es",
+            allDayText: "Todo el día",
             firstDay: 1,
             initialView,
             height: "auto",
@@ -9039,17 +9058,16 @@ export async function renderDashboardPage({
     mainClass: "dashboard-main",
     bodyContent: `
       <section class="dashboard-shell">
-        ${floatingMenuButton}
         <div class="dashboard-content">
           ${dashboardTabPanels}
         </div>
-        ${dashboardMobileDock}
-        ${dashboardDrawer}
       </section>
     `,
     bodyScripts: `
       <script>
         (function () {
+          document.addEventListener("DOMContentLoaded", () => {
+          if (window.__DESARROLLOEG_SHELL_REALTIME__) return;
           if (window.__DESARROLLOEG_PORTAL_REALTIME_STARTED__) return;
           window.__DESARROLLOEG_PORTAL_REALTIME_STARTED__ = true;
           const portalUrl = (path) => (window.__PORTAL_URL__ ? window.__PORTAL_URL__(path) : path);
@@ -9172,6 +9190,7 @@ export async function renderDashboardPage({
             if (document.visibilityState === "visible") checkState();
           });
           checkState();
+          }, { once: true });
         })();
       </script>
       <script>
@@ -9192,13 +9211,14 @@ export async function renderDashboardPage({
             const controls = Array.from(capacitaciones.querySelectorAll("[data-capacitaciones-filter]"));
             const items = Array.from(capacitaciones.querySelectorAll("[data-capacitacion-item]"));
             const groups = Array.from(capacitaciones.querySelectorAll("[data-capacitacion-group]"));
+            const groupLimits = new WeakMap(groups.map((group) => [group, 12]));
             const applyCapacitacionesFilters = () => {
               const search = normalize(capacitaciones.querySelector('[data-capacitaciones-filter="search"]')?.value || "");
               const status = normalize(capacitaciones.querySelector('[data-capacitaciones-filter="status"]')?.value || "");
               const capacitador = String(capacitaciones.querySelector('[data-capacitaciones-filter="capacitador"]')?.value || "").trim();
               const diplomas = String(capacitaciones.querySelector('[data-capacitaciones-filter="diplomas"]')?.value || "").trim().toUpperCase();
               const filtersActive = Boolean(search || status || capacitador || diplomas);
-              let totalVisible = 0;
+              let totalMatches = 0;
               items.forEach((item) => {
                 const haystack = normalize(item.dataset.search || item.textContent || "");
                 const itemStatus = normalize(item.dataset.status || "");
@@ -9208,18 +9228,27 @@ export async function renderDashboardPage({
                   && (!status || itemStatus === status)
                   && (!capacitador || keys.includes(capacitador))
                   && (!diplomas || itemDiplomas === diplomas);
-                item.hidden = !visible;
-                if (visible) totalVisible += 1;
+                item.dataset.filterMatch = visible ? "1" : "0";
+                if (visible) totalMatches += 1;
               });
               groups.forEach((group) => {
-                const visibleCount = Array.from(group.querySelectorAll("[data-capacitacion-item]")).filter((item) => !item.hidden).length;
+                const groupItems = Array.from(group.querySelectorAll("[data-capacitacion-item]"));
+                const matches = groupItems.filter((item) => item.dataset.filterMatch === "1");
+                const limit = filtersActive ? Math.max(24, groupLimits.get(group) || 12) : (groupLimits.get(group) || 12);
+                groupItems.forEach((item) => { item.hidden = !matches.includes(item) || matches.indexOf(item) >= limit; });
+                const visibleCount = matches.length;
                 const count = group.querySelector("[data-capacitacion-group-count]");
                 if (count) count.textContent = String(visibleCount);
                 group.hidden = visibleCount === 0;
                 if (filtersActive && visibleCount > 0) group.open = true;
+                const more = group.querySelector("[data-capacitaciones-more]");
+                if (more) {
+                  more.hidden = visibleCount <= limit;
+                  more.textContent = "Mostrar más (" + Math.max(0, visibleCount - limit) + ")";
+                }
               });
               const results = capacitaciones.querySelector("[data-capacitaciones-results]");
-              if (results) results.textContent = totalVisible + (totalVisible === 1 ? " capacitacion visible" : " capacitaciones visibles");
+              if (results) results.textContent = totalMatches + (totalMatches === 1 ? " capacitacion encontrada" : " capacitaciones encontradas");
             };
             controls.forEach((control) => {
               control.addEventListener("input", applyCapacitacionesFilters);
@@ -9227,8 +9256,15 @@ export async function renderDashboardPage({
             });
             capacitaciones.querySelector("[data-capacitaciones-filter-reset]")?.addEventListener("click", () => {
               controls.forEach((control) => { control.value = ""; });
+              groups.forEach((group) => { groupLimits.set(group, 12); });
               groups.forEach((group) => { group.open = false; });
               applyCapacitacionesFilters();
+            });
+            groups.forEach((group) => {
+              group.querySelector("[data-capacitaciones-more]")?.addEventListener("click", () => {
+                groupLimits.set(group, (groupLimits.get(group) || 12) + 12);
+                applyCapacitacionesFilters();
+              });
             });
             applyCapacitacionesFilters();
           }
@@ -9244,6 +9280,18 @@ export async function renderDashboardPage({
             const state = constancias.querySelector("[data-constancias-diplomas-state]");
             const sucursalesList = constancias.querySelector("[data-constancias-sucursales]");
             const diplomasForm = constancias.querySelector("[data-constancias-diplomas-form]");
+            const resizeFrame = () => {
+              if (!frame) return;
+              try {
+                const height = frame.contentDocument?.documentElement?.scrollHeight || frame.contentDocument?.body?.scrollHeight || 0;
+                if (height > 0) frame.style.height = Math.max(780, height + 12) + "px";
+              } catch {}
+            };
+            frame?.addEventListener("load", () => {
+              resizeFrame();
+              window.setTimeout(resizeFrame, 500);
+              window.setTimeout(resizeFrame, 1500);
+            });
             const updateFromSelected = () => {
               const option = capacitacion?.selectedOptions?.[0];
               if (!option) return;
@@ -9307,17 +9355,20 @@ export async function renderDashboardPage({
           const sucursales = document.querySelector("[data-sucursales-studio]");
           if (sucursales) {
             const directorySearch = sucursales.querySelector("[data-company-directory-search]");
+            const directoryMore = sucursales.querySelector("[data-company-directory-more]");
+            const directoryCards = Array.from(sucursales.querySelectorAll("[data-company-directory-card]"));
+            const directoryPageSize = window.matchMedia("(max-width: 720px)").matches ? 12 : 24;
+            let directoryLimit = directoryPageSize;
             const applyDirectorySearch = () => {
               const query = String(directorySearch?.value || "").trim().toUpperCase();
-              let visible = 0;
-              sucursales.querySelectorAll("[data-company-directory-card]").forEach((card) => {
-                card.hidden = Boolean(query) && !String(card.dataset.search || "").toUpperCase().includes(query);
-                if (!card.hidden) visible += 1;
-              });
+              const matches = directoryCards.filter((card) => !query || String(card.dataset.search || "").toUpperCase().includes(query));
+              directoryCards.forEach((card) => { card.hidden = !matches.includes(card) || matches.indexOf(card) >= directoryLimit; });
               const result = sucursales.querySelector("[data-company-directory-results]");
-              if (result) result.textContent = visible + (visible === 1 ? " empresa disponible" : " empresas disponibles");
+              if (result) result.textContent = Math.min(directoryLimit, matches.length) + " de " + matches.length + (matches.length === 1 ? " empresa" : " empresas");
+              if (directoryMore) directoryMore.hidden = matches.length <= directoryLimit;
             };
-            directorySearch?.addEventListener("input", applyDirectorySearch);
+            directorySearch?.addEventListener("input", () => { directoryLimit = directoryPageSize; applyDirectorySearch(); });
+            directoryMore?.addEventListener("click", () => { directoryLimit += directoryPageSize; applyDirectorySearch(); });
             applyDirectorySearch();
             const applyFilters = (panel) => {
               const controls = Array.from(panel.querySelectorAll("[data-sucursales-filter]"));

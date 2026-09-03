@@ -13,6 +13,7 @@ runtime-qa/
 runtime-dev/
 runtime-whatsapp-test/
 data-dev/
+tmp/
 release/
 secrets/
 publicimg/

@@ -82,12 +82,18 @@
 
   function isNavigationLinkActive(link) {
     const url = new URL(window.location.href);
-    const activeTab = url.searchParams.get("tab") || "calendar";
+    const pathname = url.pathname.replace(/\/$/, "") || "/";
+    const requestedTab = url.searchParams.get("tab") || "";
+    const activeTab = pathname.startsWith("/dashboard/empresas/")
+      ? "sucursales"
+      : requestedTab || "calendar";
     if (link.tab) {
-      return url.pathname.includes("/dashboard") && activeTab === link.tab;
+      const isDashboardRoot = pathname === "/dashboard" || pathname.startsWith("/dashboard/capacitador/") || pathname.startsWith("/dashboard/empresas/");
+      return isDashboardRoot && activeTab === link.tab;
     }
     const href = new URL(getPortalUrl(link.href), window.location.origin);
-    return url.pathname === href.pathname || url.pathname.startsWith(`${href.pathname}/`);
+    const hrefPath = href.pathname.replace(/\/$/, "") || "/";
+    return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
   }
 
   function renderNavigationGroups(profile) {
@@ -108,6 +114,26 @@
         </section>
       `;
     }).join("");
+  }
+
+  function syncNavigationState(root = appNavigation) {
+    if (!root) return;
+    let activeLabel = "Calendario";
+    root.querySelectorAll("[href]").forEach((anchor) => {
+      const href = anchor.getAttribute("href") || "";
+      const link = NAVIGATION_GROUPS.flatMap((group) => group.links)
+        .find((candidate) => getPortalUrl(candidate.href) === href);
+      if (!link) return;
+      const active = isNavigationLinkActive(link);
+      anchor.classList.toggle("is-active", active);
+      if (active) {
+        anchor.setAttribute("aria-current", "page");
+        activeLabel = link.label;
+      }
+      else anchor.removeAttribute("aria-current");
+    });
+    const context = root.querySelector("[data-portal-current-section]");
+    if (context) context.textContent = activeLabel;
   }
 
   function bindNavigationDrawer(root) {
@@ -178,7 +204,7 @@
           </a>
           <div class="portal-app-topbar__context">
             <span>Plataforma operativa</span>
-            <strong>${NAVIGATION_GROUPS.flatMap((group) => group.links).find(isNavigationLinkActive)?.label || "Calendario"}</strong>
+            <strong data-portal-current-section>${NAVIGATION_GROUPS.flatMap((group) => group.links).find(isNavigationLinkActive)?.label || "Calendario"}</strong>
           </div>
           <div class="portal-app-topbar__account">
             <span><strong>${user.nombre || "Usuario"}</strong><small>${user.puesto || ""}</small></span>
@@ -193,12 +219,19 @@
           <aside class="portal-app-drawer__panel" data-portal-nav-panel role="dialog" aria-modal="true" aria-label="Menu principal" tabindex="-1">
             <div class="portal-app-drawer__header"><strong>Menu principal</strong><button type="button" data-portal-nav-close>Cerrar</button></div>
             <nav aria-label="Navegacion principal">${renderNavigationGroups(user.accessProfile)}</nav>
+            <div class="portal-app-drawer__footer">
+              <button class="portal-app-drawer__refresh" type="button" data-portal-refresh data-refresh-scope="${inferScope()}">Actualizar datos</button>
+              <span>Sincronizacion local con AppSheet</span>
+            </div>
           </aside>
         </div>
       `;
       document.body.prepend(navigation);
       appNavigation = navigation;
+      if (liveBadge) navigation.querySelector(".portal-app-topbar__account")?.prepend(liveBadge);
       bindNavigationDrawer(navigation);
+      window.addEventListener("popstate", () => syncNavigationState(navigation));
+      window.addEventListener("desarrolloeg:navigation-changed", () => syncNavigationState(navigation));
       document.body.classList.add("portal-has-app-nav");
       return navigation;
     } catch {
@@ -341,6 +374,7 @@
       return;
     }
 
+    window.__DESARROLLOEG_SHELL_REALTIME__ = true;
     ensureLiveBadge();
     startAppEventStream();
     const schedule = () => {
@@ -502,9 +536,11 @@
     };
     window.__DESARROLLOEG_REFRESH_CACHE__ = refreshAppShellCache;
     window.refreshAppShellCache = refreshAppShellCache;
-    void ensureAppNavigation();
     startCacheWatcher();
-    bindButtons();
+    void ensureAppNavigation().finally(() => {
+      bindButtons();
+      document.dispatchEvent(new CustomEvent("desarrolloeg:shell-ready"));
+    });
   }
 
   if (document.readyState === "loading") {

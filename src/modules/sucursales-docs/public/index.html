@@ -19,8 +19,9 @@
       --line: #d7e0e7;
       --ink: #10202a;
       --muted: #617381;
-      --teal: #0f766e;
-      --teal-soft: #d9f5f1;
+      --teal: #17324a;
+      --teal-soft: #e8f0f5;
+      --red: #c7352d;
       --red-soft: #ffe3e0;
       --gold: #b2873b;
       --shadow: 0 24px 60px rgba(16, 32, 42, 0.14);
@@ -47,9 +48,7 @@
 
     .hero {
       position: relative;
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 20px;
+      display: block;
       margin-bottom: 20px;
     }
 
@@ -66,10 +65,19 @@
     }
 
     .hero-card {
-      padding: 30px 32px;
+      position: relative;
+      padding: 24px 28px;
       background:
         linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 252, 0.88)),
         linear-gradient(135deg, rgba(15, 118, 110, 0.06), rgba(178, 135, 59, 0.08));
+    }
+
+    .hero-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 5px;
+      background: linear-gradient(180deg, var(--red), #8f211c);
     }
 
     .eyebrow {
@@ -85,7 +93,7 @@
     .hero-card h1 {
       margin: 0;
       font-family: "Cinzel", serif;
-      font-size: clamp(2rem, 4vw, 3.4rem);
+      font-size: clamp(1.75rem, 3vw, 2.65rem);
       line-height: 1.02;
       text-transform: uppercase;
     }
@@ -100,7 +108,7 @@
     }
 
     .hero-card p {
-      margin: 18px 0 0;
+      margin: 12px 0 0;
       max-width: 760px;
       color: var(--muted);
       line-height: 1.75;
@@ -137,7 +145,7 @@
 
     .layout {
       display: grid;
-      grid-template-columns: 520px 1fr;
+      grid-template-columns: minmax(430px, 500px) minmax(0, 1fr);
       gap: 20px;
       align-items: start;
     }
@@ -173,9 +181,9 @@
     .status.error { color: #b91c1c; }
 
     .panel-body {
-      padding: 22px;
+      padding: 18px;
       display: grid;
-      gap: 18px;
+      gap: 16px;
     }
 
     .field {
@@ -236,11 +244,189 @@
       text-transform: uppercase;
     }
 
+    .branch-state-control { display: none; }
+
+    .branch-filter {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid #d8e2ea;
+      border-radius: 22px;
+      background: rgba(248, 250, 252, 0.88);
+    }
+
+    .branch-filter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .branch-filter-grid .field:first-child { grid-column: 1 / -1; }
+    .search-wrap { position: relative; }
+    .search-wrap input { padding-left: 44px; }
+
+    .search-wrap::before {
+      content: "";
+      position: absolute;
+      z-index: 1;
+      left: 16px;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #64748b;
+      border-radius: 50%;
+      transform: translateY(-60%);
+    }
+
+    .search-wrap::after {
+      content: "";
+      position: absolute;
+      z-index: 1;
+      left: 29px;
+      top: 29px;
+      width: 7px;
+      height: 2px;
+      background: #64748b;
+      transform: rotate(45deg);
+    }
+
+    .branch-results-toolbar,
+    .branch-results-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .branch-results-toolbar { justify-content: space-between; }
+
+    .text-action {
+      border: 0;
+      padding: 5px 7px;
+      background: transparent;
+      color: var(--teal);
+      font: 800 0.72rem "Montserrat", sans-serif;
+      cursor: pointer;
+    }
+
+    .text-action:disabled { color: #94a3b8; cursor: not-allowed; }
+
+    .branch-results {
+      display: grid;
+      gap: 7px;
+      max-height: 310px;
+      overflow: auto;
+      padding-right: 4px;
+      scrollbar-color: #9aabb8 transparent;
+    }
+
+    .branch-result {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      border: 1px solid #dbe4eb;
+      border-radius: 15px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+    }
+
+    .branch-result:hover { transform: translateY(-1px); border-color: #9fb2c1; }
+    .branch-result.is-selected { border-color: #53748e; background: #edf4f8; }
+    .branch-result.is-active { box-shadow: inset 3px 0 0 var(--red); }
+
+    .branch-check {
+      display: grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border: 1px solid #a9bac7;
+      border-radius: 8px;
+      color: transparent;
+      background: #fff;
+      font-weight: 900;
+    }
+
+    .branch-result.is-selected .branch-check { border-color: var(--teal); background: var(--teal); color: #fff; }
+    .branch-result-main { min-width: 0; }
+    .branch-result-main strong,
+    .branch-result-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .branch-result-main strong { font-size: 0.86rem; }
+    .branch-result-main small { margin-top: 3px; color: var(--muted); font-size: 0.74rem; }
+    .branch-result-type { color: #6b4d19; font: 800 0.65rem "Montserrat", sans-serif; text-transform: uppercase; }
+    .branch-empty { padding: 28px 16px; border: 1px dashed #bdcbd5; border-radius: 16px; color: var(--muted); text-align: center; }
+
+    .selected-branches {
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      padding: 2px 0 4px;
+    }
+
+    .selected-chip {
+      flex: 0 0 auto;
+      border: 1px solid #c9d7e1;
+      border-radius: 999px;
+      padding: 7px 10px;
+      background: #fff;
+      color: var(--ink);
+      font-size: 0.72rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .selection-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid #c9d7e1;
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .selection-clear {
+      border: 0;
+      padding: 4px 0;
+      background: transparent;
+      color: var(--teal);
+      font: inherit;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+
     .selected-card {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
       gap: 10px;
     }
+
+    .branch-details {
+      border: 1px solid #d8e2ea;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.7);
+      overflow: hidden;
+    }
+
+    .branch-details summary {
+      padding: 13px 15px;
+      color: var(--teal);
+      font: 800 0.75rem "Montserrat", sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .branch-details .selected-card { padding: 0 12px 12px; }
 
     .mini-card {
       border-radius: 18px;
@@ -299,7 +485,7 @@
     }
 
     .button-primary {
-      background: linear-gradient(135deg, var(--teal), #19b7a6);
+      background: linear-gradient(135deg, var(--teal), #29516f);
       color: #ffffff;
     }
 
@@ -327,6 +513,7 @@
     }
 
     .preview-frame-wrap {
+      position: relative;
       padding: 18px;
       min-height: 860px;
       background:
@@ -342,6 +529,32 @@
       background: #ffffff;
       box-shadow: 0 16px 30px rgba(16, 32, 42, 0.14);
     }
+
+    .preview-empty {
+      display: grid;
+      place-items: center;
+      min-height: 820px;
+      border: 1px dashed #adbdc9;
+      border-radius: 20px;
+      background: radial-gradient(circle at 50% 38%, rgba(199, 53, 45, 0.08), transparent 18%), rgba(255, 255, 255, 0.62);
+      text-align: center;
+    }
+
+    .preview-empty-mark {
+      display: grid;
+      place-items: center;
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 16px;
+      border-radius: 20px;
+      background: var(--teal);
+      color: #fff;
+      font: 900 1.7rem "Cinzel", serif;
+      box-shadow: 0 16px 32px rgba(23, 50, 74, 0.2);
+    }
+
+    .preview-empty h3 { margin: 0; font: 800 1rem "Montserrat", sans-serif; text-transform: uppercase; }
+    .preview-empty p { max-width: 360px; margin: 10px auto 0; color: var(--muted); line-height: 1.6; }
 
     .footer-note {
       padding: 0 22px 22px;
@@ -364,6 +577,8 @@
       .actions,
       .selected-card { grid-template-columns: 1fr; }
       .field-span-2 { grid-column: span 1; }
+      .branch-filter-grid { grid-template-columns: 1fr; }
+      .branch-filter-grid .field:first-child { grid-column: auto; }
       iframe { min-height: 620px; }
     }
   </style>
@@ -378,21 +593,10 @@
         <h1>Documentos de Sucursales</h1>
         <span class="accent">Edicion guiada sobre SUCURSALES, firmantes y formatos de Proteccion Civil.</span>
         <p>
-          Esta vista toma los datos de <strong>SUCURSALES</strong>, permite generar la carta municipal o la
-          cedula de simulacro, y te deja ajustar datos editables sin modificar AppSheet.
+          Busca, filtra y selecciona una o varias sucursales. Previsualiza una carta y descarga un PDF
+          independiente por cada sucursal seleccionada, sin modificar AppSheet.
         </p>
       </article>
-
-      <aside class="hero-aside">
-        <p class="eyebrow" style="color:#dffbf7;">Base Visual</p>
-        <h2>Un solo selector de sucursal para generar los formatos necesarios.</h2>
-        <p>Los cambios que hagas aqui solo se usan para el documento y para su PDF.</p>
-        <ul>
-          <li>La carta conserva su membrete y firma editable.</li>
-          <li>La cedula usa el logo de la columna LOGO de la sucursal.</li>
-          <li>Los valores se pueden ajustar antes de previsualizar o descargar.</li>
-        </ul>
-      </aside>
     </section>
 
     <section class="layout">
@@ -403,15 +607,41 @@
         </div>
 
         <div class="panel-body">
-          <div class="field">
-            <label for="search">Buscar sucursal</label>
-            <input id="search" type="text" placeholder="Ejemplo: 1012, Cajeme, Culiacan">
-          </div>
-
-          <div class="field">
-            <label for="branch">Sucursal</label>
-            <select id="branch"></select>
-            <div class="hint">La carta se basa en la sucursal elegida y despues puedes ajustar sus datos solo para este documento.</div>
+          <div class="branch-filter" aria-label="Filtros de sucursales">
+            <div class="branch-filter-grid">
+              <div class="field">
+                <label for="search">Buscar sucursal</label>
+                <div class="search-wrap"><input id="search" type="search" autocomplete="off" placeholder="Tienda, sucursal, empresa o municipio"></div>
+              </div>
+              <div class="field">
+                <label for="company-filter">Empresa</label>
+                <select id="company-filter"><option value="">Todas</option></select>
+              </div>
+              <div class="field">
+                <label for="state-filter">Estado</label>
+                <select id="state-filter"><option value="">Todos</option></select>
+              </div>
+              <div class="field">
+                <label for="municipality-filter">Municipio</label>
+                <select id="municipality-filter"><option value="">Todos</option></select>
+              </div>
+              <div class="field">
+                <label for="type-filter">Tipo</label>
+                <select id="type-filter"><option value="">Todos</option></select>
+              </div>
+            </div>
+            <div class="branch-results-toolbar">
+              <span class="status" id="results-status">Preparando sucursales...</span>
+              <div class="branch-results-actions">
+                <button class="text-action" id="select-visible-btn" type="button">Seleccionar visibles</button>
+                <button class="text-action" id="reset-filters-btn" type="button">Restablecer</button>
+              </div>
+            </div>
+            <div class="branch-results" id="branch-results" role="listbox" aria-multiselectable="true" aria-describedby="branch-hint"></div>
+            <select class="branch-state-control" id="branch" multiple aria-hidden="true" tabindex="-1"></select>
+            <div class="selection-summary"><span id="selection-count">0 sucursales seleccionadas</span><button class="selection-clear" id="clear-selection-btn" type="button">Limpiar selección</button></div>
+            <div class="selected-branches" id="selected-branches" aria-label="Sucursales seleccionadas"></div>
+            <div class="hint" id="branch-hint">Selecciona una tarjeta para agregarla o quitarla. La última seleccionada se utiliza en la vista previa.</div>
           </div>
 
           <div class="field">
@@ -431,15 +661,18 @@
             <div class="hint">Al seleccionar un empleado se cargan su firma, nombre y puesto, pero sigues pudiendo editarlos.</div>
           </div>
 
-          <div class="selected-card">
-            <div class="mini-card"><span>ID</span><strong id="meta-id">-</strong></div>
-            <div class="mini-card"><span>Tienda</span><strong id="meta-tienda">-</strong></div>
-            <div class="mini-card"><span>Label</span><strong id="meta-label">-</strong></div>
-            <div class="mini-card"><span>Municipio</span><strong id="meta-municipio">-</strong></div>
-            <div class="mini-card"><span>Estado</span><strong id="meta-estado">-</strong></div>
-            <div class="mini-card"><span>Tipo</span><strong id="meta-tipo">-</strong></div>
-            <div class="mini-card"><span>Empresa</span><strong id="meta-empresa">-</strong></div>
-          </div>
+          <details class="branch-details">
+            <summary>Datos de la sucursal activa</summary>
+            <div class="selected-card">
+              <div class="mini-card"><span>ID</span><strong id="meta-id">-</strong></div>
+              <div class="mini-card"><span>Tienda</span><strong id="meta-tienda">-</strong></div>
+              <div class="mini-card"><span>Label</span><strong id="meta-label">-</strong></div>
+              <div class="mini-card"><span>Municipio</span><strong id="meta-municipio">-</strong></div>
+              <div class="mini-card"><span>Estado</span><strong id="meta-estado">-</strong></div>
+              <div class="mini-card"><span>Tipo</span><strong id="meta-tipo">-</strong></div>
+              <div class="mini-card"><span>Empresa</span><strong id="meta-empresa">-</strong></div>
+            </div>
+          </details>
 
           <div class="actions">
             <button class="button button-primary" id="preview-btn">Previsualizar</button>
@@ -457,7 +690,10 @@
           <span class="status" id="preview-status">Esperando accion</span>
         </div>
         <div class="preview-frame-wrap">
-          <iframe id="preview-frame" title="Vista previa del documento"></iframe>
+          <div class="preview-empty" id="preview-empty">
+            <div><span class="preview-empty-mark">D</span><h3>Prepara tu documento</h3><p>Usa los filtros para localizar una sucursal y selecciónala para cargar aquí su carta.</p></div>
+          </div>
+          <iframe id="preview-frame" title="Vista previa del documento" hidden></iframe>
         </div>
         <div class="footer-note">
           Si cambias textos, esos cambios solo viven aqui para esta carta. No se escriben de regreso en AppSheet.
@@ -476,6 +712,8 @@
       cedulaInlineFields: {},
       cedulaExtraFields: {},
       previewObjectUrl: "",
+      selectedBranchIds: new Set(),
+      activeBranchId: "",
       busy: false,
     };
 
@@ -485,6 +723,17 @@
     const els = {
       search: document.getElementById("search"),
       branch: document.getElementById("branch"),
+      branchResults: document.getElementById("branch-results"),
+      selectedBranches: document.getElementById("selected-branches"),
+      companyFilter: document.getElementById("company-filter"),
+      stateFilter: document.getElementById("state-filter"),
+      municipalityFilter: document.getElementById("municipality-filter"),
+      typeFilter: document.getElementById("type-filter"),
+      resultsStatus: document.getElementById("results-status"),
+      selectVisibleBtn: document.getElementById("select-visible-btn"),
+      resetFiltersBtn: document.getElementById("reset-filters-btn"),
+      selectionCount: document.getElementById("selection-count"),
+      clearSelectionBtn: document.getElementById("clear-selection-btn"),
       documentType: document.getElementById("document-type"),
       signer: document.getElementById("signer"),
       signerField: document.getElementById("signer-field"),
@@ -499,6 +748,7 @@
       loadingStatus: document.getElementById("loading-status"),
       previewStatus: document.getElementById("preview-status"),
       previewFrame: document.getElementById("preview-frame"),
+      previewEmpty: document.getElementById("preview-empty"),
       previewBtn: document.getElementById("preview-btn"),
       openBtn: document.getElementById("open-btn"),
       pdfBtn: document.getElementById("pdf-btn"),
@@ -548,9 +798,10 @@
 
     function setBusy(nextBusy, message) {
       state.busy = nextBusy;
-      els.previewBtn.disabled = nextBusy;
-      els.openBtn.disabled = nextBusy;
-      els.pdfBtn.disabled = nextBusy;
+      const noBranch = !state.selectedBranchIds.size;
+      els.previewBtn.disabled = nextBusy || noBranch;
+      els.openBtn.disabled = nextBusy || noBranch;
+      els.pdfBtn.disabled = nextBusy || !state.selectedBranchIds.size;
       els.resetBtn.disabled = nextBusy;
 
       if (message) {
@@ -566,7 +817,46 @@
     }
 
     function getSelectedRow() {
-      return state.rows.find((row) => row.id === els.branch.value) || null;
+      const id = state.activeBranchId || getSelectedBranchIds()[0] || "";
+      return state.rows.find((row) => row.id === id) || null;
+    }
+
+    function getSelectedBranchIds() {
+      return Array.from(state.selectedBranchIds);
+    }
+
+    function updateSelectionSummary() {
+      const count = state.selectedBranchIds.size;
+      els.selectionCount.textContent = `${count} ${count === 1 ? "sucursal seleccionada" : "sucursales seleccionadas"}`;
+      els.pdfBtn.textContent = count > 1 ? `Descargar ${count} PDFs` : "Descargar PDF";
+      els.pdfBtn.disabled = state.busy || count === 0;
+      els.previewBtn.disabled = state.busy || count === 0;
+      els.openBtn.disabled = state.busy || count === 0;
+    }
+
+    function normalizeFilterValue(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function escapeUi(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function populateFilter(select, values, emptyLabel) {
+      const options = [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+      select.innerHTML = `<option value="">${emptyLabel}</option>${options
+        .map((value) => `<option value="${escapeUi(value)}">${escapeUi(value)}</option>`)
+        .join("")}`;
     }
 
     function getSelectedEmployee() {
@@ -584,19 +874,43 @@
       els.metaEmpresa.textContent = row ? row.empresa : "-";
     }
 
-    function renderBranchOptions(rows) {
-      if (!rows.length) {
-        els.branch.innerHTML = '<option value="">Sin resultados</option>';
+    function renderBranchResults() {
+      els.branch.innerHTML = getSelectedBranchIds()
+        .map((id) => `<option value="${escapeUi(id)}" selected>${escapeUi(id)}</option>`)
+        .join("");
+
+      if (!state.filteredRows.length) {
+        els.branchResults.innerHTML = '<div class="branch-empty">No hay sucursales que coincidan con estos filtros.</div>';
+        els.resultsStatus.textContent = "0 resultados";
         return;
       }
 
-      els.branch.innerHTML = rows
+      els.branchResults.innerHTML = state.filteredRows
         .map((row) => {
-          const main = [row.tienda, row.label].filter(Boolean).join(" | ");
-          const extra = [row.municipio, row.estado].filter(Boolean).join(" · ");
-          const typeText = row.tipo ? ` · ${row.tipo}` : "";
-          return `<option value="${row.id}">${main}${extra ? ` · ${extra}` : ""}${typeText}</option>`;
+          const selected = state.selectedBranchIds.has(row.id);
+          const active = row.id === state.activeBranchId;
+          const location = [row.municipio, row.estado].filter(Boolean).join(" · ");
+          const context = [row.empresa, location].filter(Boolean).join(" · ");
+          return `<button class="branch-result${selected ? " is-selected" : ""}${active ? " is-active" : ""}" type="button" role="option" aria-selected="${selected}" data-branch-id="${escapeUi(row.id)}">
+            <span class="branch-check" aria-hidden="true">✓</span>
+            <span class="branch-result-main"><strong>${escapeUi(row.label || row.tienda || row.id)}</strong><small>${escapeUi(context || "Sin ubicación")}</small></span>
+            <span class="branch-result-type">${escapeUi(row.tipo || "Sucursal")}</span>
+          </button>`;
         })
+        .join("");
+
+      const total = state.rows.length;
+      els.resultsStatus.textContent = `${state.filteredRows.length} de ${total} sucursales`;
+      const canSelectVisible = state.filteredRows.length > 0 && state.filteredRows.length <= 100;
+      els.selectVisibleBtn.disabled = !canSelectVisible;
+      els.selectVisibleBtn.textContent = state.filteredRows.length > 100 ? "Acota los filtros" : `Seleccionar ${state.filteredRows.length}`;
+    }
+
+    function renderSelectedBranches() {
+      els.selectedBranches.innerHTML = getSelectedBranchIds()
+        .map((id) => state.rows.find((row) => row.id === id))
+        .filter(Boolean)
+        .map((row) => `<button class="selected-chip" type="button" data-remove-branch="${escapeUi(row.id)}" title="Quitar ${escapeUi(row.label)}">${escapeUi(row.label || row.tienda || row.id)} ×</button>`)
         .join("");
     }
 
@@ -613,23 +927,57 @@
     }
 
     function filterRows() {
-      const query = els.search.value.trim().toLowerCase();
-      const currentId = els.branch.value;
+      const query = normalizeFilterValue(els.search.value);
+      const company = els.companyFilter.value;
+      const stateName = els.stateFilter.value;
+      const municipality = els.municipalityFilter.value;
+      const type = els.typeFilter.value;
 
-      state.filteredRows = !query
-        ? [...state.rows]
-        : state.rows.filter((row) => `${row.id} ${row.tienda} ${row.label} ${row.municipio} ${row.estado} ${row.tipo} ${row.empresa}`.toLowerCase().includes(query));
+      state.filteredRows = state.rows.filter((row) => {
+        const searchable = normalizeFilterValue(`${row.id} ${row.tienda} ${row.label} ${row.municipio} ${row.estado} ${row.tipo} ${row.empresa}`);
+        return (!query || searchable.includes(query))
+          && (!company || row.empresa === company)
+          && (!stateName || row.estado === stateName)
+          && (!municipality || row.municipio === municipality)
+          && (!type || row.tipo === type);
+      });
 
-      renderBranchOptions(state.filteredRows);
-
-      if (state.filteredRows.some((row) => row.id === currentId)) {
-        els.branch.value = currentId;
-      } else if (state.filteredRows[0]) {
-        els.branch.value = state.filteredRows[0].id;
-      }
+      renderBranchResults();
 
       updateSelectedMeta();
-      els.loadingStatus.textContent = `${state.filteredRows.length} sucursales visibles`;
+      updateSelectionSummary();
+      renderSelectedBranches();
+    }
+
+    async function toggleBranchSelection(id) {
+      if (!id) return;
+
+      if (state.selectedBranchIds.has(id)) {
+        state.selectedBranchIds.delete(id);
+        if (state.activeBranchId === id) {
+          const remaining = getSelectedBranchIds();
+          state.activeBranchId = remaining[remaining.length - 1] || "";
+        }
+      } else {
+        state.selectedBranchIds.add(id);
+        state.activeBranchId = id;
+      }
+
+      renderBranchResults();
+      renderSelectedBranches();
+      updateSelectionSummary();
+      updateSelectedMeta();
+
+      if (!state.activeBranchId) {
+        els.previewFrame.removeAttribute("srcdoc");
+        els.previewFrame.hidden = true;
+        els.previewEmpty.hidden = false;
+        els.previewStatus.textContent = "Selecciona una sucursal para continuar";
+        return;
+      }
+
+      await loadPreset();
+      await previewDocument(false);
     }
 
     function applyFields(fields) {
@@ -685,10 +1033,10 @@
       };
     }
 
-    function getPayload() {
+    function getPayload(id = state.activeBranchId || getSelectedBranchIds()[0] || "") {
       const templateId = getTemplateId();
       return {
-        id: els.branch.value,
+        id,
         templateId,
         title: getDocumentTitle(templateId),
         subtitle: "",
@@ -840,6 +1188,8 @@
         }
 
         const html = await res.text();
+        els.previewEmpty.hidden = true;
+        els.previewFrame.hidden = false;
         els.previewFrame.removeAttribute("src");
         els.previewFrame.srcdoc = html;
         els.previewStatus.textContent = "Vista previa actualizada";
@@ -862,26 +1212,23 @@
 
     async function downloadPdf() {
       try {
-        setBusy(true, "Generando PDF...");
-        const res = await fetchPdfResponse(apiUrl("pdf"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(getPayload()),
-        });
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const header = res.headers.get("Content-Disposition") || "";
-        const match = header.match(/filename\\*=UTF-8''([^;]+)/);
-        const fallback = header.match(/filename=\"([^\"]+)\"/);
-        const fileName = match ? decodeURIComponent(match[1]) : (fallback ? fallback[1] : "documento.pdf");
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(url);
-        els.previewStatus.textContent = "PDF generado correctamente";
+        const selectedIds = getSelectedBranchIds();
+        if (!selectedIds.length) throw new Error("Selecciona al menos una sucursal.");
+        setBusy(true, `Generando 1 de ${selectedIds.length}...`);
+
+        for (let index = 0; index < selectedIds.length; index += 1) {
+          const id = selectedIds[index];
+          els.previewStatus.textContent = `Generando ${index + 1} de ${selectedIds.length}...`;
+          const payload = await getPayloadForBranch(id);
+          const res = await fetchPdfResponse(apiUrl("pdf"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          await downloadPdfResponse(res);
+        }
+
+        els.previewStatus.textContent = `${selectedIds.length} ${selectedIds.length === 1 ? "PDF generado" : "PDFs generados"} correctamente`;
         els.previewStatus.classList.remove("error");
       } catch (error) {
         setError(error.message || "No se pudo generar el PDF.");
@@ -893,11 +1240,13 @@
     async function loadRows() {
       state.rows = await fetchJson(apiUrl("sucursales"), {}, 45000);
       state.filteredRows = [...state.rows];
-      renderBranchOptions(state.filteredRows);
-      if (state.rows.length) {
-        els.branch.value = state.rows[0].id;
-      }
+      populateFilter(els.companyFilter, state.rows.map((row) => row.empresa), "Todas");
+      populateFilter(els.stateFilter, state.rows.map((row) => row.estado), "Todos");
+      populateFilter(els.municipalityFilter, state.rows.map((row) => row.municipio), "Todos");
+      populateFilter(els.typeFilter, state.rows.map((row) => row.tipo), "Todos");
+      filterRows();
       updateSelectedMeta();
+      updateSelectionSummary();
     }
 
     async function loadEmployees() {
@@ -906,11 +1255,11 @@
     }
 
     async function loadPreset() {
-      if (!els.branch.value) return;
+      if (!state.activeBranchId) return;
 
       const currentSigner = els.signer.value;
       const templateId = getTemplateId();
-      const preset = await fetchJson(apiUrl(`presets/${templateId}?id=${encodeURIComponent(els.branch.value)}`));
+      const preset = await fetchJson(apiUrl(`presets/${templateId}?id=${encodeURIComponent(state.activeBranchId)}`));
 
       if (templateId === "cedula-simulacro") {
         applyCedulaFields(preset.fields || {});
@@ -965,14 +1314,113 @@
           els.previewStatus.classList.add("error");
         }
 
-        await loadPreset();
-        await previewDocument(false);
+        setBusy(false);
+        els.previewStatus.textContent = "Selecciona una sucursal para comenzar";
       } catch (error) {
         setError(error.message || "No se pudo iniciar la herramienta.");
       }
     }
 
+    async function getPayloadForBranch(id) {
+      if (id === state.activeBranchId) return getPayload(id);
+
+      const templateId = getTemplateId();
+      const preset = await fetchJson(apiUrl(`presets/${templateId}?id=${encodeURIComponent(id)}`));
+      let fields = { ...(preset.fields || {}) };
+      const employee = getSelectedEmployee();
+
+      if (templateId === "cedula-simulacro") {
+        fields = { ...fields, ...state.cedulaChoices };
+      } else if (employee) {
+        fields = {
+          ...fields,
+          signer_id: employee.id || "",
+          firma_url: employee.firma || "",
+          nombre_firma: employee.nombre || "",
+          puesto_firma: employee.puesto || "",
+        };
+      }
+
+      return {
+        id,
+        templateId,
+        title: getDocumentTitle(templateId),
+        subtitle: "",
+        fields,
+      };
+    }
+
+    async function downloadPdfResponse(res) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const header = res.headers.get("Content-Disposition") || "";
+      const match = header.match(/filename\\*=UTF-8''([^;]+)/);
+      const fallback = header.match(/filename=\"([^\"]+)\"/);
+      const fileName = match ? decodeURIComponent(match[1]) : (fallback ? fallback[1] : "documento.pdf");
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     els.search.addEventListener("input", filterRows);
+    [els.companyFilter, els.stateFilter, els.municipalityFilter, els.typeFilter]
+      .forEach((select) => select.addEventListener("change", filterRows));
+    els.branchResults.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-branch-id]");
+      if (!button) return;
+      try {
+        await toggleBranchSelection(button.dataset.branchId || "");
+      } catch (error) {
+        setError(error.message || "No se pudo seleccionar la sucursal.");
+      }
+    });
+    els.selectedBranches.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-remove-branch]");
+      if (!button) return;
+      try {
+        await toggleBranchSelection(button.dataset.removeBranch || "");
+      } catch (error) {
+        setError(error.message || "No se pudo quitar la sucursal.");
+      }
+    });
+    els.selectVisibleBtn.addEventListener("click", async () => {
+      state.filteredRows.forEach((row) => state.selectedBranchIds.add(row.id));
+      if (!state.activeBranchId && state.filteredRows[0]) state.activeBranchId = state.filteredRows[0].id;
+      renderBranchResults();
+      renderSelectedBranches();
+      updateSelectionSummary();
+      updateSelectedMeta();
+      if (state.activeBranchId) {
+        await loadPreset();
+        await previewDocument(false);
+      }
+    });
+    els.resetFiltersBtn.addEventListener("click", () => {
+      els.search.value = "";
+      els.companyFilter.value = "";
+      els.stateFilter.value = "";
+      els.municipalityFilter.value = "";
+      els.typeFilter.value = "";
+      filterRows();
+      els.search.focus();
+    });
+    els.clearSelectionBtn.addEventListener("click", () => {
+      state.selectedBranchIds.clear();
+      state.activeBranchId = "";
+      renderBranchResults();
+      renderSelectedBranches();
+      updateSelectionSummary();
+      updateSelectedMeta();
+      els.previewFrame.removeAttribute("srcdoc");
+      els.previewFrame.hidden = true;
+      els.previewEmpty.hidden = false;
+      els.previewStatus.textContent = "Selecciona una sucursal para continuar";
+      els.previewStatus.classList.remove("error");
+    });
     els.documentType.addEventListener("change", async () => {
       updateDocumentMode();
       await loadPreset();
@@ -1003,11 +1451,6 @@
         const value = String(event.data.value || "");
         state.cedulaInlineFields[name] = value;
       }
-    });
-    els.branch.addEventListener("change", async () => {
-      updateSelectedMeta();
-      await loadPreset();
-      await previewDocument(false);
     });
     els.signer.addEventListener("change", async () => {
       fillSignerFields(getSelectedEmployee());

@@ -12,13 +12,14 @@ const pedidosServiceSource = fs.readFileSync(new URL("../src/modules/pedidos-ley
 const cotizacionSource = fs.readFileSync(new URL("../src/modules/facturacion/views/cotizacion.ejs", import.meta.url), "utf8");
 const cotizacionLeySource = fs.readFileSync(new URL("../src/modules/facturacion/views/cotizacion_ley.ejs", import.meta.url), "utf8");
 const cotizacionDataSource = fs.readFileSync(new URL("../src/modules/facturacion/services/construirDataHTML.js", import.meta.url), "utf8");
+const sucursalesDocsSource = fs.readFileSync(new URL("../src/modules/sucursales-docs/public/index.html", import.meta.url), "utf8");
 
 test("el calendario es la vista principal del shell", () => {
   assert.match(shellSource, /label:\s*"Calendario",\s*href:\s*"\/dashboard"/);
   assert.match(homeSource, /defaultView:\s*"calendario"/);
   assert.match(homeSource, /dashboardTabs\[0\]\?\.id\s*\|\|\s*"calendar"/);
   assert.match(homeSource, /<body class="portal-shell portal-dashboard">/);
-  assert.match(homeSource, /portal-shell\.css\?v=20260828a/);
+  assert.match(homeSource, /portal-shell\.css\?v=20260903a/);
 });
 
 test("la navegacion compartida implementa estado por URL y drawer accesible", () => {
@@ -28,6 +29,15 @@ test("la navegacion compartida implementa estado por URL y drawer accesible", ()
   assert.match(shellSource, /previousFocus\?\.focus/);
   assert.match(shellCss, /\.portal-app-topbar/);
   assert.match(shellCss, /prefers-reduced-motion/);
+  assert.match(shellSource, /desarrolloeg:shell-ready/);
+});
+
+test("la pantalla de carga espera al shell y usa una sola composicion de marca", () => {
+  assert.match(homeSource, /class="page-loader-brand"/);
+  assert.match(homeSource, /class="page-loader-progress"/);
+  assert.match(homeSource, /document\.addEventListener\("desarrolloeg:shell-ready", hide/);
+  assert.doesNotMatch(homeSource, /class="page-loader-spinner"><\/div>/);
+  assert.doesNotMatch(homeSource, /id="page-loader" aria-hidden="true"/);
 });
 
 test("las cotizaciones mantienen visible y accesible el panel de opciones", () => {
@@ -64,6 +74,25 @@ test("el indicador en vivo no aparece en impresiones", () => {
   }
 });
 
+test("sucursales docs permite descargar una carta individual por sucursal seleccionada", () => {
+  assert.match(sucursalesDocsSource, /id="branch-results" role="listbox" aria-multiselectable="true"/);
+  assert.match(sucursalesDocsSource, /id="company-filter"/);
+  assert.match(sucursalesDocsSource, /id="state-filter"/);
+  assert.match(sucursalesDocsSource, /id="municipality-filter"/);
+  assert.match(sucursalesDocsSource, /id="type-filter"/);
+  assert.match(sucursalesDocsSource, /selectedBranchIds: new Set\(\)/);
+  assert.match(sucursalesDocsSource, /async function toggleBranchSelection\(id\)/);
+  assert.match(sucursalesDocsSource, /id="clear-selection-btn"/);
+  assert.match(sucursalesDocsSource, /for \(let index = 0; index < selectedIds\.length; index \+= 1\)/);
+  assert.match(sucursalesDocsSource, /await downloadPdfResponse\(res\)/);
+
+  const scripts = [...sucursalesDocsSource.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)]
+    .filter((match) => !match[1].includes("src="))
+    .map((match) => match[2])
+    .filter(Boolean);
+  scripts.forEach((source) => assert.doesNotThrow(() => new Function(source)));
+});
+
 test("el tiempo real publica cambios incrementales y calendario consume su API", () => {
   assert.match(shellSource, /new EventSource/);
   assert.match(shellSource, /desarrolloeg:data-changed/);
@@ -94,7 +123,9 @@ test("pedidos abre sin filtros silenciosos de estatus o facturador", () => {
   assert.match(pedidosPageSource, /orderStatus:[\s\S]*\? url\.orderStatus : "all"/);
   assert.match(pedidosPageSource, /facturadorId: String\(url\.facturadorId \|\| INITIAL\.facturadorId \|\| ""\)/);
   assert.doesNotMatch(pedidosPageSource, /stored\.facturadorId/);
-  assert.match(pedidosPageSource, /els\.contentMount\.innerHTML = renderPedidosSection\(visibleRows\);[\s\S]*renderSectionTabs\(\);/);
+  assert.match(pedidosPageSource, /const displayedRows = visibleRows\.slice\(pageStart, pageStart \+ state\.pageSize\);/);
+  assert.match(pedidosPageSource, /els\.contentMount\.innerHTML = renderPedidosSection\(visibleRows, displayedRows\);[\s\S]*renderSectionTabs\(\);/);
+  assert.match(pedidosPageSource, /pageSize:\s*window\.matchMedia\("\(max-width: 640px\)"\)\.matches \? 10 : 50/);
 });
 
 test("pedidos genera JavaScript ejecutable y controles de estado unicos", () => {

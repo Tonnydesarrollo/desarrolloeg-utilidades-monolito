@@ -86,6 +86,17 @@ function toUpperDisplay(value) {
   return toDisplayValue(value).toLocaleUpperCase("es-MX");
 }
 
+const SIGNER_NAME_OVERRIDES = new Map([
+  ["SERGIO GONZALES GAMEZ", "M.C. SERGIO GONZALES GAMEZ"],
+  ["SERGIO GONZALEZ GAMEZ", "M.C. SERGIO GONZALES GAMEZ"],
+  ["MORELOS ENRIQUE PEREZ PICOS", "LIC. MORELOS ENRIQUE PEREZ PICOS"],
+]);
+
+export function formatSignerDisplayName(value) {
+  const displayName = toUpperDisplay(value);
+  return SIGNER_NAME_OVERRIDES.get(normalizeSearch(displayName).toUpperCase()) || displayName;
+}
+
 function slugify(value) {
   return (
     stripAccents(value)
@@ -746,7 +757,7 @@ function getEstadoRow(row, estadosById) {
 function getEmployeeSummary(row) {
   return {
     id: getEmployeeId(row),
-    nombre: toDisplayValue(getFirstFlexible(row, ["NOMBRE", "Nombre"]) ?? ""),
+    nombre: formatSignerDisplayName(getFirstFlexible(row, ["NOMBRE", "Nombre"]) ?? ""),
     puesto: toDisplayValue(getFirstFlexible(row, ["PUESTO", "Puesto"]) ?? ""),
     firma: toDisplayValue(getFirstFlexible(row, ["FIRMA", "Firma"]) ?? ""),
   };
