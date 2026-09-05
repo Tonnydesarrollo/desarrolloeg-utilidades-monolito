@@ -49,7 +49,7 @@ test("el dashboard nunca renderiza limites numericos indefinidos", () => {
 });
 
 test("constancias usa Tailwind compilado localmente en produccion", () => {
-  assert.match(constanciasSource, /href="\/constancias\/tailwind\.generated\.css"/);
+  assert.match(constanciasSource, /href="\/constancias\/tailwind\.generated\.css\?v=[\w.-]+"/);
   assert.doesNotMatch(constanciasSource, /cdn\.tailwindcss\.com/);
   assert.ok(constanciasCss.length > 20_000);
   assert.match(constanciasCss, /tailwindcss v3\.4\.17/);
