@@ -1,5 +1,7 @@
 .git
 .gitignore
+.docker-runtime-config
+.docker-temp
 node_modules
 npm-debug.log
 *.log
@@ -11,8 +13,12 @@ npm-debug.log
 .wwebjs_cache
 .wwebjs_auth
 runtime
+runtime-*
 runtime-qa
 release
+data-dev
+DICTAMENES ESTRUCTURALES
+tmp
 *.tar
 *.zip
 secrets

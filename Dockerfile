@@ -28,11 +28,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY src ./src
-COPY cloudflared ./cloudflared
-COPY publicimg ./publicimg
-COPY standalone/sucursales-docs ./standalone/sucursales-docs
-COPY ["POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf", "./POLIZA SEGURO Carta Ley Todas las tiendas 2026-2027.pdf"]
+# The legacy builder used by PC B commits every COPY as a separate, slow layer.
+# Runtime data and secrets remain excluded by .dockerignore.
+COPY . .
 RUN mkdir -p \
     /app/runtime/facturacion \
     /app/runtime/jobs/facturas \
