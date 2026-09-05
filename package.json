@@ -1,13 +1,13 @@
 {
     "name": "desarrolloeg-utilidades-monolito",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "private": true,
     "type": "module",
     "scripts": {
         "dev": "node --watch src/server.js",
         "start": "node src/server.js",
         "test": "node --test",
-        "build:constancias-css": "tailwindcss -i ./src/modules/constancias-v2/tailwind.input.css -o ./src/modules/constancias-v2/public/tailwind.generated.css --content ./src/modules/constancias-v2/public/index.html --minify",
+        "build:constancias-css": "tailwindcss -i ./src/modules/constancias-v2/tailwind.input.css -o ./src/modules/constancias-v2/public/tailwind.generated.css --content ./src/modules/constancias-v2/public/**/*.{html,js} --minify",
         "pm2:start": "pm2 start ecosystem.config.cjs --env production",
         "pm2:restart": "pm2 restart desarrolloeg-monolito",
         "pm2:stop": "pm2 stop desarrolloeg-monolito",

@@ -51,8 +51,12 @@ test("el dashboard nunca renderiza limites numericos indefinidos", () => {
 test("constancias usa Tailwind compilado localmente en produccion", () => {
   assert.match(constanciasSource, /href="\/constancias\/tailwind\.generated\.css"/);
   assert.doesNotMatch(constanciasSource, /cdn\.tailwindcss\.com/);
-  assert.ok(constanciasCss.length > 5_000);
+  assert.ok(constanciasCss.length > 20_000);
   assert.match(constanciasCss, /tailwindcss v3\.4\.17/);
+  assert.match(constanciasCss, /\.grid-cols-1/);
+  assert.match(constanciasCss, /\.xl\\:grid-cols-12/);
+  assert.match(constanciasCss, /\.bg-slate-50/);
+  assert.match(constanciasCss, /\.rounded-\\\[2\\\.5rem\\\]/);
 });
 
 test("las cotizaciones mantienen visible y accesible el panel de opciones", () => {
