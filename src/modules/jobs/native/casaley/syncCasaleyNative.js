@@ -90,9 +90,12 @@ function resolveCasaLeyMonthRange() {
   const manualIni = readEnv(["CASALEY_FECHA_INI", "FECHA_INI"], "").trim();
   const manualFin = readEnv(["CASALEY_FECHA_FIN", "FECHA_FIN"], "").trim();
 
+  // Un solo limite manual puede dejar una consulta abierta por meses; usa el mes actual.
+  if (!manualIni || !manualFin) return current;
+
   return {
-    ini: manualIni || current.ini,
-    fin: manualFin || current.fin,
+    ini: manualIni,
+    fin: manualFin,
   };
 }
 
@@ -115,6 +118,24 @@ function computeIncrementalRange(defaultRange, lastSyncDateText, lookbackDays) {
     ini: formatDateDMY(start),
     fin: formatDateDMY(end),
   };
+}
+
+function splitDateRangeByMonth(range = {}) {
+  const start = parseDMYToDate(range.fechaIni || range.ini || "");
+  const end = parseDMYToDate(range.fechaFin || range.fin || "");
+  if (!start || !end || start.getTime() > end.getTime()) return [range];
+
+  const chunks = [];
+  let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  while (cursor.getTime() <= end.getTime()) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const chunkStart = start.getTime() > monthStart.getTime() ? start : monthStart;
+    const chunkEnd = end.getTime() < monthEnd.getTime() ? end : monthEnd;
+    chunks.push({ ini: formatDateDMY(chunkStart), fin: formatDateDMY(chunkEnd) });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return chunks;
 }
 
 function decodeLatin1(data) {
@@ -1082,7 +1103,7 @@ async function reconcileNoCobradoChequesToCobrado(client, config) {
   return { updatedRows, checked, updated, skipped };
 }
 
-async function consultarFacturas(client, config, user, range = {}) {
+async function consultarFacturasEnRango(client, config, user, range = {}) {
   const fechaIni = range.fechaIni || config.fechaIni;
   const fechaFin = range.fechaFin || config.fechaFin;
   const getResponse = await client.get(config.facturasUrl, {
@@ -1129,6 +1150,30 @@ async function consultarFacturas(client, config, user, range = {}) {
     return [];
   }
   return rows;
+}
+
+async function consultarFacturas(client, config, user, range = {}) {
+  const chunks = splitDateRangeByMonth(range);
+  const rowsByUuid = new Map();
+
+  for (const chunk of chunks) {
+    try {
+      const rows = await consultarFacturasEnRango(client, config, user, chunk);
+      for (const row of rows) {
+        const uuid = cleanText(row?.["Folio Uuid"] || row?.UUID || "");
+        const key = uuid || JSON.stringify(row);
+        rowsByUuid.set(key, row);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/timeout|timed out|execution timeout expired/i.test(message)) throw error;
+      console.warn(
+        `[casaley] ${user}: consulta de facturas ${chunk.ini}-${chunk.fin} agoto el tiempo de espera; se continua con el siguiente mes`
+      );
+    }
+  }
+
+  return [...rowsByUuid.values()];
 }
 
 async function appsheetAction(config, tableName, action, rows) {
