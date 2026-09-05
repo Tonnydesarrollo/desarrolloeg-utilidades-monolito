@@ -2,7 +2,9 @@ import express from "express";
 import { readConstanciasContext, readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 import {
   resolveConstanciasDriveDestination,
+  sanitizeCsvFileName,
   sanitizePdfFileName,
+  uploadConstanciasCsv,
   uploadConstanciasPdf,
 } from "./constanciasDrive.service.js";
 import path from "path";
@@ -54,6 +56,39 @@ constanciasV2Router.post(
       return res.status(knownError ? 422 : 502).json({
         ok: false,
         error: knownError ? error.message : "Google Drive rechazo el archivo. Revisa la sesion del servicio.",
+      });
+    }
+  },
+);
+
+constanciasV2Router.post(
+  "/api/csv/drive",
+  express.raw({ type: ["text/csv", "text/plain"], limit: "10mb" }),
+  async (req, res) => {
+    try {
+      const csv = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (csv.length === 0) {
+        return res.status(400).json({ ok: false, error: "El archivo recibido no es un CSV valido." });
+      }
+
+      const destination = resolveConstanciasDriveDestination({
+        sucursalId: req.query.sucursalId,
+        sucursalLabel: req.query.sucursalLabel,
+        capacitacionId: req.query.capacitacionId,
+      });
+      const fileName = sanitizeCsvFileName(
+        req.query.fileName,
+        `${destination.sucursalLabel} PARTICIPANTES.csv`,
+      );
+      const file = await uploadConstanciasCsv({ buffer: csv, fileName, destination });
+
+      return res.status(201).json({ ok: true, file, destination });
+    } catch (error) {
+      const knownError = String(error?.code || "").startsWith("CONSTANCIAS_");
+      console.error("[constancias-drive] No se pudo guardar el CSV:", error);
+      return res.status(knownError ? 422 : 502).json({
+        ok: false,
+        error: knownError ? error.message : "Google Drive rechazo el CSV. Revisa la sesion del servicio.",
       });
     }
   },

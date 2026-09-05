@@ -110,6 +110,16 @@ export function sanitizePdfFileName(value, fallback = "CONSTANCIAS.pdf") {
   return base.toLowerCase().endsWith(".pdf") ? base : `${base}.pdf`;
 }
 
+export function sanitizeCsvFileName(value, fallback = "PARTICIPANTES.csv") {
+  const cleaned = text(value)
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 180)
+    .trim();
+  const base = cleaned || fallback;
+  return base.toLowerCase().endsWith(".csv") ? base : `${base}.csv`;
+}
+
 function loadGoogleAuth() {
   const credentialsPath = text(
     process.env.CONSTANCIAS_GOOGLE_CREDENTIALS_PATH
@@ -159,6 +169,40 @@ export async function uploadConstanciasPdf({ buffer, fileName, destination } = {
     },
     media: {
       mimeType: "application/pdf",
+      body: Readable.from(buffer),
+    },
+    fields: "id,name,webViewLink,webContentLink,createdTime",
+    supportsAllDrives: true,
+  });
+
+  const file = response.data || {};
+  return {
+    id: text(file.id),
+    name: text(file.name) || safeName,
+    url: text(file.webViewLink) || (file.id ? `https://drive.google.com/file/d/${file.id}/view` : ""),
+    downloadUrl: text(file.webContentLink),
+    createdTime: text(file.createdTime),
+  };
+}
+
+export async function uploadConstanciasCsv({ buffer, fileName, destination } = {}) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    const error = new Error("El CSV recibido esta vacio.");
+    error.code = "CONSTANCIAS_CSV_EMPTY";
+    throw error;
+  }
+
+  const drive = google.drive({ version: "v3", auth: loadGoogleAuth() });
+  const safeName = sanitizeCsvFileName(fileName, `${destination.sucursalLabel} PARTICIPANTES.csv`);
+  const response = await drive.files.create({
+    requestBody: {
+      name: safeName,
+      mimeType: "text/csv",
+      parents: [destination.folderId],
+      description: `Participantes de constancias para ${destination.sucursalLabel}`,
+    },
+    media: {
+      mimeType: "text/csv; charset=utf-8",
       body: Readable.from(buffer),
     },
     fields: "id,name,webViewLink,webContentLink,createdTime",

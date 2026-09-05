@@ -67,7 +67,23 @@
       sucursalId,
       sucursalLabel,
       fileName: `${safeLabel || "CONSTANCIAS"} DIP ${timestamp}.pdf`,
+      csvFileName: `${safeLabel || "CONSTANCIAS"} PARTICIPANTES ${timestamp}.csv`,
     };
+  }
+
+  function createParticipantsCsvBlob() {
+    const captureArea = getCaptureArea();
+    const names = captureArea
+      ? Array.from(captureArea.querySelectorAll(".recipient-name"))
+        .map((element) => String(element.textContent || "").replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+      : [];
+    if (names.length === 0) {
+      throw new Error("No hay participantes para exportar al CSV.");
+    }
+    const escapeCsv = (value) => `"${String(value).replace(/"/g, '""')}"`;
+    const content = `\uFEFFNOMBRE\r\n${names.map(escapeCsv).join("\r\n")}\r\n`;
+    return new Blob([content], { type: "text/csv;charset=utf-8" });
   }
 
   function rememberCaptureStyles(captureArea) {
@@ -160,8 +176,14 @@
     try {
       const metadata = readMetadata();
       const pdf = await createPdfBlob();
+      const csv = createParticipantsCsvBlob();
       button.textContent = "GUARDANDO EN DRIVE...";
-      const query = new URLSearchParams(metadata);
+      const query = new URLSearchParams({
+        capacitacionId: metadata.capacitacionId,
+        sucursalId: metadata.sucursalId,
+        sucursalLabel: metadata.sucursalLabel,
+        fileName: metadata.fileName,
+      });
       const response = await fetch(`/constancias/api/pdf/drive?${query}`, {
         method: "POST",
         headers: { "Content-Type": "application/pdf" },
@@ -172,7 +194,27 @@
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || "No fue posible guardar el PDF en Drive.");
       }
-      showNotice(`PDF guardado en Drive: ${payload.file?.name || metadata.fileName}`, "success", payload.file?.url);
+      const csvQuery = new URLSearchParams({
+        capacitacionId: metadata.capacitacionId,
+        sucursalId: metadata.sucursalId,
+        sucursalLabel: metadata.sucursalLabel,
+        fileName: metadata.csvFileName,
+      });
+      const csvResponse = await fetch(`/constancias/api/csv/drive?${csvQuery}`, {
+        method: "POST",
+        headers: { "Content-Type": "text/csv; charset=utf-8" },
+        body: csv,
+        credentials: "same-origin",
+      });
+      const csvPayload = await csvResponse.json().catch(() => ({}));
+      if (!csvResponse.ok || !csvPayload.ok) {
+        throw new Error(csvPayload.error || "El PDF se guardo, pero no fue posible guardar el CSV en Drive.");
+      }
+      showNotice(
+        `PDF y CSV guardados en Drive: ${payload.file?.name || metadata.fileName}`,
+        "success",
+        payload.file?.url,
+      );
     } catch (error) {
       console.error("[constancias-drive]", error);
       showNotice(error.message || "No fue posible guardar el PDF en Drive.", "error");

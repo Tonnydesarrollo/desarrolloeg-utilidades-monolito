@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   extractDriveFolderId,
   resolveConstanciasDriveDestination,
+  sanitizeCsvFileName,
   sanitizePdfFileName,
 } from "../src/modules/constancias-v2/constanciasDrive.service.js";
 
@@ -36,13 +37,18 @@ test("rechaza sucursales sin carpeta y limpia el nombre del PDF", () => {
     /no tiene una carpeta de Drive/i,
   );
   assert.equal(sanitizePdfFileName('1176: LA/CANTERA? DIP'), "1176 LACANTERA DIP.pdf");
+  assert.equal(sanitizeCsvFileName('1176: LA/CANTERA? PARTICIPANTES'), "1176 LACANTERA PARTICIPANTES.csv");
 });
 
 test("todas las vistas React de constancias cargan la accion Drive", () => {
   const html = fs.readFileSync(new URL("../src/modules/constancias-v2/public/index.html", import.meta.url), "utf8");
   const script = fs.readFileSync(new URL("../src/modules/constancias-v2/public/drive-pdf.js", import.meta.url), "utf8");
   assert.match(html, /\/constancias\/drive-pdf\.js/);
+  assert.match(html, /img\[alt="Logo Cliente"\][\s\S]*max-height: 140px !important;[\s\S]*object-fit: contain !important;/);
   assert.match(script, /CREAR PDF Y GUARDAR EN DRIVE/);
   assert.match(script, /#print-capture-area \.sucursal-label/);
   assert.match(script, /\/constancias\/api\/pdf\/drive/);
+  assert.match(script, /\.recipient-name/);
+  assert.match(script, /\/constancias\/api\/csv\/drive/);
+  assert.match(script, /PDF y CSV guardados en Drive/);
 });
