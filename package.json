@@ -1,12 +1,13 @@
 {
     "name": "desarrolloeg-utilidades-monolito",
-  "version": "1.2.0",
+    "version": "1.2.1",
     "private": true,
     "type": "module",
     "scripts": {
         "dev": "node --watch src/server.js",
         "start": "node src/server.js",
         "test": "node --test",
+        "build:constancias-css": "tailwindcss -i ./src/modules/constancias-v2/tailwind.input.css -o ./src/modules/constancias-v2/public/tailwind.generated.css --content ./src/modules/constancias-v2/public/index.html --minify",
         "pm2:start": "pm2 start ecosystem.config.cjs --env production",
         "pm2:restart": "pm2 restart desarrolloeg-monolito",
         "pm2:stop": "pm2 stop desarrolloeg-monolito",
@@ -35,5 +36,8 @@
         "tough-cookie": "^6.0.0",
         "whatsapp-web.js": "^1.34.7",
         "xlsx": "^0.18.5"
+    },
+    "devDependencies": {
+        "tailwindcss": "^3.4.17"
     }
 }

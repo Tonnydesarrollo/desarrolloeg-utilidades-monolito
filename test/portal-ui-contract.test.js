@@ -13,6 +13,8 @@ const cotizacionSource = fs.readFileSync(new URL("../src/modules/facturacion/vie
 const cotizacionLeySource = fs.readFileSync(new URL("../src/modules/facturacion/views/cotizacion_ley.ejs", import.meta.url), "utf8");
 const cotizacionDataSource = fs.readFileSync(new URL("../src/modules/facturacion/services/construirDataHTML.js", import.meta.url), "utf8");
 const sucursalesDocsSource = fs.readFileSync(new URL("../src/modules/sucursales-docs/public/index.html", import.meta.url), "utf8");
+const constanciasSource = fs.readFileSync(new URL("../src/modules/constancias-v2/public/index.html", import.meta.url), "utf8");
+const constanciasCss = fs.readFileSync(new URL("../src/modules/constancias-v2/public/tailwind.generated.css", import.meta.url), "utf8");
 
 test("el calendario es la vista principal del shell", () => {
   assert.match(shellSource, /label:\s*"Calendario",\s*href:\s*"\/dashboard"/);
@@ -38,6 +40,19 @@ test("la pantalla de carga espera al shell y usa una sola composicion de marca",
   assert.match(homeSource, /document\.addEventListener\("desarrolloeg:shell-ready", hide/);
   assert.doesNotMatch(homeSource, /class="page-loader-spinner"><\/div>/);
   assert.doesNotMatch(homeSource, /id="page-loader" aria-hidden="true"/);
+});
+
+test("el dashboard nunca renderiza limites numericos indefinidos", () => {
+  assert.match(homeSource, /Number\.isFinite\(Number\(thresholds\?\.estatalMin\)\)/);
+  assert.match(homeSource, /Number\.isFinite\(Number\(thresholds\?\.municipalMin\)\)/);
+  assert.doesNotMatch(homeSource, /value="\$\{escapeAttr\(String\(thresholds\.(?:estatalMin|municipalMin)\)\)\}"/);
+});
+
+test("constancias usa Tailwind compilado localmente en produccion", () => {
+  assert.match(constanciasSource, /href="\/constancias\/tailwind\.generated\.css"/);
+  assert.doesNotMatch(constanciasSource, /cdn\.tailwindcss\.com/);
+  assert.ok(constanciasCss.length > 5_000);
+  assert.match(constanciasCss, /tailwindcss v3\.4\.17/);
 });
 
 test("las cotizaciones mantienen visible y accesible el panel de opciones", () => {

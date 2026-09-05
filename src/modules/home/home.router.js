@@ -7042,6 +7042,8 @@ function renderPedidosCoverageSection({ rows = [], catalogs = {}, facturadorId =
 
 function buildPedidosDashboardToolbar({ requestedYear, thresholds, facturadorId, facturadorLabel, facturadores = [], selectedScope, selectedStatus, selectedType, searchText }) {
   const selectedFacturadorId = String(facturadorId || "").trim();
+  const estatalMin = Number.isFinite(Number(thresholds?.estatalMin)) ? Number(thresholds.estatalMin) : 32967.49;
+  const municipalMin = Number.isFinite(Number(thresholds?.municipalMin)) ? Number(thresholds.municipalMin) : 11000;
   const facturadorOptions = Array.isArray(facturadores) ? facturadores : [];
   const selectedExists = !selectedFacturadorId || facturadorOptions.some((option) => String(option?.value || option?.id || "").trim() === selectedFacturadorId);
   const facturadorOptionMarkup = [
@@ -7098,11 +7100,11 @@ function buildPedidosDashboardToolbar({ requestedYear, thresholds, facturadorId,
           </div>
           <div class="pedidos-field">
             <label>Precio estatal</label>
-            <input data-pedidos-estatal-min type="number" step="0.01" value="${escapeAttr(String(thresholds.estatalMin))}">
+            <input data-pedidos-estatal-min type="number" step="0.01" value="${escapeAttr(String(estatalMin))}">
           </div>
           <div class="pedidos-field">
             <label>Precio municipal</label>
-            <input data-pedidos-municipal-min type="number" step="0.01" value="${escapeAttr(String(thresholds.municipalMin))}">
+            <input data-pedidos-municipal-min type="number" step="0.01" value="${escapeAttr(String(municipalMin))}">
           </div>
           <div class="pedidos-field">
             <label>Buscar</label>
