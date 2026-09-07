@@ -3,6 +3,7 @@
 
   const BUTTON_TEXT = "CREAR PDF Y GUARDAR EN DRIVE";
   let generating = false;
+  let downloading = false;
 
   function normalize(value) {
     return String(value || "")
@@ -13,16 +14,32 @@
       .toUpperCase();
   }
 
-  function waitForImages(root, timeoutMs = 12000) {
+  function withTimeout(promise, timeoutMs) {
+    return Promise.race([
+      promise,
+      new Promise((resolve) => window.setTimeout(resolve, timeoutMs)),
+    ]);
+  }
+
+  async function waitForImages(root, timeoutMs = 12000) {
     const images = Array.from(root.querySelectorAll("img"));
-    if (images.length === 0) return Promise.resolve();
-    const timeout = new Promise((resolve) => window.setTimeout(resolve, timeoutMs));
-    const loaded = Promise.all(images.map((image) => new Promise((resolve) => {
-      if (image.complete) return resolve();
-      image.addEventListener("load", resolve, { once: true });
-      image.addEventListener("error", resolve, { once: true });
-    })));
-    return Promise.race([loaded, timeout]);
+    await Promise.all(images.map(async (image) => {
+      if (!image.complete || image.naturalWidth === 0) {
+        await withTimeout(new Promise((resolve) => {
+          image.addEventListener("load", resolve, { once: true });
+          image.addEventListener("error", resolve, { once: true });
+        }), timeoutMs);
+      }
+      if (typeof image.decode === "function" && image.naturalWidth > 0) {
+        await withTimeout(image.decode().catch(() => {}), timeoutMs);
+      }
+    }));
+  }
+
+  function waitForPaint() {
+    return new Promise((resolve) => {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+    });
   }
 
   function getCaptureArea() {
@@ -114,14 +131,19 @@
       throw new Error("No se cargaron las herramientas para crear el PDF.");
     }
 
-    if (document.fonts) await document.fonts.ready;
-    await waitForImages(captureArea);
     const restoreStyles = rememberCaptureStyles(captureArea);
     document.body.classList.add("capturing");
 
     try {
+      if (document.fonts) await document.fonts.ready;
+      await waitForPaint();
+      await waitForImages(captureArea);
+      await waitForPaint();
+
       const pdf = new JsPdf({ unit: "in", format: [11, 8.5], orientation: "landscape" });
       for (let index = 0; index < pages.length; index += 1) {
+        await waitForImages(pages[index]);
+        await waitForPaint();
         const canvas = await window.html2canvas(pages[index], {
           scale: 2,
           useCORS: true,
@@ -137,7 +159,16 @@
           windowHeight: 816,
         });
         if (index > 0) pdf.addPage([11, 8.5], "landscape");
-        pdf.addImage(canvas.toDataURL("image/jpeg", 1), "JPEG", 0.15, 0.15, 10.7, 8.2);
+        pdf.addImage(
+          canvas.toDataURL("image/jpeg", 0.98),
+          "JPEG",
+          0.15,
+          0.15,
+          10.7,
+          8.2,
+          `constancia-${index + 1}`,
+          "FAST",
+        );
       }
       return pdf.output("blob");
     } finally {
@@ -225,9 +256,49 @@
     }
   }
 
+  async function downloadPdf(button) {
+    if (downloading || generating) return;
+    downloading = true;
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = "CREANDO PDF...";
+
+    try {
+      const metadata = readMetadata();
+      const pdf = await createPdfBlob();
+      const url = URL.createObjectURL(pdf);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = metadata.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      console.error("[constancias-download]", error);
+      showNotice(error.message || "No fue posible descargar el PDF.", "error");
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+      downloading = false;
+    }
+  }
+
+  function installDownloadHandler(button) {
+    if (button.dataset.constanciasDownloadInstalled === "true") return;
+    button.dataset.constanciasDownloadInstalled = "true";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      downloadPdf(button);
+    }, true);
+  }
+
   function installButtons() {
     for (const original of document.querySelectorAll("button")) {
       if (!normalize(original.textContent).includes("DESCARGAR PDF")) continue;
+      installDownloadHandler(original);
       const parent = original.parentElement;
       if (!parent || parent.querySelector(".constancias-drive-button")) continue;
       const button = document.createElement("button");

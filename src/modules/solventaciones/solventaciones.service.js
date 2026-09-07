@@ -15,6 +15,9 @@ const APPSHEET_MAX_CONCURRENCY = Number(process.env.APPSHEET_MAX_CONCURRENCY || 
 const APPSHEET_MAX_RETRIES = Number(process.env.APPSHEET_MAX_RETRIES || 3);
 const APPSHEET_RETRY_BASE_MS = Number(process.env.APPSHEET_RETRY_BASE_MS || 500);
 const APPSHEET_RETRY_MAX_MS = Number(process.env.APPSHEET_RETRY_MAX_MS || 5000);
+const REPORT_CACHE_TTL_MS = Number(process.env.SOLVENTACIONES_REPORT_CACHE_TTL_MS || 2 * 60 * 1000);
+const PDF_IMAGE_CONCURRENCY = Number(process.env.SOLVENTACIONES_PDF_IMAGE_CONCURRENCY || 6);
+const PDF_IMAGE_TIMEOUT_MS = Number(process.env.SOLVENTACIONES_PDF_IMAGE_TIMEOUT_MS || 12_000);
 const APPSHEET_APP_ID = (process.env.APPSHEET_APP_ID || "").trim();
 const APPSHEET_API_KEY = (process.env.APPSHEET_API_KEY || "").trim();
 const APPSHEET_TABLE = process.env.SOLVENTACIONES_APPSHEET_TABLE || "STATUS SISTEMA PC";
@@ -38,9 +41,15 @@ const COMPANY_BRANDING = {
   ],
 };
 const COMPANY_LOGO_FALLBACK_PATH = path.join(projectRoot, "standalone", "sucursales-docs", "assets", "logo.png");
+const LOCAL_DB_PATH = String(
+  process.env.DESARROLLOEG_LOCAL_DB_PATH ||
+  process.env.DESARROLLOEG_SYNC_DB_PATH ||
+  path.join(projectRoot, "data", "desarrolloeg.sqlite"),
+).trim();
 const PDF_IMAGE_CACHE = new Map();
 const REPORT_CACHE = new Map();
 const PCSINALOA_READ_CACHE = new Map();
+let lastDatabaseRevision = "";
 const PCSINALOA_TOKEN_CACHE_TTL_MS = Number(process.env.PCSINALOA_TOKEN_CACHE_TTL_MS || 10 * 60 * 1000);
 const PCSINALOA_READ_CACHE_TTL_MS = Number(process.env.PCSINALOA_READ_CACHE_TTL_MS || 2 * 60 * 1000);
 const PCSINALOA_TOKEN_STATE = {
@@ -200,6 +209,29 @@ async function postJsonWithRetry(url, options) {
 
 async function leerTablaAppSheet(nombreTabla) {
   return readLocalOperationalTable(nombreTabla);
+}
+
+async function readDatabaseRevision() {
+  const paths = [LOCAL_DB_PATH, `${LOCAL_DB_PATH}-wal`];
+  const stats = await Promise.all(paths.map(async (filePath) => {
+    try {
+      const value = await fs.stat(filePath);
+      return `${filePath}:${value.size}:${value.mtimeMs}`;
+    } catch {
+      return `${filePath}:missing`;
+    }
+  }));
+  return stats.join("|");
+}
+
+async function refreshCachesForDatabaseRevision() {
+  const revision = await readDatabaseRevision();
+  if (lastDatabaseRevision && revision !== lastDatabaseRevision) {
+    REPORT_CACHE.clear();
+    PCSINALOA_READ_CACHE.clear();
+  }
+  lastDatabaseRevision = revision;
+  return revision;
 }
 
 async function mapaSucursales() {
@@ -370,19 +402,28 @@ async function imageUrlToPdfDataUri(url, options = {}) {
   }
 
   const promise = (async () => {
-    const response = await fetch(source, { headers: { Accept: "image/*" } });
-    if (!response.ok) {
-      throw new Error(`No se pudo descargar evidencia (${response.status})`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), Math.max(1_000, PDF_IMAGE_TIMEOUT_MS));
+    try {
+      const response = await fetch(source, {
+        headers: { Accept: "image/*" },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`No se pudo descargar evidencia (${response.status})`);
+      }
+
+      const inputBuffer = Buffer.from(await response.arrayBuffer());
+      const outputBuffer = await sharp(inputBuffer)
+        .rotate()
+        .resize({ width, height, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality, mozjpeg: true, progressive: true })
+        .toBuffer();
+
+      return `data:image/jpeg;base64,${outputBuffer.toString("base64")}`;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const inputBuffer = Buffer.from(await response.arrayBuffer());
-    const outputBuffer = await sharp(inputBuffer)
-      .rotate()
-      .resize({ width, height, fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality, mozjpeg: true, progressive: true })
-      .toBuffer();
-
-    return `data:image/jpeg;base64,${outputBuffer.toString("base64")}`;
   })();
 
   PDF_IMAGE_CACHE.set(cacheKey, promise);
@@ -854,6 +895,7 @@ function buildTopCounts(items, getLabel, getWeight, limit = 3) {
 }
 
 export async function obtenerSolventacionesCompleto(query = {}) {
+  const databaseRevision = await refreshCachesForDatabaseRevision();
   const cacheKey = JSON.stringify({
     tienda: String(query.tienda || query.TIENDA || "").trim(),
     razonSocial: String(query.razonSocial || query.razon_social || query["razon social"] || "").trim(),
@@ -861,7 +903,7 @@ export async function obtenerSolventacionesCompleto(query = {}) {
   });
   const cached = REPORT_CACHE.get(cacheKey);
   const now = Date.now();
-  if (cached && cached.expiraEn > now) {
+  if (cached && cached.expiraEn > now && cached.databaseRevision === databaseRevision) {
     return cached.promise;
   }
 
@@ -1069,7 +1111,11 @@ export async function obtenerSolventacionesCompleto(query = {}) {
   };
   })();
 
-  REPORT_CACHE.set(cacheKey, { expiraEn: now + Math.max(30_000, APPSHEET_TIMEOUT_MS), promise });
+  REPORT_CACHE.set(cacheKey, {
+    expiraEn: now + Math.max(30_000, REPORT_CACHE_TTL_MS),
+    databaseRevision,
+    promise,
+  });
   try {
     return await promise;
   } catch (err) {
@@ -1078,30 +1124,53 @@ export async function obtenerSolventacionesCompleto(query = {}) {
   }
 }
 
+export async function mapWithConcurrency(items, concurrency, mapper) {
+  const source = Array.isArray(items) ? items : [];
+  if (source.length === 0) return [];
+
+  const limit = Math.min(source.length, Math.max(1, Math.floor(Number(concurrency) || 1)));
+  const results = new Array(source.length);
+  let cursor = 0;
+
+  await Promise.all(Array.from({ length: limit }, async () => {
+    while (cursor < source.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(source[index], index);
+    }
+  }));
+
+  return results;
+}
+
 export async function prepararSolventacionesPdf(reporte) {
   const copia = typeof structuredClone === "function"
     ? structuredClone(reporte)
     : JSON.parse(JSON.stringify(reporte || {}));
 
   const grupos = Array.isArray(copia?.grupos) ? copia.grupos : [];
+  const imagenes = [];
   for (const grupo of grupos) {
     for (const item of Array.isArray(grupo.items) ? grupo.items : []) {
       for (const inc of Array.isArray(item.incidencias) ? item.incidencias : []) {
-        const imagenes = [
+        imagenes.push(...[
           ...(Array.isArray(inc.adjuntosIncidencia) ? inc.adjuntosIncidencia : []),
           ...(Array.isArray(inc.evidenciasDetalle) ? inc.evidenciasDetalle.flatMap((ev) => Array.isArray(ev.files) ? ev.files : []) : []),
-        ];
-        for (const img of imagenes) {
-          const source = img.url_imagen || img.url || img.previewUrl || img.thumbnailUrl || "";
-          try {
-            img.pdfPreviewUrl = await imageUrlToPdfDataUri(source, { width: 420, height: 320, quality: 38 });
-          } catch {
-            img.pdfPreviewUrl = source;
-          }
-        }
+        ]);
       }
     }
   }
+
+  await mapWithConcurrency(imagenes, PDF_IMAGE_CONCURRENCY, async (img) => {
+    const source = img.url_imagen || img.url || img.previewUrl || img.thumbnailUrl || "";
+    try {
+      img.pdfPreviewUrl = await imageUrlToPdfDataUri(source, { width: 420, height: 320, quality: 38 });
+      img.pdfPreviewUnavailable = false;
+    } catch {
+      img.pdfPreviewUrl = "";
+      img.pdfPreviewUnavailable = true;
+    }
+  });
 
   return copia;
 }

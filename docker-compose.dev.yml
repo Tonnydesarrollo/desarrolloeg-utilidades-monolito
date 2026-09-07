@@ -16,6 +16,7 @@ services:
     environment:
       DESARROLLOEG_WEBHOOK_PORT: 8787
       DESARROLLOEG_RECONCILE_INTERVAL_MINUTES: 1
+      DESARROLLOEG_STATUS_PC_SYNC_INTERVAL_MINUTES: 5
       DESARROLLOEG_APP_SHELL_WEBHOOK_URL: http://monolito-dev:7001/api/app-shell/webhook
     healthcheck:
       test:

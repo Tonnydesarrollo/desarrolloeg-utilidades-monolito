@@ -833,7 +833,7 @@
                                       <% if (fullSrc) { %>
                                         <a class="image-card" href="<%= esc(fullSrc) %>" target="_blank" rel="noreferrer">
                                           <% if (thumbSrc) { %>
-                                            <img src="<%= esc(thumbSrc) %>" alt="<%= esc(caption) %>">
+                                            <img src="<%= esc(thumbSrc) %>" alt="<%= esc(caption) %>" loading="lazy" decoding="async" fetchpriority="low">
                                           <% } else { %>
                                             <div class="image-fallback">Sin miniatura</div>
                                           <% } %>
@@ -869,7 +869,7 @@
                                           <% if (fullSrc) { %>
                                             <a class="image-card" href="<%= esc(fullSrc) %>" target="_blank" rel="noreferrer">
                                               <% if (thumbSrc) { %>
-                                                <img src="<%= esc(thumbSrc) %>" alt="<%= esc(caption) %>">
+                                                <img src="<%= esc(thumbSrc) %>" alt="<%= esc(caption) %>" loading="lazy" decoding="async" fetchpriority="low">
                                               <% } else { %>
                                                 <div class="image-fallback">Sin miniatura</div>
                                               <% } %>

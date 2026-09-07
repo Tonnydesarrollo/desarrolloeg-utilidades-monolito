@@ -43,7 +43,7 @@ test("rechaza sucursales sin carpeta y limpia el nombre del PDF", () => {
 test("todas las vistas React de constancias cargan la accion Drive", () => {
   const html = fs.readFileSync(new URL("../src/modules/constancias-v2/public/index.html", import.meta.url), "utf8");
   const script = fs.readFileSync(new URL("../src/modules/constancias-v2/public/drive-pdf.js", import.meta.url), "utf8");
-  assert.match(html, /\/constancias\/drive-pdf\.js/);
+  assert.match(html, /\/constancias\/drive-pdf\.js\?v=1\.2\.6/);
   assert.match(html, /img\[alt="Logo Cliente"\][\s\S]*max-height: 140px !important;[\s\S]*object-fit: contain !important;/);
   assert.match(script, /CREAR PDF Y GUARDAR EN DRIVE/);
   assert.match(script, /#print-capture-area \.sucursal-label/);
@@ -51,4 +51,8 @@ test("todas las vistas React de constancias cargan la accion Drive", () => {
   assert.match(script, /\.recipient-name/);
   assert.match(script, /\/constancias\/api\/csv\/drive/);
   assert.match(script, /PDF y CSV guardados en Drive/);
+  assert.match(script, /await waitForPaint\(\);[\s\S]*await waitForImages\(captureArea\)/);
+  assert.match(script, /await waitForImages\(pages\[index\]\)/);
+  assert.match(script, /`constancia-\$\{index \+ 1\}`/);
+  assert.match(script, /installDownloadHandler\(original\)/);
 });

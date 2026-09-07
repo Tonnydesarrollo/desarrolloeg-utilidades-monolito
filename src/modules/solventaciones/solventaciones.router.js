@@ -3,6 +3,7 @@ import puppeteer from "puppeteer-core";
 import { obtenerSolventacionesCompleto, prepararSolventacionesPdf } from "./solventaciones.service.js";
 
 export const solventacionesRouter = express.Router();
+let pdfBrowserPromise = null;
 
 function getChromePath() {
   if (process.env.CHROME_PATH && String(process.env.CHROME_PATH).trim()) {
@@ -12,6 +13,26 @@ function getChromePath() {
     return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
   }
   return "/usr/bin/chromium";
+}
+
+async function getPdfBrowser() {
+  if (!pdfBrowserPromise) {
+    pdfBrowserPromise = puppeteer.launch({
+      executablePath: getChromePath(),
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    }).then((browser) => {
+      browser.once("disconnected", () => {
+        pdfBrowserPromise = null;
+      });
+      return browser;
+    }).catch((error) => {
+      pdfBrowserPromise = null;
+      throw error;
+    });
+  }
+
+  return pdfBrowserPromise;
 }
 
 function buildPdfFilename(reporte) {
@@ -68,9 +89,12 @@ solventacionesRouter.get("/html", async (req, res) => {
 });
 
 solventacionesRouter.get("/pdf", async (req, res) => {
+  const startedAt = performance.now();
   try {
     const reporteBase = await obtenerSolventacionesCompleto(req.query);
+    const reportReadyAt = performance.now();
     const reporte = await prepararSolventacionesPdf(reporteBase);
+    const imagesReadyAt = performance.now();
     const baseUrl = getPublicOrigin(req);
     const html = await new Promise((resolve, reject) => {
       res.app.render("solventaciones_pdf", { reporte, filtros: reporte.filtros, baseUrl }, (err, rendered) => {
@@ -78,18 +102,16 @@ solventacionesRouter.get("/pdf", async (req, res) => {
         else resolve(rendered);
       });
     });
+    const htmlReadyAt = performance.now();
 
-    const chromePath = getChromePath();
-    const browser = await puppeteer.launch({
-      executablePath: chromePath,
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-
+    const browser = await getPdfBrowser();
+    const browserReadyAt = performance.now();
+    let page = null;
     try {
-      const page = await browser.newPage();
-      page.setDefaultNavigationTimeout(120000);
-      await page.setContent(html, { waitUntil: "networkidle0" });
+      page = await browser.newPage();
+      page.setDefaultNavigationTimeout(30_000);
+      await page.setJavaScriptEnabled(false);
+      await page.setContent(html, { waitUntil: "load", timeout: 30_000 });
       await page.emulateMediaType("screen");
       const pdfBytes = await page.pdf({
         format: "Letter",
@@ -102,12 +124,20 @@ solventacionesRouter.get("/pdf", async (req, res) => {
         },
         preferCSSPageSize: true,
       });
+      const pdfReadyAt = performance.now();
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", getPdfContentDisposition(buildPdfFilename(reporte)));
+      res.setHeader("Server-Timing", [
+        `report;dur=${(reportReadyAt - startedAt).toFixed(1)}`,
+        `images;dur=${(imagesReadyAt - reportReadyAt).toFixed(1)}`,
+        `template;dur=${(htmlReadyAt - imagesReadyAt).toFixed(1)}`,
+        `browser;dur=${(browserReadyAt - htmlReadyAt).toFixed(1)}`,
+        `render;dur=${(pdfReadyAt - browserReadyAt).toFixed(1)}`,
+      ].join(", "));
       res.send(Buffer.from(pdfBytes));
     } finally {
-      await browser.close();
+      if (page) await page.close().catch(() => {});
     }
   } catch (err) {
     console.error("ERROR EN /solventaciones/pdf:", err);
