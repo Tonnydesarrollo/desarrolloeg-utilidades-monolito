@@ -6,7 +6,7 @@ const view = fs.readFileSync(new URL("../src/modules/trabajos/trabajos.ejs", imp
 const shellCss = fs.readFileSync(new URL("../src/public/ui/portal-shell.css", import.meta.url), "utf8");
 
 test("trabajos agrupa empresas contraidas y permite editar estatus y documentacion", () => {
-  assert.match(view, /<details class="company-group">/);
+  assert.match(view, /<details class="company-group" data-company-id=/);
   assert.doesNotMatch(view, /<details class="company-group" open/);
   assert.match(view, /data-status/);
   assert.match(view, /data-save-docs/);
