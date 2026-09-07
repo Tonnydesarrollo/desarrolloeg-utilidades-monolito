@@ -236,15 +236,28 @@ async function refreshCachesForDatabaseRevision() {
 
 async function mapaSucursales() {
   const map = {};
+  const empresas = new Map(
+    readLocalOperationalTable("EMPRESAS").map((row) => [String(row.ID || row["Row ID"] || "").trim(), row]),
+  );
   for (const row of readLocalOperationalTable("SUCURSALES")) {
-    map[row.ID] = {
+    const empresaId = String(row.EMPRESA || row["ID EMPRESA"] || "").trim();
+    const empresa = empresas.get(empresaId) || null;
+    const sucursal = {
       id: row.ID,
-      nombre: row.NOMBRE || row.LABEL || "",
+      nombre: row.LABEL2 || row.LABEL || row.NOMBRE || "",
       tienda: row.TIENDA || "",
-      razonSocial: row["RAZON SOCIAL"] || "",
+      razonSocial: empresa?.["RAZON SOCIAL"] || row["RAZON SOCIAL"] || "",
       municipio: { nombre: row.MUNICIPIO_NOMBRE || "" },
       estado: { nombre: row.ESTADO_NOMBRE || "" },
+      empresa: {
+        id: empresaId,
+        nombreComercial: empresa?.["NOMBRE COMERCIAL"] || empresa?.LABEL || "",
+        razonSocial: empresa?.["RAZON SOCIAL"] || row["RAZON SOCIAL"] || "",
+        logo: empresa?.LOGOCALCULADO || empresa?.LOGOURL || empresa?.LOGO || "",
+      },
     };
+    const keys = [row.ID, row["Row ID"], row.ID_PC].map((value) => String(value || "").trim()).filter(Boolean);
+    keys.forEach((key) => { map[key] = sucursal; });
   }
   return map;
 }
@@ -263,7 +276,29 @@ function formatDate(value) {
 }
 
 function compact(value) {
-  return normalizeText(value).replace(/\s+/g, "");
+  return normalizeText(value).replace(/[^a-z0-9]/g, "");
+}
+
+function extractOpinionUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  let candidate = raw;
+  if (raw.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw);
+      candidate = String(parsed?.Url || parsed?.url || parsed?.LinkText || parsed?.linkText || "").trim();
+    } catch {
+      candidate = raw;
+    }
+  }
+  const match = candidate.match(/https?:\/\/[^\s"'}]+/i);
+  if (!match) return "";
+  try {
+    const url = new URL(match[0]);
+    return url.protocol === "https:" && /(^|\.)pcsinaloa\.gob\.mx$/i.test(url.hostname) ? url.toString() : "";
+  } catch {
+    return "";
+  }
 }
 
 function buildRowView(row, sucursal) {
@@ -283,7 +318,8 @@ function buildRowView(row, sucursal) {
       sucursal?.tienda ||
       ""
   ).trim();
-  const sucursalId = String(readField(row, ["sucursal_id", "SUCURSAL_ID", "Row ID", "ID"]) || "").trim();
+  const sucursalId = String(readField(row, ["SUCURSAL", "sucursal_local_id", "Row ID", "ID"]) || sucursal?.id || "").trim();
+  const sistemaPcSucursalId = String(readField(row, ["sucursal_id", "SUCURSAL_ID"]) || "").trim();
   const municipioNombre = String(
     readField(row, ["municipio", "MUNICIPIO"]) ||
       sucursal?.municipio?.nombre ||
@@ -295,6 +331,7 @@ function buildRowView(row, sucursal) {
   const motivo = String(readField(row, ["motivo", "MOTIVO"]) || "").trim();
   const registroFecha = formatDate(readField(row, ["registro_fecha", "REGISTRO_FECHA"]));
   const vigenciaFecha = formatDate(readField(row, ["vigencia_fecha_propuesta", "VIGENCIA_FECHA_PROPUESTA"]));
+  const opinionFavorableUrl = extractOpinionUrl(readField(row, ["OPINION FAVORABLE", "OPINION_FAVORABLE", "opinion_favorable"]));
 
   return {
     solicitudId,
@@ -302,16 +339,181 @@ function buildRowView(row, sucursal) {
     razonSocial,
     tienda,
     sucursalId,
+    sistemaPcSucursalId,
     sucursalNombre,
     municipioNombre,
     estadoNombre,
     motivo,
     registroFecha,
     vigenciaFecha,
+    opinionFavorableUrl,
     etiquetaGrupo: tienda || razonSocial || municipioNombre || sucursalNombre || "SIN GRUPO",
     filtroTienda: compact(tienda),
     filtroRazonSocial: compact(razonSocial),
     filtroMunicipio: compact(municipioNombre),
+    empresaId: sucursal?.empresa?.id || "",
+    empresaNombre: sucursal?.empresa?.nombreComercial || razonSocial,
+    empresaLogo: sucursal?.empresa?.logo || "",
+  };
+}
+
+const WORKFLOW_STAGES = [
+  { key: "creada", label: "Creada" },
+  { key: "captura", label: "En captura" },
+  { key: "revision", label: "Revision de campo" },
+  { key: "visitada", label: "Visitada" },
+  { key: "autorizada", label: "Autorizada" },
+  { key: "firmada", label: "Firmada" },
+];
+
+function getRecordYear(row) {
+  const explicit = String(readField(row, ["AÑO", "ANIO", "ANO", "YEAR"]) || "").trim();
+  const explicitMatch = explicit.match(/20\d{2}/);
+  if (explicitMatch) return Number(explicitMatch[0]);
+
+  for (const value of [
+    readField(row, ["registro_fecha", "REGISTRO_FECHA"]),
+    readField(row, ["vigencia_fecha_propuesta", "VIGENCIA_FECHA_PROPUESTA"]),
+  ]) {
+    const match = String(value || "").match(/20\d{2}/);
+    if (match) return Number(match[0]);
+  }
+  return null;
+}
+
+export function normalizeSistemaPcStage(value) {
+  const status = normalizeText(value);
+  if (/firmad/.test(status)) return { key: "firmada", label: "Firmada", detail: "" };
+  if (/autoriz|opinion favorable/.test(status)) return { key: "autorizada", label: "Autorizada", detail: "" };
+  if (/rechaz|subsan|visitad/.test(status)) {
+    const detail = /rechaz/.test(status) ? "Rechazada" : (/subsan/.test(status) ? "Subsanada" : "");
+    return { key: "visitada", label: "Visitada", detail };
+  }
+  if (/revision.*campo|campo.*revision/.test(status)) return { key: "revision", label: "Revision de campo", detail: "" };
+  if (/captur/.test(status)) return { key: "captura", label: "En captura", detail: "" };
+  if (/cread/.test(status)) return { key: "creada", label: "Creada", detail: "" };
+  return { key: "creada", label: "Creada", detail: value ? String(value).trim() : "Sin clasificar" };
+}
+
+function parseSelectedSolicitudIds(query) {
+  const source = query.solicitudIds || query.solicitudes || query.solicitudId || "";
+  const values = Array.isArray(source) ? source : String(source).split(",");
+  return dedupeStrings(values.map((value) => String(value || "").trim()));
+}
+
+export async function obtenerSistemaPcResumen(query = {}) {
+  await refreshCachesForDatabaseRevision();
+  const currentYear = new Date().getFullYear();
+  const requestedSection = normalizeText(query.section || query.seccion || "proceso");
+  const section = ["proceso", "historico", "pendientes"].includes(requestedSection)
+    ? requestedSection
+    : "proceso";
+  const requestedYear = Number(query.year || query.anio || 0);
+  const search = normalizeText(query.q || query.buscar || "");
+  const requestedCompany = normalizeText(query.empresa || query.company || "");
+  const [rowsRaw, sucursalesMap] = await Promise.all([leerTablaAppSheet(APPSHEET_TABLE), mapaSucursales()]);
+
+  const allItems = (Array.isArray(rowsRaw) ? rowsRaw : []).map((row) => {
+    const localSucursalId = String(readField(row, ["SUCURSAL", "sucursal_local_id"]) || "").trim();
+    const externalSucursalId = String(readField(row, ["sucursal_id", "SUCURSAL_ID"]) || "").trim();
+    const sucursal = sucursalesMap[localSucursalId] || sucursalesMap[externalSucursalId] || null;
+    const base = buildRowView(row, sucursal);
+    const stage = normalizeSistemaPcStage(base.estatus);
+    const year = getRecordYear(row);
+    const rowId = String(readField(row, ["Row ID", "row_id", "ID"]) || "").trim();
+    return {
+      ...base,
+      rowId,
+      year,
+      stageKey: stage.key,
+      stageLabel: stage.label,
+      statusDetail: stage.detail,
+      reportReady: stage.key === "visitada",
+    };
+  }).filter((item) => item.solicitudId || item.sucursalId || item.sucursalNombre);
+
+  const years = [...new Set(allItems.map((item) => item.year).filter(Number.isFinite))].sort((a, b) => b - a);
+  let selectedYear = Number.isFinite(requestedYear) && requestedYear > 0 ? requestedYear : currentYear;
+  if (section === "historico" && !(Number.isFinite(requestedYear) && requestedYear > 0)) {
+    selectedYear = years.find((year) => year < currentYear) || currentYear - 1;
+  }
+
+  const matchesSection = (item) => {
+    if (section === "historico") return item.year === selectedYear && item.year < currentYear;
+    if (section === "pendientes") return item.year === selectedYear && item.reportReady;
+    return item.year === selectedYear;
+  };
+  const items = allItems.filter((item) => {
+    if (!matchesSection(item)) return false;
+    const companyText = `${item.empresaId} ${item.empresaNombre} ${item.razonSocial}`;
+    if (requestedCompany && !normalizeText(companyText).includes(requestedCompany)) return false;
+    if (search) {
+      const haystack = normalizeText([
+        item.sucursalNombre,
+        item.tienda,
+        item.empresaNombre,
+        item.razonSocial,
+        item.municipioNombre,
+        item.estadoNombre,
+        item.solicitudId,
+        item.estatus,
+      ].join(" "));
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const groupsMap = new Map();
+  items.forEach((item) => {
+    const companyKey = item.empresaId || normalizeText(item.razonSocial || item.empresaNombre) || "sin-empresa";
+    if (!groupsMap.has(companyKey)) {
+      groupsMap.set(companyKey, {
+        key: companyKey,
+        empresaId: item.empresaId,
+        nombre: item.empresaNombre || item.razonSocial || "Empresa sin identificar",
+        razonSocial: item.razonSocial,
+        logo: item.empresaLogo,
+        items: [],
+      });
+    }
+    groupsMap.get(companyKey).items.push(item);
+  });
+
+  const groups = [...groupsMap.values()].map((group) => ({
+    ...group,
+    total: group.items.length,
+    statuses: WORKFLOW_STAGES.map((stage) => ({
+      ...stage,
+      items: group.items.filter((item) => item.stageKey === stage.key),
+      count: group.items.filter((item) => item.stageKey === stage.key).length,
+    })),
+  })).sort((a, b) => a.nombre.localeCompare(b.nombre, "es-MX"));
+
+  const stageCounts = Object.fromEntries(WORKFLOW_STAGES.map((stage) => [
+    stage.key,
+    items.filter((item) => item.stageKey === stage.key).length,
+  ]));
+  const companies = [...new Map(allItems.map((item) => [
+    item.empresaId || normalizeText(item.razonSocial),
+    { id: item.empresaId, nombre: item.empresaNombre || item.razonSocial, razonSocial: item.razonSocial },
+  ])).values()].filter((item) => item.nombre).sort((a, b) => a.nombre.localeCompare(b.nombre, "es-MX"));
+
+  return {
+    source: "sqlite-local",
+    generatedAt: new Date().toISOString(),
+    currentYear,
+    section,
+    selectedYear,
+    years,
+    companies,
+    stages: WORKFLOW_STAGES,
+    counts: {
+      total: items.length,
+      companies: groups.length,
+      reportReady: items.filter((item) => item.reportReady).length,
+      ...stageCounts,
+    },
+    groups,
   };
 }
 
@@ -896,10 +1098,13 @@ function buildTopCounts(items, getLabel, getWeight, limit = 3) {
 
 export async function obtenerSolventacionesCompleto(query = {}) {
   const databaseRevision = await refreshCachesForDatabaseRevision();
+  const selectedSolicitudIds = parseSelectedSolicitudIds(query);
   const cacheKey = JSON.stringify({
     tienda: String(query.tienda || query.TIENDA || "").trim(),
     razonSocial: String(query.razonSocial || query.razon_social || query["razon social"] || "").trim(),
     municipio: String(query.municipio || query.MUNICIPIO || "").trim(),
+    year: String(query.year || query.anio || "").trim(),
+    solicitudIds: selectedSolicitudIds,
   });
   const cached = REPORT_CACHE.get(cacheKey);
   const now = Date.now();
@@ -912,6 +1117,8 @@ export async function obtenerSolventacionesCompleto(query = {}) {
     tienda: String(query.tienda || query.TIENDA || "").trim(),
     razonSocial: String(query.razonSocial || query.razon_social || query["razon social"] || "").trim(),
     municipio: String(query.municipio || query.MUNICIPIO || "").trim(),
+    year: Number(query.year || query.anio || 0) || null,
+    solicitudIds: selectedSolicitudIds,
   };
 
   const [rowsRaw, sucursalesMap] = await Promise.all([
@@ -920,14 +1127,16 @@ export async function obtenerSolventacionesCompleto(query = {}) {
   ]);
 
   const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
-  const estatusIncluidos = new Set(["visitada", "rechazada"]);
+  const estatusIncluidos = new Set(["visitada", "rechazada", "subsanada", "subsanadas"]);
   const visitadasBase = rows
     .filter((row) => estatusIncluidos.has(normalizeText(readField(row, ["estatus", "ESTATUS"]))))
     .map((row) => {
-      const sucursalId = String(readField(row, ["sucursal_id", "SUCURSAL_ID", "Row ID", "ID"]) || "").trim();
-      const sucursal = sucursalesMap?.[sucursalId] || null;
+      const localSucursalId = String(readField(row, ["SUCURSAL", "sucursal_local_id"]) || "").trim();
+      const externalSucursalId = String(readField(row, ["sucursal_id", "SUCURSAL_ID"]) || "").trim();
+      const sucursal = sucursalesMap?.[localSucursalId] || sucursalesMap?.[externalSucursalId] || null;
       return {
         ...buildRowView(row, sucursal),
+        year: getRecordYear(row),
       };
     })
     .filter(Boolean);
@@ -937,6 +1146,8 @@ export async function obtenerSolventacionesCompleto(query = {}) {
       if (!matchesToken(row.tienda, filtros.tienda)) return false;
       if (!matchesToken(row.razonSocial, filtros.razonSocial)) return false;
       if (!matchesToken(row.municipioNombre, filtros.municipio)) return false;
+      if (filtros.year && row.year !== filtros.year) return false;
+      if (filtros.solicitudIds.length && !filtros.solicitudIds.includes(row.solicitudId)) return false;
       return true;
     });
 
@@ -1024,8 +1235,8 @@ export async function obtenerSolventacionesCompleto(query = {}) {
   const gruposLista = [...grupos.values()].map((grupo) => ({
     ...grupo,
     subtitulo: dedupeStrings([
-      grupo.subtitulo,
-      ...grupo.items.map((item) => buildSourceLabel(item)),
+      ...grupo.items.map((item) => item.municipioNombre),
+      ...grupo.items.map((item) => item.estadoNombre),
     ]),
     items: grupo.items.map((item) => ({
       ...item,
@@ -1164,7 +1375,7 @@ export async function prepararSolventacionesPdf(reporte) {
   await mapWithConcurrency(imagenes, PDF_IMAGE_CONCURRENCY, async (img) => {
     const source = img.url_imagen || img.url || img.previewUrl || img.thumbnailUrl || "";
     try {
-      img.pdfPreviewUrl = await imageUrlToPdfDataUri(source, { width: 420, height: 320, quality: 38 });
+      img.pdfPreviewUrl = await imageUrlToPdfDataUri(source, { width: 340, height: 255, quality: 34 });
       img.pdfPreviewUnavailable = false;
     } catch {
       img.pdfPreviewUrl = "";

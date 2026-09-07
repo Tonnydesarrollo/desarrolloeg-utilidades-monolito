@@ -44,6 +44,9 @@ test("dashboard entrega JavaScript ejecutable sin errores de sintaxis", async ()
       "El script inline " + index + " debe compilar",
     );
   }
+  assert.match(html, /data-dashboard-tab-panel="solventaciones"/);
+  assert.match(html, /data-solventaciones-frame/);
+  assert.match(html, /Sistema de Proteccion Civil/);
 });
 
 test("perfil de empresa muestra detalle territorial y carga todos los expandibles contraidos", async () => {

@@ -566,7 +566,6 @@
     </style>
   </head>
   <body class="portal-shell portal-solventaciones">
-    <a class="skip-link" href="#solventaciones-pdf-main">Saltar al contenido principal</a>
     <main id="solventaciones-pdf-main" class="page" role="main" aria-label="Reporte de solventaciones PDF">
     <div class="sheet">
       <div class="hero">
@@ -648,20 +647,12 @@
 
             <% grupo.items.forEach(function (item) {
               const itemIncidencias = Array.isArray(item.incidencias) ? item.incidencias : [];
-              const itemImagenes = Array.isArray(item.imagenes) ? item.imagenes : [];
-              const previewVisit = [
-                `Incidencias ${itemIncidencias.length}`,
-                `Fotos ${itemImagenes.length}`,
-                `Con foto ${itemIncidencias.filter(function (inc) { return Array.isArray(inc.imagenes) && inc.imagenes.length > 0; }).length}`
-              ];
             %>
               <div class="visit">
                 <div class="visit-head">
                   <div>
                     <h3 class="visit-title"><%= esc(item.sucursalNombre || item.razonSocial || item.tienda || "Sin nombre") %></h3>
                     <div class="visit-tags">
-                      <% if (item.tienda) { %><span class="tag">Tienda <%= esc(item.tienda) %></span><% } %>
-                      <% if (item.razonSocial) { %><span class="tag"><%= esc(item.razonSocial) %></span><% } %>
                       <% if (item.municipioNombre) { %><span class="tag"><%= esc(item.municipioNombre) %></span><% } %>
                       <% if (item.estatus) { %><span class="tag"><%= esc(item.estatus) %></span><% } %>
                     </div>
@@ -670,16 +661,9 @@
                 </div>
 
                 <div class="visit-meta">
-                  <% if (item.sucursalId) { %><span>Sucursal ID: <strong><%= esc(item.sucursalId) %></strong></span><% } %>
                   <% if (item.estadoNombre) { %><span>Estado: <strong><%= esc(item.estadoNombre) %></strong></span><% } %>
                   <% if (item.registroFecha) { %><span>Registro: <strong><%= esc(item.registroFecha) %></strong></span><% } %>
                   <% if (item.vigenciaFecha) { %><span>Vigencia: <strong><%= esc(item.vigenciaFecha) %></strong></span><% } %>
-                </div>
-
-                <div class="visit-stats">
-                  <% previewVisit.forEach(function (stat) { %>
-                    <span class="mini-stat"><%= esc(stat) %></span>
-                  <% }); %>
                 </div>
 
                 <% if (item.errorIncidencias) { %>
@@ -696,13 +680,9 @@
                       <div class="incidencia">
                         <div class="incidencia-head">
                           <div>
-                            <% if (statusValue) { %>
-                              <div class="incidencia-guide <%= getStatusTone(statusValue) %>"><%= esc(getStatusGuide(statusValue)) %></div>
-                            <% } %>
                             <h4 class="incidencia-title"><%= esc(inc.titulo || "Sin titulo") %></h4>
                             <div class="incidencia-info">
                               <% if (inc.incidencia_id) { %><span>Incidencia #<%= esc(inc.incidencia_id) %></span><% } %>
-                              <% if (statusValue) { %><span> - Estatus <%= esc(statusValue) %> · <%= esc(getStatusLabel(statusValue)) %></span><% } %>
                               <% if (inc.registro_fecha) { %><span> - <%= esc(inc.registro_fecha) %></span><% } %>
                             </div>
                           </div>
@@ -749,9 +729,6 @@
                                   </div>
                                 <% } %>
                               <% }); %>
-                            </div>
-                            <div class="evidence-note" style="border:1px solid #f0c3c8; border-radius:8px; background:#fff8f8;">
-                              <span class="label">Evidencia fotográfica</span>
                             </div>
                           </div>
                         <% } %>

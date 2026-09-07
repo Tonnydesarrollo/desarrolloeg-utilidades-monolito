@@ -49,11 +49,15 @@
       tienda: filtros.tienda || "",
       razonSocial: filtros.razonSocial || "",
       municipio: filtros.municipio || "",
+      year: filtros.year || "",
+      solicitudIds: Array.isArray(filtros.solicitudIds) ? filtros.solicitudIds.join(",") : "",
     };
     const merged = Object.assign({}, base, extra || {});
     if (merged.tienda) params.set("tienda", merged.tienda);
     if (merged.razonSocial) params.set("razonSocial", merged.razonSocial);
     if (merged.municipio) params.set("municipio", merged.municipio);
+    if (merged.year) params.set("year", merged.year);
+    if (merged.solicitudIds) params.set("solicitudIds", merged.solicitudIds);
     return `/solventaciones/pdf${params.toString() ? `?${params.toString()}` : ""}`;
   }
   const pdfActualUrl = buildPdfUrl();
@@ -655,7 +659,6 @@
     <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a" />
   </head>
   <body class="portal-shell portal-solventaciones">
-    <a class="skip-link" href="#solventaciones-main">Saltar al contenido principal</a>
     <main id="solventaciones-main" class="page" role="main" aria-label="Reporte de solventaciones">
       <div class="sheet">
         <section class="hero">
@@ -668,13 +671,15 @@
               </div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-              <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
+              <a class="pill" href="/solventaciones/html" style="text-decoration:none;">Volver al sistema PC</a>
               <span class="chip chip-brand">Datos reales</span>
               <span class="chip">Tabla: <%= esc(reporte.tableName || "STATUS SISTEMA PC") %></span>
             </div>
           </div>
 
-          <form class="toolbar" method="get" action="/solventaciones/html">
+          <form class="toolbar" method="get" action="/solventaciones/report">
+            <% if (filtros.year) { %><input type="hidden" name="year" value="<%= esc(filtros.year) %>"><% } %>
+            <% if (Array.isArray(filtros.solicitudIds) && filtros.solicitudIds.length) { %><input type="hidden" name="solicitudIds" value="<%= esc(filtros.solicitudIds.join(',')) %>"><% } %>
             <div class="field">
               <label for="tienda">Tienda</label>
               <input id="tienda" name="tienda" list="tiendasCatalogo" value="<%= esc(filtros.tienda || "") %>" placeholder="Ej. 1016 LEY PLAZA FIESTA">
@@ -688,7 +693,7 @@
               <input id="municipio" name="municipio" list="municipiosCatalogo" value="<%= esc(filtros.municipio || "") %>" placeholder="Ej. MAZATLAN">
             </div>
             <div class="actions">
-              <a class="secondary" href="/solventaciones/html">Limpiar</a>
+              <a class="secondary" href="/solventaciones/html">Cerrar reporte</a>
               <a class="secondary" href="<%= esc(pdfActualUrl) %>" target="_blank" rel="noreferrer">PDF actual</a>
               <button class="primary" type="submit">Generar reporte</button>
             </div>
@@ -761,16 +766,6 @@
                       <div>
                         <div class="item-title"><%= esc(item.sucursalNombre || item.razonSocial || item.tienda || "Sin nombre") %></div>
                         <div class="item-meta">
-                          <% if (item.tienda) { %>
-                            <a class="tag-link" href="<%= esc(buildPdfUrl({ tienda: item.tienda, razonSocial: '', municipio: '' })) %>" target="_blank" rel="noreferrer">
-                              <span class="tag tag-brand">Tienda <%= esc(item.tienda) %></span>
-                            </a>
-                          <% } %>
-                          <% if (item.razonSocial) { %>
-                            <a class="tag-link" href="<%= esc(buildPdfUrl({ razonSocial: item.razonSocial, tienda: '', municipio: '' })) %>" target="_blank" rel="noreferrer">
-                              <span class="tag"><%= esc(item.razonSocial) %></span>
-                            </a>
-                          <% } %>
                           <% if (item.municipioNombre) { %>
                             <a class="tag-link" href="<%= esc(buildPdfUrl({ municipio: item.municipioNombre, tienda: '', razonSocial: '' })) %>" target="_blank" rel="noreferrer">
                               <span class="tag"><%= esc(item.municipioNombre) %></span>
@@ -783,7 +778,6 @@
                     </div>
 
                     <div class="item-meta">
-                      <% if (item.sucursalId) { %><span>Sucursal ID: <strong><%= esc(item.sucursalId) %></strong></span><% } %>
                       <% if (item.estadoNombre) { %><span>Estado: <strong><%= esc(item.estadoNombre) %></strong></span><% } %>
                       <% if (item.registroFecha) { %><span>Registro: <strong><%= esc(item.registroFecha) %></strong></span><% } %>
                       <% if (item.vigenciaFecha) { %><span>Vigencia: <strong><%= esc(item.vigenciaFecha) %></strong></span><% } %>
@@ -805,11 +799,10 @@
                           <div class="incidencia">
                             <div class="incidencia-head">
                               <div>
-                                <% if (statusValue) { %><div class="incidencia-guide <%= getStatusTone(statusValue) %>"><%= esc(getStatusGuide(statusValue)) %></div><% } %>
                                 <div class="incidencia-title"><%= esc(inc.titulo || "Sin titulo") %></div>
                                 <div class="incidencia-meta">
                                   <% if (inc.incidencia_id) { %><span class="tag">Incidencia #<%= esc(inc.incidencia_id) %></span><% } %>
-                                  <% if (statusValue) { %><span class="tag tag-estado <%= getStatusTone(statusValue) %>">Estatus <%= esc(statusValue) %> · <%= esc(getStatusLabel(statusValue)) %></span><% } %>
+                                  <% if (statusValue) { %><span class="tag tag-estado <%= getStatusTone(statusValue) %>"><%= esc(getStatusLabel(statusValue)) %></span><% } %>
                                   <% if (inc.registro_fecha) { %><span class="tag">Registrada: <%= esc(inc.registro_fecha) %></span><% } %>
                                   <span class="tag">Fotos: <%= esc(String(inc.evidenciasCount ?? (inc.imagenes || []).length)) %></span>
                                 </div>
@@ -844,9 +837,6 @@
                                         </div>
                                       <% } %>
                                     <% }); %>
-                                  </div>
-                                  <div class="evidence-note evidence-note--standalone">
-                                    <span class="label">Evidencia fotográfica</span>
                                   </div>
                                 </div>
                               </div>

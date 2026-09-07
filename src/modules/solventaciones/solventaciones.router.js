@@ -1,6 +1,10 @@
 import express from "express";
 import puppeteer from "puppeteer-core";
-import { obtenerSolventacionesCompleto, prepararSolventacionesPdf } from "./solventaciones.service.js";
+import {
+  obtenerSistemaPcResumen,
+  obtenerSolventacionesCompleto,
+  prepararSolventacionesPdf,
+} from "./solventaciones.service.js";
 
 export const solventacionesRouter = express.Router();
 let pdfBrowserPromise = null;
@@ -40,6 +44,8 @@ function buildPdfFilename(reporte) {
   if (reporte?.filtros?.tienda) parts.push(`TIENDA ${reporte.filtros.tienda}`);
   if (reporte?.filtros?.razonSocial) parts.push(reporte.filtros.razonSocial);
   if (reporte?.filtros?.municipio) parts.push(reporte.filtros.municipio);
+  if (reporte?.filtros?.year) parts.push(String(reporte.filtros.year));
+  if (reporte?.filtros?.solicitudIds?.length > 1) parts.push(`${reporte.filtros.solicitudIds.length} SUCURSALES`);
   const raw = `${parts.filter(Boolean).join(" - ")}.pdf`;
   return raw.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
 }
@@ -75,16 +81,29 @@ solventacionesRouter.get("/html-data", async (req, res) => {
   }
 });
 
-solventacionesRouter.get("/html", async (req, res) => {
+solventacionesRouter.get("/api/overview", async (req, res) => {
+  try {
+    const data = await obtenerSistemaPcResumen(req.query);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("ERROR EN /solventaciones/api/overview:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+solventacionesRouter.get("/html", (req, res) => {
+  const embedded = String(req.query.embed || "").trim() === "1";
+  res.render("solventaciones_system", { currentYear: new Date().getFullYear(), embedded });
+});
+
+solventacionesRouter.get("/report", async (req, res) => {
   try {
     const reporte = await obtenerSolventacionesCompleto(req.query);
-    res.render("solventaciones", {
-      reporte,
-      filtros: reporte.filtros,
-    });
+    res.render("solventaciones", { reporte, filtros: reporte.filtros });
   } catch (err) {
-    console.error("ERROR EN /solventaciones/html:", err);
-    res.status(500).send("Error");
+    console.error("ERROR EN /solventaciones/report:", err);
+    res.status(500).send("Error al generar el reporte");
   }
 });
 

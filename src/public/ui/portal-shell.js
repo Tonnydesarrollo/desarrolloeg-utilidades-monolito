@@ -44,6 +44,7 @@
         { label: "Faltantes Ley", href: "/faltantes-ley", view: "faltantes-ley" },
         { label: "Planeacion", href: "/Planeacion-ley/", view: "planeacion" },
         { label: "Polizas", href: "/poliza-ley", view: "poliza" },
+        { label: "Proteccion Civil", href: "/dashboard?tab=solventaciones", view: "reportes", tab: "solventaciones" },
         { label: "Reportes", href: "/reportes-inspecciones", view: "reportes" },
       ],
     },

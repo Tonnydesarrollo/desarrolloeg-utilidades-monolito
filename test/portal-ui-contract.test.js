@@ -32,6 +32,7 @@ test("la navegacion compartida implementa estado por URL y drawer accesible", ()
   assert.match(shellCss, /\.portal-app-topbar/);
   assert.match(shellCss, /prefers-reduced-motion/);
   assert.match(shellSource, /desarrolloeg:shell-ready/);
+  assert.match(shellSource, /href:\s*"\/dashboard\?tab=solventaciones"/);
 });
 
 test("la pantalla de carga espera al shell y usa una sola composicion de marca", () => {

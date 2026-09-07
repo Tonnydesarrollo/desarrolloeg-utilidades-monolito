@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#123649">
+    <title>Sistema de Proteccion Civil | Desarrollo EG</title>
+    <link rel="icon" type="image/png" href="/img/Logo%20sin%20fondo%203D%20HD.png">
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260828a">
+    <style>
+      :root {
+        --pc-ink: #132838;
+        --pc-teal: #0f5961;
+        --pc-red: #ba332b;
+        --pc-sand: #e9b44c;
+        --pc-line: rgba(31, 62, 82, 0.13);
+        --pc-muted: #617282;
+      }
+      * { box-sizing: border-box; }
+      body.portal-solventaciones-system { overflow-x: hidden; }
+      body.portal-solventaciones-system.is-embedded { background: transparent; }
+      body.portal-solventaciones-system.is-embedded .pc-shell { width: 100%; max-width: none; padding: 0 2px 110px !important; }
+      body.portal-solventaciones-system.is-embedded .pc-hero { display: none; }
+      .pc-shell { display: grid; gap: 18px; padding-bottom: 110px !important; }
+      .pc-hero {
+        position: relative;
+        overflow: hidden;
+        padding: clamp(22px, 4vw, 42px);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,.24);
+        border-radius: 30px;
+        background:
+          linear-gradient(125deg, rgba(9,42,57,.98), rgba(15,89,97,.92)),
+          repeating-linear-gradient(45deg, transparent 0 18px, rgba(255,255,255,.04) 18px 19px);
+        box-shadow: 0 28px 70px rgba(13, 45, 63, .22);
+      }
+      .pc-hero::after {
+        content: "";
+        position: absolute;
+        width: 290px;
+        height: 290px;
+        right: -85px;
+        top: -120px;
+        border: 42px solid rgba(255,255,255,.07);
+        border-radius: 50%;
+      }
+      .pc-hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr auto; gap: 22px; align-items: end; }
+      .pc-eyebrow { display: inline-flex; gap: 8px; align-items: center; margin-bottom: 12px; color: #bfe4e4; font: 800 .72rem/1 var(--portal-font-ui); letter-spacing: .15em; text-transform: uppercase; }
+      .pc-eyebrow::before { content: ""; width: 30px; height: 3px; border-radius: 9px; background: var(--pc-red); }
+      .pc-hero h1 { max-width: 760px; margin: 0; font: 700 clamp(1.9rem, 4vw, 3.8rem)/.98 var(--portal-font-display); letter-spacing: -.035em; }
+      .pc-hero p { max-width: 760px; margin: 16px 0 0; color: rgba(255,255,255,.76); font-size: .95rem; line-height: 1.65; }
+      .pc-year-mark { min-width: 126px; padding: 18px; border: 1px solid rgba(255,255,255,.2); border-radius: 22px; background: rgba(255,255,255,.08); backdrop-filter: blur(14px); text-align: center; }
+      .pc-year-mark span { display: block; font: 800 .62rem/1 var(--portal-font-ui); letter-spacing: .14em; text-transform: uppercase; color: #bfe4e4; }
+      .pc-year-mark strong { display: block; margin-top: 6px; font: 800 2rem/1 var(--portal-font-display); }
+      .pc-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px; border: 1px solid var(--pc-line); border-radius: 22px; background: rgba(255,255,255,.76); box-shadow: 0 14px 35px rgba(25, 55, 75, .08); backdrop-filter: blur(18px); }
+      .pc-tab { min-height: 54px; padding: 11px 15px; border: 0; border-radius: 16px; color: var(--pc-muted); background: transparent; cursor: pointer; font: 800 .78rem/1.2 var(--portal-font-ui); letter-spacing: .035em; text-transform: uppercase; transition: 180ms ease; }
+      .pc-tab small { display: block; margin-top: 4px; font: 600 .65rem/1.2 var(--portal-font-body); letter-spacing: 0; text-transform: none; opacity: .8; }
+      .pc-tab[aria-selected="true"] { color: #fff; background: linear-gradient(135deg, var(--pc-teal), #123649); box-shadow: 0 12px 25px rgba(15,89,97,.22); }
+      .pc-toolbar { display: grid; grid-template-columns: 150px minmax(220px, .8fr) minmax(260px, 1.4fr) auto; gap: 12px; padding: 16px; border: 1px solid var(--pc-line); border-radius: 22px; background: rgba(255,255,255,.83); box-shadow: 0 14px 35px rgba(25, 55, 75, .07); }
+      .pc-field { display: grid; gap: 6px; }
+      .pc-field label { color: var(--pc-muted); font: 800 .62rem/1 var(--portal-font-ui); letter-spacing: .11em; text-transform: uppercase; }
+      .pc-field input, .pc-field select { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid var(--pc-line); border-radius: 13px; outline: 0; color: var(--pc-ink); background: #f8fbfd; font: 700 .82rem/1 var(--portal-font-body); }
+      .pc-field input:focus, .pc-field select:focus { border-color: var(--pc-teal); box-shadow: 0 0 0 4px rgba(15,89,97,.1); }
+      .pc-refresh { align-self: end; min-height: 46px; padding: 0 18px; border: 0; border-radius: 13px; color: #fff; background: var(--pc-red); cursor: pointer; font: 800 .72rem/1 var(--portal-font-ui); text-transform: uppercase; }
+      .pc-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+      .pc-metric { position: relative; overflow: hidden; min-height: 112px; padding: 18px; border: 1px solid var(--pc-line); border-radius: 20px; background: rgba(255,255,255,.88); box-shadow: 0 14px 30px rgba(26,54,73,.07); }
+      .pc-metric::after { content: ""; position: absolute; inset: auto -24px -35px auto; width: 90px; height: 90px; border-radius: 50%; background: var(--metric-color, rgba(15,89,97,.08)); }
+      .pc-metric span { position: relative; z-index: 1; display: block; color: var(--pc-muted); font: 800 .63rem/1 var(--portal-font-ui); letter-spacing: .1em; text-transform: uppercase; }
+      .pc-metric strong { position: relative; z-index: 1; display: block; margin-top: 12px; color: var(--pc-ink); font: 800 2rem/1 var(--portal-font-display); }
+      .pc-progress { display: grid; grid-template-columns: repeat(6, minmax(115px, 1fr)); gap: 8px; overflow-x: auto; padding-bottom: 3px; }
+      .pc-stage { min-width: 115px; padding: 14px; border: 1px solid var(--pc-line); border-top: 4px solid var(--stage-color, var(--pc-teal)); border-radius: 15px; background: rgba(255,255,255,.83); }
+      .pc-stage span { display: block; min-height: 30px; color: var(--pc-muted); font: 800 .66rem/1.3 var(--portal-font-ui); text-transform: uppercase; }
+      .pc-stage strong { display: block; margin-top: 6px; color: var(--pc-ink); font: 800 1.4rem/1 var(--portal-font-display); }
+      .pc-section-head { display: flex; justify-content: space-between; align-items: end; gap: 18px; padding: 8px 3px 0; }
+      .pc-section-head h2 { margin: 0; color: var(--pc-ink); font: 700 clamp(1.25rem, 3vw, 2rem)/1 var(--portal-font-display); }
+      .pc-section-head p { margin: 6px 0 0; color: var(--pc-muted); font-size: .8rem; }
+      .pc-updated { color: var(--pc-muted); font: 700 .68rem/1.4 var(--portal-font-ui); text-align: right; }
+      .pc-groups { display: grid; gap: 12px; }
+      .pc-company { overflow: hidden; border: 1px solid var(--pc-line); border-radius: 22px; background: rgba(255,255,255,.9); box-shadow: 0 16px 38px rgba(25,55,75,.07); }
+      .pc-company > summary, .pc-status-group > summary { list-style: none; cursor: pointer; }
+      .pc-company > summary::-webkit-details-marker, .pc-status-group > summary::-webkit-details-marker { display: none; }
+      .pc-company-head { display: grid; grid-template-columns: 58px 1fr auto auto; gap: 14px; align-items: center; padding: 17px 19px; }
+      .pc-company-logo { width: 58px; height: 58px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--pc-line); border-radius: 16px; background: #f4f8fa; color: var(--pc-teal); font: 900 .8rem/1 var(--portal-font-ui); }
+      .pc-company-logo img { width: 100%; height: 100%; object-fit: contain; }
+      .pc-company-title { margin: 0; color: var(--pc-ink); font: 800 1rem/1.25 var(--portal-font-ui); }
+      .pc-company-subtitle { margin: 4px 0 0; color: var(--pc-muted); font-size: .72rem; }
+      .pc-count { padding: 8px 11px; border-radius: 999px; color: var(--pc-teal); background: rgba(15,89,97,.08); font: 800 .67rem/1 var(--portal-font-ui); white-space: nowrap; }
+      .pc-chevron { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #eef4f6; transition: transform 180ms ease; }
+      .pc-company[open] .pc-company-head > .pc-chevron { transform: rotate(180deg); }
+      .pc-company-body { display: grid; gap: 10px; padding: 0 18px 18px; border-top: 1px solid var(--pc-line); }
+      .pc-company-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
+      .pc-action { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 13px; border: 1px solid var(--pc-line); border-radius: 999px; color: var(--pc-ink); background: #fff; font: 800 .66rem/1 var(--portal-font-ui); text-decoration: none; text-transform: uppercase; }
+      .pc-action--primary { border-color: transparent; color: #fff !important; background: var(--pc-teal); }
+      .pc-status-group { border: 1px solid var(--pc-line); border-radius: 16px; background: #f8fafc; }
+      .pc-status-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 15px; }
+      .pc-status-name { display: flex; align-items: center; gap: 9px; color: var(--pc-ink); font: 800 .75rem/1 var(--portal-font-ui); text-transform: uppercase; }
+      .pc-status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--stage-color, var(--pc-teal)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--stage-color, var(--pc-teal)) 14%, transparent); }
+      .pc-branches { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; padding: 0 10px 10px; }
+      .pc-branch { position: relative; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; min-height: 76px; padding: 12px; border: 1px solid var(--pc-line); border-radius: 13px; background: #fff; }
+      .pc-check { width: 18px; height: 18px; accent-color: var(--pc-teal); }
+      .pc-branch-name { color: var(--pc-ink); font: 800 .78rem/1.3 var(--portal-font-ui); }
+      .pc-branch-meta { margin-top: 4px; color: var(--pc-muted); font-size: .68rem; line-height: 1.4; }
+      .pc-detail { display: inline-block; margin-top: 5px; padding: 4px 7px; border-radius: 999px; color: #8d2a25; background: #fff0ef; font: 800 .58rem/1 var(--portal-font-ui); text-transform: uppercase; }
+      .pc-store-actions { display: flex; gap: 5px; }
+      .pc-icon-link { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--pc-line); border-radius: 10px; color: var(--pc-teal); text-decoration: none; font: 900 .62rem/1 var(--portal-font-ui); }
+      .pc-empty, .pc-error { padding: 40px 24px; border: 1px dashed rgba(31,62,82,.2); border-radius: 20px; color: var(--pc-muted); background: rgba(255,255,255,.7); text-align: center; }
+      .pc-error { color: #982c27; border-color: rgba(186,51,43,.25); }
+      .pc-skeleton { display: grid; gap: 12px; }
+      .pc-skeleton div { height: 92px; border-radius: 20px; background: linear-gradient(90deg,#edf2f5 25%,#f8fafb 50%,#edf2f5 75%); background-size: 200% 100%; animation: pc-shimmer 1.2s infinite; }
+      @keyframes pc-shimmer { to { background-position: -200% 0; } }
+      .pc-selection { position: fixed; z-index: 80; left: 50%; bottom: 18px; width: min(760px, calc(100% - 28px)); display: none; grid-template-columns: 1fr auto auto auto; gap: 9px; align-items: center; padding: 12px; border: 1px solid rgba(255,255,255,.2); border-radius: 20px; color: #fff; background: rgba(13,42,57,.95); box-shadow: 0 24px 60px rgba(6,28,40,.3); backdrop-filter: blur(18px); transform: translateX(-50%); }
+      .pc-selection.is-visible { display: grid; }
+      .pc-selection strong { font: 800 .78rem/1 var(--portal-font-ui); }
+      .pc-selection button, .pc-selection a { min-height: 38px; padding: 0 12px; border: 1px solid rgba(255,255,255,.18); border-radius: 12px; color: #fff; background: rgba(255,255,255,.09); cursor: pointer; font: 800 .64rem/1 var(--portal-font-ui); text-decoration: none; text-transform: uppercase; }
+      .pc-selection .primary { border-color: transparent; background: var(--pc-red); }
+      @media (max-width: 900px) {
+        .pc-toolbar { grid-template-columns: 1fr 1fr; }
+        .pc-field--search { grid-column: 1 / -1; }
+        .pc-summary { grid-template-columns: repeat(2,1fr); }
+        .pc-branches { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 620px) {
+        .pc-hero-grid { grid-template-columns: 1fr; }
+        .pc-year-mark { justify-self: start; }
+        .pc-nav { grid-template-columns: 1fr; }
+        .pc-tab small { display: none; }
+        .pc-toolbar { grid-template-columns: 1fr; }
+        .pc-field--search { grid-column: auto; }
+        .pc-summary { grid-template-columns: 1fr 1fr; }
+        .pc-company-head { grid-template-columns: 48px 1fr auto; }
+        .pc-company-logo { width: 48px; height: 48px; }
+        .pc-company-head > .pc-count { display: none; }
+        .pc-branch { grid-template-columns: auto 1fr; }
+        .pc-store-actions { grid-column: 2; }
+        .pc-selection { grid-template-columns: 1fr 1fr; }
+        .pc-selection strong { grid-column: 1 / -1; }
+      }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
+    </style>
+  </head>
+  <body class="portal-shell portal-solventaciones portal-solventaciones-system<%= embedded ? ' is-embedded' : '' %>">
+    <% if (!embedded) { %><a class="skip-link" href="#pc-content">Saltar al contenido</a><% } %>
+    <main id="pc-content" class="page pc-shell" role="main">
+      <header class="pc-hero">
+        <div class="pc-hero-grid">
+          <div>
+            <div class="pc-eyebrow">Operacion estatal</div>
+            <h1>Sistema de Proteccion Civil</h1>
+            <p>Seguimiento anual de expedientes por empresa, sucursal y etapa. Las evidencias se consultan solamente al preparar un reporte.</p>
+          </div>
+          <div class="pc-year-mark"><span>Periodo activo</span><strong id="heroYear"><%= currentYear %></strong></div>
+        </div>
+      </header>
+
+      <nav class="pc-nav" aria-label="Vistas del sistema" role="tablist">
+        <button class="pc-tab" type="button" role="tab" data-section="proceso" aria-selected="true">En proceso<small>Expedientes del año seleccionado</small></button>
+        <button class="pc-tab" type="button" role="tab" data-section="historico" aria-selected="false">Historico<small>Años anteriores por empresa</small></button>
+        <button class="pc-tab" type="button" role="tab" data-section="pendientes" aria-selected="false">Pendientes<small>Visitas listas para reporte</small></button>
+      </nav>
+
+      <section class="pc-toolbar" aria-label="Filtros">
+        <div class="pc-field"><label for="yearFilter">Año</label><select id="yearFilter"><option value="<%= currentYear %>"><%= currentYear %></option></select></div>
+        <div class="pc-field"><label for="companyFilter">Empresa</label><select id="companyFilter"><option value="">Todas las empresas</option></select></div>
+        <div class="pc-field pc-field--search"><label for="searchFilter">Buscar sucursal</label><input id="searchFilter" type="search" placeholder="Sucursal, tienda, municipio o solicitud" autocomplete="off"></div>
+        <button id="refreshButton" class="pc-refresh" type="button">Actualizar</button>
+      </section>
+
+      <section id="summary" class="pc-summary" aria-live="polite"></section>
+      <section id="workflow" class="pc-progress" aria-label="Resumen por etapa"></section>
+      <div class="pc-section-head">
+        <div><h2 id="sectionTitle">Expedientes en proceso</h2><p id="sectionDescription">Agrupados por empresa y etapa.</p></div>
+        <div id="updatedAt" class="pc-updated"></div>
+      </div>
+      <section id="results" class="pc-groups" aria-live="polite"><div class="pc-skeleton"><div></div><div></div><div></div></div></section>
+    </main>
+
+    <aside id="selectionBar" class="pc-selection" aria-live="polite">
+      <strong><span id="selectionCount">0</span> sucursales seleccionadas</strong>
+      <button id="clearSelection" type="button">Limpiar</button>
+      <a id="selectionHtml" href="#" target="_blank" rel="noreferrer">Ver reporte</a>
+      <a id="selectionPdf" class="primary" href="#" target="_blank" rel="noreferrer">Crear PDF</a>
+    </aside>
+
+    <script>
+      (() => {
+        "use strict";
+        const state = { section: "proceso", year: <%= currentYear %>, company: "", q: "", request: null, selected: new Set(), catalogReady: false };
+        const colors = { creada: "#718096", captura: "#d18b2c", revision: "#2774a6", visitada: "#ba332b", autorizada: "#16836f", firmada: "#335f3d" };
+        const titles = { proceso: ["Expedientes del año", "Seguimiento completo por empresa y etapa."], historico: ["Archivo historico", "Expedientes de años anteriores agrupados por empresa."], pendientes: ["Reportes pendientes", "Visitas y solventaciones listas para generar por tienda, empresa o selección."] };
+        const elements = {
+          tabs: [...document.querySelectorAll(".pc-tab")], year: document.getElementById("yearFilter"), company: document.getElementById("companyFilter"), search: document.getElementById("searchFilter"), refresh: document.getElementById("refreshButton"), summary: document.getElementById("summary"), workflow: document.getElementById("workflow"), results: document.getElementById("results"), heroYear: document.getElementById("heroYear"), title: document.getElementById("sectionTitle"), description: document.getElementById("sectionDescription"), updated: document.getElementById("updatedAt"), selectionBar: document.getElementById("selectionBar"), selectionCount: document.getElementById("selectionCount"), clearSelection: document.getElementById("clearSelection"), selectionHtml: document.getElementById("selectionHtml"), selectionPdf: document.getElementById("selectionPdf")
+        };
+        const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+        const companyLogoUrl = (group) => {
+          if (!group?.logo) return "";
+          if (group.empresaId) return `/dashboard/empresas/${encodeURIComponent(group.empresaId)}/logo`;
+          return /^https?:\/\//i.test(group.logo) ? `/cotizaciones/img-proxy?url=${encodeURIComponent(group.logo)}` : "";
+        };
+        const reportUrl = (type, params) => `/solventaciones/${type}?${new URLSearchParams(params).toString()}`;
+        const currentParams = () => ({ section: state.section, year: String(state.year), empresa: state.company, q: state.q });
+
+        function syncUrl() {
+          const url = new URL(location.href);
+          Object.entries(currentParams()).forEach(([key, value]) => value ? url.searchParams.set(key, value) : url.searchParams.delete(key));
+          history.replaceState(currentParams(), "", url);
+        }
+
+        function renderSummary(data) {
+          const metrics = [
+            ["Expedientes", data.counts.total, "rgba(15,89,97,.09)"],
+            ["Empresas", data.counts.companies, "rgba(39,116,166,.09)"],
+            ["Listos para reporte", data.counts.reportReady, "rgba(186,51,43,.09)"],
+            ["Año", data.selectedYear, "rgba(233,180,76,.14)"],
+          ];
+          elements.summary.innerHTML = metrics.map(([label, value, color]) => `<article class="pc-metric" style="--metric-color:${color}"><span>${esc(label)}</span><strong>${esc(value)}</strong></article>`).join("");
+          elements.workflow.innerHTML = data.stages.map((stage) => `<article class="pc-stage" style="--stage-color:${colors[stage.key] || colors.creada}"><span>${esc(stage.label)}</span><strong>${esc(data.counts[stage.key] || 0)}</strong></article>`).join("");
+        }
+
+        function branchCard(item) {
+          const checked = state.selected.has(item.solicitudId) ? " checked" : "";
+          const detail = item.statusDetail ? `<span class="pc-detail">${esc(item.statusDetail)}</span>` : "";
+          const base = { solicitudIds: item.solicitudId, year: item.year || state.year };
+          const opinion = item.stageKey === "firmada" && item.opinionFavorableUrl
+            ? `<div class="pc-store-actions"><a class="pc-icon-link" href="${esc(item.opinionFavorableUrl)}" target="_blank" rel="noreferrer" title="Abrir opinion favorable">OF</a></div>`
+            : "";
+          return `<article class="pc-branch">
+            ${item.reportReady ? `<input class="pc-check" type="checkbox" value="${esc(item.solicitudId)}" aria-label="Seleccionar ${esc(item.sucursalNombre)}"${checked}>` : `<span class="pc-status-dot" style="--stage-color:${colors[item.stageKey] || colors.creada}"></span>`}
+            <div><div class="pc-branch-name">${esc(item.sucursalNombre || item.tienda || "Sucursal sin nombre")}</div><div class="pc-branch-meta">${esc([item.municipioNombre, item.estadoNombre, item.solicitudId ? `Solicitud ${item.solicitudId}` : ""].filter(Boolean).join(" · "))}</div>${detail}</div>
+            ${item.reportReady ? `<div class="pc-store-actions"><a class="pc-icon-link" href="${esc(reportUrl("report", base))}" target="_blank" title="Ver reporte">HTML</a><a class="pc-icon-link" href="${esc(reportUrl("pdf", base))}" target="_blank" title="Descargar PDF">PDF</a></div>` : opinion}
+          </article>`;
+        }
+
+        function companyCard(group) {
+          const logoUrl = companyLogoUrl(group);
+          const logo = logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo de ${esc(group.nombre)}">` : esc((group.nombre || "EG").slice(0, 2).toUpperCase());
+          const companyParams = { razonSocial: group.razonSocial || group.nombre, year: state.year };
+          const statuses = group.statuses.filter((status) => status.count > 0).map((status) => `<details class="pc-status-group" style="--stage-color:${colors[status.key] || colors.creada}"><summary class="pc-status-head"><span class="pc-status-name"><span class="pc-status-dot"></span>${esc(status.label)}</span><span class="pc-count">${status.count} sucursal${status.count === 1 ? "" : "es"}</span></summary><div class="pc-branches">${status.items.map(branchCard).join("")}</div></details>`).join("");
+          const reportActions = group.items.some((item) => item.reportReady) ? `<div class="pc-company-actions"><a class="pc-action" href="${esc(reportUrl("report", companyParams))}" target="_blank">Reporte de empresa</a><a class="pc-action pc-action--primary" href="${esc(reportUrl("pdf", companyParams))}" target="_blank">PDF de empresa</a></div>` : "";
+          return `<details class="pc-company"><summary class="pc-company-head"><span class="pc-company-logo">${logo}</span><span><h3 class="pc-company-title">${esc(group.nombre)}</h3><p class="pc-company-subtitle">${esc(group.razonSocial && group.razonSocial !== group.nombre ? group.razonSocial : `${group.total} expediente${group.total === 1 ? "" : "s"}`)}</p></span><span class="pc-count">${group.total} sucursal${group.total === 1 ? "" : "es"}</span><span class="pc-chevron">⌄</span></summary><div class="pc-company-body">${reportActions}${statuses}</div></details>`;
+        }
+
+        function renderResults(data) {
+          if (!data.groups.length) {
+            elements.results.innerHTML = `<div class="pc-empty">No hay expedientes que coincidan con los filtros seleccionados.</div>`;
+            return;
+          }
+          elements.results.innerHTML = data.groups.map(companyCard).join("");
+          elements.results.querySelectorAll(".pc-check").forEach((input) => input.addEventListener("change", () => {
+            if (input.checked) state.selected.add(input.value); else state.selected.delete(input.value);
+            updateSelection();
+          }));
+        }
+
+        function populateCatalogs(data) {
+          const years = data.years.filter((year) => state.section !== "historico" || year < data.currentYear);
+          elements.year.innerHTML = years.map((year) => `<option value="${year}"${year === data.selectedYear ? " selected" : ""}>${year}</option>`).join("");
+          elements.company.innerHTML = `<option value="">Todas las empresas</option>${data.companies.map((company) => `<option value="${esc(company.id || company.razonSocial)}"${state.company === (company.id || company.razonSocial) ? " selected" : ""}>${esc(company.nombre)}</option>`).join("")}`;
+          state.catalogReady = true;
+        }
+
+        function updateSelection() {
+          const ids = [...state.selected];
+          elements.selectionCount.textContent = ids.length;
+          elements.selectionBar.classList.toggle("is-visible", ids.length > 0);
+          const params = { solicitudIds: ids.join(","), year: state.year };
+          elements.selectionHtml.href = reportUrl("report", params);
+          elements.selectionPdf.href = reportUrl("pdf", params);
+        }
+
+        async function load() {
+          if (state.request) state.request.abort();
+          state.request = new AbortController();
+          elements.results.innerHTML = `<div class="pc-skeleton"><div></div><div></div><div></div></div>`;
+          elements.refresh.disabled = true;
+          try {
+            const response = await fetch(`/solventaciones/api/overview?${new URLSearchParams(currentParams())}`, { signal: state.request.signal, cache: "no-store" });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) throw new Error(payload.error || "No fue posible cargar los expedientes");
+            const data = payload.data;
+            state.years = data.years;
+            state.currentYear = data.currentYear;
+            state.year = data.selectedYear;
+            elements.heroYear.textContent = data.selectedYear;
+            elements.year.value = String(data.selectedYear);
+            if (!state.catalogReady) populateCatalogs(data);
+            renderSummary(data);
+            renderResults(data);
+            const copy = titles[state.section] || titles.proceso;
+            elements.title.textContent = `${copy[0]} ${data.selectedYear}`;
+            elements.description.textContent = copy[1];
+            elements.updated.textContent = `Base local · ${new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date(data.generatedAt))}`;
+            syncUrl();
+          } catch (error) {
+            if (error.name !== "AbortError") elements.results.innerHTML = `<div class="pc-error"><strong>No pudimos cargar esta vista.</strong><br>${esc(error.message)}</div>`;
+          } finally {
+            elements.refresh.disabled = false;
+          }
+        }
+
+        let searchTimer;
+        elements.tabs.forEach((tab) => tab.addEventListener("click", () => {
+          state.section = tab.dataset.section;
+          if (state.section === "historico") {
+            state.year = (state.years || []).find((year) => year < (state.currentYear || <%= currentYear %>)) || (<%= currentYear %> - 1);
+          } else if (state.year < (state.currentYear || <%= currentYear %>)) {
+            state.year = state.currentYear || <%= currentYear %>;
+          }
+          state.catalogReady = false;
+          state.selected.clear();
+          updateSelection();
+          elements.tabs.forEach((item) => item.setAttribute("aria-selected", String(item === tab)));
+          load();
+        }));
+        elements.year.addEventListener("change", () => { state.year = Number(elements.year.value); state.selected.clear(); updateSelection(); load(); });
+        elements.company.addEventListener("change", () => { state.company = elements.company.value; load(); });
+        elements.search.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.q = elements.search.value.trim(); load(); }, 280); });
+        elements.refresh.addEventListener("click", load);
+        elements.clearSelection.addEventListener("click", () => { state.selected.clear(); document.querySelectorAll(".pc-check").forEach((input) => { input.checked = false; }); updateSelection(); });
+
+        const initial = new URLSearchParams(location.search);
+        if (["proceso", "historico", "pendientes"].includes(initial.get("section"))) state.section = initial.get("section");
+        if (Number(initial.get("year"))) state.year = Number(initial.get("year"));
+        else if (state.section === "historico") state.year = <%= currentYear - 1 %>;
+        state.company = initial.get("empresa") || "";
+        state.q = initial.get("q") || "";
+        elements.search.value = state.q;
+        elements.tabs.forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.section === state.section)));
+        load();
+        <% if (embedded) { %>
+        const notifyHeight = () => parent.postMessage({ type: "desarrolloeg:solventaciones-height", height: document.documentElement.scrollHeight }, "*");
+        new ResizeObserver(notifyHeight).observe(document.documentElement);
+        window.addEventListener("load", notifyHeight, { once: true });
+        <% } %>
+      })();
+    </script>
+    <% if (!embedded) { %><script src="/ui/portal-shell.js?v=20260907a" defer></script><% } %>
+  </body>
+</html>

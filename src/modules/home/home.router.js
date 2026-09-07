@@ -2096,6 +2096,20 @@ function renderFaltantesLeyLoadingPanel({
   `;
 }
 
+function renderSolventacionesPanel() {
+  return `
+    <div class="dashboard-tab-panel-content" data-solventaciones-shell>
+      <iframe
+        title="Sistema de Proteccion Civil"
+        data-solventaciones-frame
+        data-src="/solventaciones/html?embed=1"
+        loading="lazy"
+        style="display:block;width:100%;min-height:980px;border:0;background:transparent;"
+      ></iframe>
+    </div>
+  `;
+}
+
 function renderCapacitacionesGrid(capacitaciones, options = {}) {
   if (!capacitaciones.length) {
     return `<div class="empty-state">${escapeHtml(options.emptyMessage || "No hay capacitaciones programadas.")}</div>`;
@@ -7521,6 +7535,7 @@ export async function renderDashboardPage({
         gestion: "Gestion",
         pedidos: "Pedidos",
         "reporte-ley": "Reporte Casa Ley",
+        solventaciones: "Proteccion Civil",
         faltantes: "Faltantes",
         diplomas: "Diplomas faltantes",
         ley: "Faltantes Ley",
@@ -7697,6 +7712,9 @@ export async function renderDashboardPage({
   const casaLeyReportPanel = hasPortalCapability(user, "reportes", "view")
     ? renderCasaLeyStoresReport({ sucursales })
     : "";
+  const solventacionesPanel = hasPortalCapability(user, "reportes", "view")
+    ? renderSolventacionesPanel()
+    : "";
   const dashboardTabs = [
     {
       id: "calendar",
@@ -7726,6 +7744,14 @@ export async function renderDashboardPage({
       count: Array.isArray(sucursales) ? sucursales.length : 0,
       content: sucursalesPanel,
     },
+    ...(solventacionesPanel
+      ? [{
+          id: "solventaciones",
+          view: "reportes",
+          label: "Proteccion Civil",
+          content: solventacionesPanel,
+        }]
+      : []),
     {
       id: "notas",
       view: "notas",
@@ -7847,6 +7873,7 @@ export async function renderDashboardPage({
             gestion: "Gestión",
             pedidos: "Pedidos",
             "reporte-ley": "Reporte Casa Ley",
+            solventaciones: "Proteccion Civil",
             faltantes: "Faltantes",
             diplomas: "Diplomas faltantes",
             ley: "Faltantes Ley",
@@ -8675,6 +8702,10 @@ export async function renderDashboardPage({
             if (nextTab === "ley") {
               loadDeferredPanel("ley");
             }
+            if (nextTab === "solventaciones") {
+              const frame = document.querySelector("[data-solventaciones-frame]");
+              if (frame && !frame.src) frame.src = frame.dataset.src || "/solventaciones/html?embed=1";
+            }
             if (focus) {
               tabs.find((button) => button.dataset.dashboardTab === nextTab)?.focus();
             }
@@ -8689,6 +8720,14 @@ export async function renderDashboardPage({
           };
           tabs.forEach((button) => {
             button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab, { historyMode: "push" }));
+          });
+          window.addEventListener("message", (event) => {
+            if (event.data?.type !== "desarrolloeg:solventaciones-height") return;
+            const frame = document.querySelector("[data-solventaciones-frame]");
+            const height = Number(event.data.height || 0);
+            if (frame && event.source === frame.contentWindow && Number.isFinite(height) && height > 0) {
+              frame.style.height = Math.max(760, Math.min(height + 8, 5000)) + "px";
+            }
           });
           mobileChips.forEach((button) => {
             button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab, { focus: false, historyMode: "push" }));
