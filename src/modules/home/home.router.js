@@ -9395,11 +9395,19 @@ export async function renderDashboardPage({
 
           const sucursales = document.querySelector("[data-sucursales-studio]");
           if (sucursales) {
+            const initialWorkFilter = String(new URL(window.location.href).searchParams.get("trabajo") || "").trim().toUpperCase();
             const directorySearch = sucursales.querySelector("[data-company-directory-search]");
             const directoryMore = sucursales.querySelector("[data-company-directory-more]");
             const directoryCards = Array.from(sucursales.querySelectorAll("[data-company-directory-card]"));
             const directoryPageSize = window.matchMedia("(max-width: 720px)").matches ? 12 : 24;
             let directoryLimit = directoryPageSize;
+            if (initialWorkFilter) {
+              directoryCards.forEach((card) => {
+                const href = new URL(card.href, window.location.origin);
+                href.searchParams.set("trabajo", initialWorkFilter);
+                card.href = href.pathname + href.search;
+              });
+            }
             const applyDirectorySearch = () => {
               const query = String(directorySearch?.value || "").trim().toUpperCase();
               const matches = directoryCards.filter((card) => !query || String(card.dataset.search || "").toUpperCase().includes(query));
@@ -9464,6 +9472,8 @@ export async function renderDashboardPage({
               if (result) result.textContent = visibleCount + (visibleCount === 1 ? " sucursal disponible" : " sucursales disponibles");
             };
             sucursales.querySelectorAll("[data-sucursales-company]").forEach((panel) => {
+              const workControl = panel.querySelector('[data-sucursales-filter="trabajo"]');
+              if (workControl && ["MUNICIPAL", "ESTATAL"].includes(initialWorkFilter)) workControl.value = initialWorkFilter;
               panel.querySelectorAll("[data-sucursales-filter]").forEach((input) => {
                 input.addEventListener("input", () => applyFilters(panel));
                 input.addEventListener("change", () => applyFilters(panel));

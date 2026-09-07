@@ -53,7 +53,8 @@ Los reportes aceptan `year`, `razonSocial` y `solicitudIds` separados por coma.
 
 ## Contratos de navegacion
 
-- El menu global contiene `Proteccion Civil` dentro de `Documentos y cumplimiento`.
+- El menu global contiene el grupo `Trabajos`: `Municipales`, `Estatales` y `Sistema de Proteccion Civil`.
+- Los accesos Municipal y Estatal abren el directorio de empresas con el filtro de trabajo aplicado y lo conservan al entrar al perfil empresarial.
 - El estado activo se refleja en la URL y sobrevive a una recarga.
 - El modo integrado no crea una segunda barra superior ni un segundo menu.
 - Los reportes se abren como documentos independientes y no muestran el enlace `Saltar al contenido principal`.

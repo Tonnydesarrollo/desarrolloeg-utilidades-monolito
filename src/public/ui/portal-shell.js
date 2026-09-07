@@ -39,12 +39,19 @@
       ],
     },
     {
+      label: "Trabajos",
+      links: [
+        { label: "Municipales", href: "/dashboard?tab=sucursales&trabajo=MUNICIPAL", view: "informacion-sucursales", tab: "sucursales", params: { trabajo: "MUNICIPAL" } },
+        { label: "Estatales", href: "/dashboard?tab=sucursales&trabajo=ESTATAL", view: "informacion-sucursales", tab: "sucursales", params: { trabajo: "ESTATAL" } },
+        { label: "Sistema de Proteccion Civil", href: "/dashboard?tab=solventaciones", view: "reportes", tab: "solventaciones" },
+      ],
+    },
+    {
       label: "Documentos y cumplimiento",
       links: [
         { label: "Faltantes Ley", href: "/faltantes-ley", view: "faltantes-ley" },
         { label: "Planeacion", href: "/Planeacion-ley/", view: "planeacion" },
         { label: "Polizas", href: "/poliza-ley", view: "poliza" },
-        { label: "Proteccion Civil", href: "/dashboard?tab=solventaciones", view: "reportes", tab: "solventaciones" },
         { label: "Reportes", href: "/reportes-inspecciones", view: "reportes" },
       ],
     },
@@ -90,7 +97,13 @@
       : requestedTab || "calendar";
     if (link.tab) {
       const isDashboardRoot = pathname === "/dashboard" || pathname.startsWith("/dashboard/capacitador/") || pathname.startsWith("/dashboard/empresas/");
-      return isDashboardRoot && activeTab === link.tab;
+      if (!isDashboardRoot || activeTab !== link.tab) return false;
+      const expectedParams = link.params || {};
+      if (Object.keys(expectedParams).length) {
+        return Object.entries(expectedParams).every(([key, value]) => url.searchParams.get(key) === value);
+      }
+      if (link.tab === "sucursales" && url.searchParams.has("trabajo")) return false;
+      return true;
     }
     const href = new URL(getPortalUrl(link.href), window.location.origin);
     const hrefPath = href.pathname.replace(/\/$/, "") || "/";
