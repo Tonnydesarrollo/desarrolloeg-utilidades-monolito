@@ -15,6 +15,7 @@ import { faltantesLeyRouter } from "./modules/faltantes-ley/faltantesLey.router.
 import { separarPipcRouter } from "./modules/separar-pipc/separarPipc.router.js";
 import { whatsappCapacitadoresRouter } from "./modules/whatsapp-capacitadores/whatsappCapacitadores.router.js";
 import { solventacionesRouter } from "./modules/solventaciones/solventaciones.router.js";
+import { trabajosRouter } from "./modules/trabajos/trabajos.router.js";
 import { sucursalesDocsRouter } from "./modules/sucursales-docs/sucursalesDocs.router.js";
 import { reportesInspeccionesRouter } from "./modules/reportes-inspecciones/reportesInspecciones.router.js";
 import { polizaLeyRouter } from "./modules/poliza-ley/polizaLey.router.js";
@@ -148,6 +149,7 @@ export function createApp() {
   app.set("views", [
     path.join(__dirname, "modules", "facturacion", "views"),
     path.join(__dirname, "modules", "solventaciones", "views"),
+    path.join(__dirname, "modules", "trabajos"),
     path.join(__dirname, "modules", "jobs", "views")
   ]);
 
@@ -184,6 +186,7 @@ export function createApp() {
   app.use("/whatsapp-capacitadores", whatsappCapacitadoresRouter);
   app.use("/SOLVENTACIONES", solventacionesRouter);
   app.use("/solventaciones", solventacionesRouter);
+  app.use("/trabajos", trabajosRouter);
   app.use("/SUCURSALES-DOCS", sucursalesDocsRouter);
   app.use("/sucursales-docs", sucursalesDocsRouter);
   app.use("/REPORTES-INSPECCIONES", reportesInspeccionesRouter);

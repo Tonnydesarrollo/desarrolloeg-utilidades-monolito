@@ -33,8 +33,8 @@ test("la navegacion compartida implementa estado por URL y drawer accesible", ()
   assert.match(shellCss, /prefers-reduced-motion/);
   assert.match(shellSource, /desarrolloeg:shell-ready/);
   assert.match(shellSource, /label:\s*"Trabajos"/);
-  assert.match(shellSource, /label:\s*"Municipales",\s*href:\s*"\/dashboard\?tab=sucursales&trabajo=MUNICIPAL"/);
-  assert.match(shellSource, /label:\s*"Estatales",\s*href:\s*"\/dashboard\?tab=sucursales&trabajo=ESTATAL"/);
+  assert.match(shellSource, /label:\s*"Municipales",\s*href:\s*"\/dashboard\?tab=municipales"/);
+  assert.match(shellSource, /label:\s*"Estatales",\s*href:\s*"\/dashboard\?tab=estatales"/);
   assert.match(shellSource, /label:\s*"Sistema de Proteccion Civil",\s*href:\s*"\/dashboard\?tab=solventaciones"/);
 });
 

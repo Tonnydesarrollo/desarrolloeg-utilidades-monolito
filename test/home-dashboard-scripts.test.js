@@ -45,6 +45,10 @@ test("dashboard entrega JavaScript ejecutable sin errores de sintaxis", async ()
     );
   }
   assert.match(html, /data-dashboard-tab-panel="solventaciones"/);
+  assert.match(html, /data-dashboard-tab-panel="municipales"/);
+  assert.match(html, /data-dashboard-tab-panel="estatales"/);
+  assert.match(html, /data-trabajos-frame="municipales"/);
+  assert.match(html, /data-trabajos-frame="estatales"/);
   assert.match(html, /data-solventaciones-frame/);
   assert.match(html, /Sistema de Proteccion Civil/);
 });

@@ -2110,6 +2110,20 @@ function renderSolventacionesPanel() {
   `;
 }
 
+function renderTrabajoPanel(tipo) {
+  return `
+    <div class="dashboard-tab-panel-content" data-trabajos-shell="${escapeAttr(tipo)}">
+      <iframe
+        title="Trabajos ${escapeAttr(tipo)}"
+        data-trabajos-frame="${escapeAttr(tipo)}"
+        data-src="/trabajos/${escapeAttr(tipo)}?embed=1"
+        loading="lazy"
+        style="display:block;width:100%;min-height:900px;border:0;background:transparent;"
+      ></iframe>
+    </div>
+  `;
+}
+
 function renderCapacitacionesGrid(capacitaciones, options = {}) {
   if (!capacitaciones.length) {
     return `<div class="empty-state">${escapeHtml(options.emptyMessage || "No hay capacitaciones programadas.")}</div>`;
@@ -7536,6 +7550,8 @@ export async function renderDashboardPage({
         pedidos: "Pedidos",
         "reporte-ley": "Reporte Casa Ley",
         solventaciones: "Proteccion Civil",
+        municipales: "Trabajos municipales",
+        estatales: "Trabajos estatales",
         faltantes: "Faltantes",
         diplomas: "Diplomas faltantes",
         ley: "Faltantes Ley",
@@ -7715,6 +7731,8 @@ export async function renderDashboardPage({
   const solventacionesPanel = hasPortalCapability(user, "reportes", "view")
     ? renderSolventacionesPanel()
     : "";
+  const municipalesPanel = hasPortalCapability(user, "reportes", "view") ? renderTrabajoPanel("municipales") : "";
+  const estatalesPanel = hasPortalCapability(user, "reportes", "view") ? renderTrabajoPanel("estatales") : "";
   const dashboardTabs = [
     {
       id: "calendar",
@@ -7752,6 +7770,8 @@ export async function renderDashboardPage({
           content: solventacionesPanel,
         }]
       : []),
+    ...(municipalesPanel ? [{ id: "municipales", view: "reportes", label: "Municipales", content: municipalesPanel }] : []),
+    ...(estatalesPanel ? [{ id: "estatales", view: "reportes", label: "Estatales", content: estatalesPanel }] : []),
     {
       id: "notas",
       view: "notas",
@@ -7874,6 +7894,8 @@ export async function renderDashboardPage({
             pedidos: "Pedidos",
             "reporte-ley": "Reporte Casa Ley",
             solventaciones: "Proteccion Civil",
+            municipales: "Trabajos municipales",
+            estatales: "Trabajos estatales",
             faltantes: "Faltantes",
             diplomas: "Diplomas faltantes",
             ley: "Faltantes Ley",
@@ -8706,6 +8728,10 @@ export async function renderDashboardPage({
               const frame = document.querySelector("[data-solventaciones-frame]");
               if (frame && !frame.src) frame.src = frame.dataset.src || "/solventaciones/html?embed=1";
             }
+            if (nextTab === "municipales" || nextTab === "estatales") {
+              const frame = document.querySelector('[data-trabajos-frame="' + nextTab + '"]');
+              if (frame && !frame.src) frame.src = frame.dataset.src || ("/trabajos/" + nextTab + "?embed=1");
+            }
             if (focus) {
               tabs.find((button) => button.dataset.dashboardTab === nextTab)?.focus();
             }
@@ -8722,6 +8748,14 @@ export async function renderDashboardPage({
             button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab, { historyMode: "push" }));
           });
           window.addEventListener("message", (event) => {
+            if (event.data?.type === "desarrolloeg:trabajos-height") {
+              const frame = document.querySelector('[data-trabajos-frame="' + String(event.data.tipo || "") + '"]');
+              const height = Number(event.data.height || 0);
+              if (frame && event.source === frame.contentWindow && Number.isFinite(height) && height > 0) {
+                frame.style.height = Math.max(760, Math.min(height + 8, 5000)) + "px";
+              }
+              return;
+            }
             if (event.data?.type !== "desarrolloeg:solventaciones-height") return;
             const frame = document.querySelector("[data-solventaciones-frame]");
             const height = Number(event.data.height || 0);
@@ -9395,19 +9429,11 @@ export async function renderDashboardPage({
 
           const sucursales = document.querySelector("[data-sucursales-studio]");
           if (sucursales) {
-            const initialWorkFilter = String(new URL(window.location.href).searchParams.get("trabajo") || "").trim().toUpperCase();
             const directorySearch = sucursales.querySelector("[data-company-directory-search]");
             const directoryMore = sucursales.querySelector("[data-company-directory-more]");
             const directoryCards = Array.from(sucursales.querySelectorAll("[data-company-directory-card]"));
             const directoryPageSize = window.matchMedia("(max-width: 720px)").matches ? 12 : 24;
             let directoryLimit = directoryPageSize;
-            if (initialWorkFilter) {
-              directoryCards.forEach((card) => {
-                const href = new URL(card.href, window.location.origin);
-                href.searchParams.set("trabajo", initialWorkFilter);
-                card.href = href.pathname + href.search;
-              });
-            }
             const applyDirectorySearch = () => {
               const query = String(directorySearch?.value || "").trim().toUpperCase();
               const matches = directoryCards.filter((card) => !query || String(card.dataset.search || "").toUpperCase().includes(query));
@@ -9472,8 +9498,6 @@ export async function renderDashboardPage({
               if (result) result.textContent = visibleCount + (visibleCount === 1 ? " sucursal disponible" : " sucursales disponibles");
             };
             sucursales.querySelectorAll("[data-sucursales-company]").forEach((panel) => {
-              const workControl = panel.querySelector('[data-sucursales-filter="trabajo"]');
-              if (workControl && ["MUNICIPAL", "ESTATAL"].includes(initialWorkFilter)) workControl.value = initialWorkFilter;
               panel.querySelectorAll("[data-sucursales-filter]").forEach((input) => {
                 input.addEventListener("input", () => applyFilters(panel));
                 input.addEventListener("change", () => applyFilters(panel));

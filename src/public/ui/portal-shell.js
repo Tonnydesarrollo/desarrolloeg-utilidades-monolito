@@ -41,8 +41,8 @@
     {
       label: "Trabajos",
       links: [
-        { label: "Municipales", href: "/dashboard?tab=sucursales&trabajo=MUNICIPAL", view: "informacion-sucursales", tab: "sucursales", params: { trabajo: "MUNICIPAL" } },
-        { label: "Estatales", href: "/dashboard?tab=sucursales&trabajo=ESTATAL", view: "informacion-sucursales", tab: "sucursales", params: { trabajo: "ESTATAL" } },
+        { label: "Municipales", href: "/dashboard?tab=municipales", view: "reportes", tab: "municipales" },
+        { label: "Estatales", href: "/dashboard?tab=estatales", view: "reportes", tab: "estatales" },
         { label: "Sistema de Proteccion Civil", href: "/dashboard?tab=solventaciones", view: "reportes", tab: "solventaciones" },
       ],
     },
@@ -98,11 +98,6 @@
     if (link.tab) {
       const isDashboardRoot = pathname === "/dashboard" || pathname.startsWith("/dashboard/capacitador/") || pathname.startsWith("/dashboard/empresas/");
       if (!isDashboardRoot || activeTab !== link.tab) return false;
-      const expectedParams = link.params || {};
-      if (Object.keys(expectedParams).length) {
-        return Object.entries(expectedParams).every(([key, value]) => url.searchParams.get(key) === value);
-      }
-      if (link.tab === "sucursales" && url.searchParams.has("trabajo")) return false;
       return true;
     }
     const href = new URL(getPortalUrl(link.href), window.location.origin);
