@@ -660,7 +660,7 @@ body.portal-shell .portal-app-drawer__header button {
 
 body.portal-shell .portal-app-menu {
   position: fixed;
-  left: max(24px, calc((100vw - var(--portal-shell-max)) / 2 + 32px));
+  left: 18px;
   bottom: 18px;
   z-index: 950;
   display: inline-flex;
