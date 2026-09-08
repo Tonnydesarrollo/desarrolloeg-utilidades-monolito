@@ -68,7 +68,8 @@ function latestTrainingBySucursal(capacitaciones) {
     const date = parseDate(capacitacion["FECHA CAPACITACION"]);
     if (!date) return;
     const entry = { date, formatted: formatDate(capacitacion["FECHA CAPACITACION"]), status: today > dateKey(date) ? "CAPACITADA" : "PROGRAMADA", capacitadores: text(capacitacion.CAPACITADORES) };
-    splitRefs(capacitacion.SUCURSALES).forEach((id) => { const current = bySucursal.get(id); if (!current || current.date < date) bySucursal.set(id, entry); });
+    const sucursalIds = new Set([...splitRefs(capacitacion.SUCURSALES), text(capacitacion.CEDE)].filter(Boolean));
+    sucursalIds.forEach((id) => { const current = bySucursal.get(id); if (!current || current.date < date) bySucursal.set(id, entry); });
   });
   return bySucursal;
 }
@@ -143,11 +144,14 @@ export function obtenerTrabajosResumen(tipo, query = {}) {
   const status = normalize(query.status);
   const trainingStatus = normalize(query.capacitacion);
   const search = normalize(query.q);
-  const items = all.filter((item) => item.year === selectedYear
-    && (!company || item.empresaId === company)
-    && (!status || normalize(item.status) === status)
-    && (!trainingStatus || normalize(item.capacitacionStatus) === trainingStatus)
-    && (!search || normalize([item.sucursal, item.tienda, item.empresa, item.razonSocial, item.municipio, item.estado].join(" ")).includes(search)));
+  const yearItems = all.filter((item) => item.year === selectedYear);
+  const matchesFilters = (item, ignored = "") => (
+    (ignored === "empresa" || !company || item.empresaId === company)
+    && (ignored === "status" || !status || normalize(item.status) === status)
+    && (ignored === "capacitacion" || !trainingStatus || normalize(item.capacitacionStatus) === trainingStatus)
+    && (!search || normalize([item.sucursal, item.tienda, item.empresa, item.razonSocial, item.municipio, item.estado].join(" ")).includes(search))
+  );
+  const items = yearItems.filter((item) => matchesFilters(item));
 
   const groupedMap = new Map();
   items.forEach((item) => { const key = item.empresaId || item.empresa; if (!groupedMap.has(key)) groupedMap.set(key, []); groupedMap.get(key).push(item); });
@@ -155,7 +159,17 @@ export function obtenerTrabajosResumen(tipo, query = {}) {
     id: key, name: companyItems[0]?.empresa || "Empresa sin identificar", businessName: companyItems[0]?.razonSocial || "", logo: key && companyItems[0]?.logo ? `/dashboard/empresas/${encodeURIComponent(key)}/logo` : "", total: companyItems.length,
     items: companyItems.sort((a, b) => a.sucursal.localeCompare(b.sucursal, "es")),
   })).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  const companies = empresas.map((empresa) => ({ id: text(empresa.ID || empresa["Row ID"]), label: companyName(empresa) })).filter((item) => item.id).sort((a, b) => a.label.localeCompare(b.label, "es"));
-  const statuses = [...new Set(all.filter((item) => item.year === selectedYear).map((item) => item.status))].sort((a, b) => a.localeCompare(b, "es"));
-  return { tipo: normalizedType, table, selectedYear, years, companies, statuses, trainingStatuses: ["CAPACITADA", "PROGRAMADA", "SIN CAPACITACION"], documentOptions, total: items.length, groups, items };
+  const companyCounts = new Map();
+  yearItems.filter((item) => matchesFilters(item, "empresa")).forEach((item) => companyCounts.set(item.empresaId, (companyCounts.get(item.empresaId) || 0) + 1));
+  const companyLabels = new Map(yearItems.map((item) => [item.empresaId, item.empresa]));
+  const companies = [...companyLabels].filter(([id]) => id).map(([id, label]) => ({ id, label, count: companyCounts.get(id) || 0 })).sort((a, b) => a.label.localeCompare(b.label, "es"));
+
+  const statusCounts = new Map();
+  yearItems.filter((item) => matchesFilters(item, "status")).forEach((item) => statusCounts.set(item.status, (statusCounts.get(item.status) || 0) + 1));
+  const statuses = [...new Set(yearItems.map((item) => item.status))].sort((a, b) => a.localeCompare(b, "es")).map((value) => ({ value, count: statusCounts.get(value) || 0 }));
+
+  const trainingCounts = new Map();
+  yearItems.filter((item) => matchesFilters(item, "capacitacion")).forEach((item) => trainingCounts.set(item.capacitacionStatus, (trainingCounts.get(item.capacitacionStatus) || 0) + 1));
+  const trainingStatuses = ["CAPACITADA", "PROGRAMADA", "SIN CAPACITACION"].map((value) => ({ value, count: trainingCounts.get(value) || 0 }));
+  return { tipo: normalizedType, table, selectedYear, years, companies, statuses, trainingStatuses, documentOptions, total: items.length, groups, items };
 }

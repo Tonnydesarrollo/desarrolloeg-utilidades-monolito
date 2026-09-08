@@ -11,6 +11,8 @@ test("trabajos agrupa empresas contraidas y permite editar estatus y documentaci
   assert.match(view, /data-status/);
   assert.match(view, /data-save-docs/);
   assert.match(view, /workTraining/);
+  assert.match(view, /workClear/);
+  assert.match(view, /facetOptions/);
 });
 
 test("el boton de menu permanece anclado a la esquina izquierda", () => {

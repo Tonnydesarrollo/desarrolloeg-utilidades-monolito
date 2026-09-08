@@ -15,6 +15,8 @@ test("municipales y estatales consultan sus tablas persistentes reales", () => {
   assert.ok(estatales.items.every((item) => Object.hasOwn(item, "drive")));
   assert.ok(municipales.companies.some((company) => company.label && company.label !== company.id));
   assert.ok(municipales.groups.every((group) => group.name && Array.isArray(group.items)));
-  assert.ok(municipales.statuses.includes("PENDIENTE DE CREAR"));
+  assert.ok(municipales.statuses.some((status) => status.value === "PENDIENTE DE CREAR"));
+  assert.ok(municipales.statuses.every((status) => Number.isInteger(status.count)));
+  assert.ok(municipales.companies.every((company) => company.count > 0));
   assert.ok(municipales.items.every((item) => Object.hasOwn(item, "capacitacionStatus")));
 });
