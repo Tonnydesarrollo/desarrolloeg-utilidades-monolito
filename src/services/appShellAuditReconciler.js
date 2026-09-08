@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { reconcilePortalCaches } from "../modules/home/portalAuth.service.js";
-import { prewarmFacturacionCaches } from "../modules/facturacion/services/appsheet.js";
+import { invalidateFacturacionCaches, prewarmFacturacionCaches } from "../modules/facturacion/services/appsheet.js";
 import {
   getPersistentCacheEntry,
   primePersistentCacheNamespaces,
@@ -224,12 +224,13 @@ function primeAppShellCacheMemory() {
   ]);
 }
 
-async function refreshScope(scope, runAsUserEmail = "") {
+async function refreshScope(scope, runAsUserEmail = "", changedTables = []) {
   if (scope === "portal") {
     return reconcilePortalCaches({ runAsUserEmail });
   }
 
   if (scope === "facturacion") {
+    invalidateFacturacionCaches(changedTables);
     prewarmFacturacionCaches();
     return {
       ok: true,
@@ -333,7 +334,7 @@ export async function reconcileAppShellCachesFromAudit({
 
     const results = [];
     for (const targetScope of scopes) {
-      results.push(await refreshScope(targetScope, runAsUserEmail));
+      results.push(await refreshScope(targetScope, runAsUserEmail, tables));
     }
 
     if (normalizedScope === "all") {

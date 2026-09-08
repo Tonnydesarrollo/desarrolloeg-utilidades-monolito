@@ -78,6 +78,11 @@ test("las cotizaciones aceptan logos de cliente guardados por AppSheet", () => {
   assert.match(cotizacionDataSource, /json\.empresa\.logoUrl \|\| json\.empresa\.logo/);
 });
 
+test("la auditoria invalida las cotizaciones en memoria antes de precargar", () => {
+  const reconciler = fs.readFileSync(new URL("../src/services/appShellAuditReconciler.js", import.meta.url), "utf8");
+  assert.match(reconciler, /invalidateFacturacionCaches\(changedTables\);\s*prewarmFacturacionCaches\(\);/);
+});
+
 test("la direccion de sucursal es opcional en pantalla e impresion", () => {
   for (const source of [cotizacionSource, cotizacionLeySource]) {
     assert.match(source, /id="mostrarDireccionSucursal"/);

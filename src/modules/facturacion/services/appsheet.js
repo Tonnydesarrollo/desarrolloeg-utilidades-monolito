@@ -39,6 +39,29 @@ const TABLE_CACHE_NAMESPACES = {
 
 const COTIZACION_CACHE_NAMESPACE = "facturacion.cotizacion-completa";
 
+export function invalidateFacturacionCaches(tableNames = []) {
+  const requestedTables = [...new Set(
+    (Array.isArray(tableNames) ? tableNames : [tableNames])
+      .map((tableName) => String(tableName || "").trim().toUpperCase())
+      .filter((tableName) => TABLE_CACHE_NAMESPACES[tableName]),
+  )];
+  const tables = requestedTables.length > 0
+    ? requestedTables
+    : Object.keys(TABLE_CACHE_NAMESPACES);
+
+  for (const tableName of tables) {
+    cachedTables.delete(tableName);
+    deletePersistentCacheEntry(getTableCacheNamespace(tableName), "shared");
+  }
+
+  if (tables.some((tableName) => ["COTIZACIONES_VARIOS_CT", "CONCEPTOS_VARIOS_CT"].includes(tableName))) {
+    cachedCotizacionesCompletas.clear();
+    deletePersistentCacheNamespace(COTIZACION_CACHE_NAMESPACE);
+  }
+
+  cotizacionesWarmupStarted = false;
+}
+
 let appsheetActive = 0;
 const appsheetQueue = [];
 
