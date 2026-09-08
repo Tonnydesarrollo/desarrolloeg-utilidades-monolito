@@ -93,7 +93,7 @@ function normalizeWebhookTable(value = "") {
 
 function scopeForWebhookTable(tableName = "") {
   const table = normalizeWebhookTable(tableName);
-  if (["EMPLEADOS", "CAPACITACIONES", "CALENDARIO"].includes(table)) return "portal";
+  if (["EMPLEADOS", "CAPACITACIONES", "CALENDARIO", "PEDIDOS_LEY"].includes(table)) return "portal";
   if ([
     "EMPRESAS",
     "SUCURSALES",
@@ -465,7 +465,8 @@ appShellRouter.post("/webhook", async (req, res) => {
     const table = String(req.body?.table || req.body?.tabla || req.body?.TableName || req.body?.Table || "").trim();
     const scope = scopeForWebhookTable(table);
     const runAsUserEmail = String(req.body?.runAsUserEmail || "").trim();
-    const result = await refreshAppShellCaches({ scope, runAsUserEmail, mode: "auto" });
+    const mode = req.body?.forceRefresh === true ? "full" : "auto";
+    const result = await refreshAppShellCaches({ scope, runAsUserEmail, mode });
     const state = getAppShellAuditState(scope);
     broadcastAppShellEvent({
       ok: true,

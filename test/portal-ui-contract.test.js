@@ -83,6 +83,14 @@ test("la auditoria invalida las cotizaciones en memoria antes de precargar", () 
   assert.match(reconciler, /invalidateFacturacionCaches\(changedTables\);\s*prewarmFacturacionCaches\(\);/);
 });
 
+test("los cambios de pedidos invalidan la cache operativa del portal", () => {
+  const reconciler = fs.readFileSync(new URL("../src/services/appShellAuditReconciler.js", import.meta.url), "utf8");
+  const shellRouter = fs.readFileSync(new URL("../src/modules/app-shell/appShell.router.js", import.meta.url), "utf8");
+  assert.match(reconciler, /"PEDIDOS_LEY"/);
+  assert.match(shellRouter, /"PEDIDOS_LEY"\]\.includes\(table\)\) return "portal"/);
+  assert.match(shellRouter, /req\.body\?\.forceRefresh === true \? "full" : "auto"/);
+});
+
 test("la direccion de sucursal es opcional en pantalla e impresion", () => {
   for (const source of [cotizacionSource, cotizacionLeySource]) {
     assert.match(source, /id="mostrarDireccionSucursal"/);
