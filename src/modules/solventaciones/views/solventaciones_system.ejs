@@ -101,6 +101,8 @@
       .pc-branch-name { color: var(--pc-ink); font: 800 .78rem/1.3 var(--portal-font-ui); }
       .pc-branch-meta { margin-top: 4px; color: var(--pc-muted); font-size: .68rem; line-height: 1.4; }
       .pc-detail { display: inline-block; margin-top: 5px; padding: 4px 7px; border-radius: 999px; color: #8d2a25; background: #fff0ef; font: 800 .58rem/1 var(--portal-font-ui); text-transform: uppercase; }
+      .pc-expiration { display: inline-flex; align-items: center; gap: 5px; margin: 6px 0 0 7px; padding: 4px 8px; border: 1px solid rgba(15,89,97,.14); border-radius: 999px; color: var(--pc-teal); background: rgba(15,89,97,.07); font: 800 .58rem/1 var(--portal-font-ui); text-transform: uppercase; }
+      .pc-expiration.is-missing { color: var(--pc-muted); border-color: var(--pc-line); background: #f3f6f7; }
       .pc-store-actions { display: flex; gap: 5px; }
       .pc-icon-link { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--pc-line); border-radius: 10px; color: var(--pc-teal); text-decoration: none; font: 900 .62rem/1 var(--portal-font-ui); }
       .pc-empty, .pc-error { padding: 40px 24px; border: 1px dashed rgba(31,62,82,.2); border-radius: 20px; color: var(--pc-muted); background: rgba(255,255,255,.7); text-align: center; }
@@ -221,13 +223,16 @@
         function branchCard(item) {
           const checked = state.selected.has(item.solicitudId) ? " checked" : "";
           const detail = item.statusDetail ? `<span class="pc-detail">${esc(item.statusDetail)}</span>` : "";
+          const expiration = item.readyToCreate
+            ? `<span class="pc-expiration${item.vigenciaFecha ? "" : " is-missing"}">Vencimiento estatal: ${esc(item.vencimientoEstatal)}</span>`
+            : "";
           const base = { solicitudIds: item.solicitudId, year: item.year || state.year };
           const opinion = item.stageKey === "firmada" && item.opinionFavorableUrl
             ? `<div class="pc-store-actions"><a class="pc-icon-link" href="${esc(item.opinionFavorableUrl)}" target="_blank" rel="noreferrer" title="Abrir opinion favorable">OF</a></div>`
             : "";
           return `<article class="pc-branch">
             ${item.reportReady ? `<input class="pc-check" type="checkbox" value="${esc(item.solicitudId)}" aria-label="Seleccionar ${esc(item.sucursalNombre)}"${checked}>` : `<span class="pc-status-dot" style="--stage-color:${colors[item.stageKey] || colors.creada}"></span>`}
-            <div><div class="pc-branch-name">${esc(item.sucursalNombre || item.tienda || "Sucursal sin nombre")}</div><div class="pc-branch-meta">${esc([item.municipioNombre, item.estadoNombre, item.solicitudId ? `Solicitud ${item.solicitudId}` : ""].filter(Boolean).join(" · "))}</div>${detail}</div>
+            <div><div class="pc-branch-name">${esc(item.sucursalNombre || item.tienda || "Sucursal sin nombre")}</div><div class="pc-branch-meta">${esc([item.municipioNombre, item.estadoNombre, item.solicitudId ? `Solicitud ${item.solicitudId}` : ""].filter(Boolean).join(" · "))}</div>${detail}${expiration}</div>
             ${item.reportReady ? `<div class="pc-store-actions"><a class="pc-icon-link" href="${esc(reportUrl("report", base))}" target="_blank" title="Ver reporte">HTML</a><a class="pc-icon-link" href="${esc(reportUrl("pdf", base))}" target="_blank" title="Descargar PDF">PDF</a></div>` : opinion}
           </article>`;
         }

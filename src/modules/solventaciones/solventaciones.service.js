@@ -264,9 +264,18 @@ async function mapaSucursales() {
 }
 
 function formatDate(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const pad = (part) => String(part).padStart(2, "0");
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) return `${pad(isoMatch[3])}/${pad(isoMatch[2])}/${isoMatch[1]}`;
+
+  // Sistema PC serializa las fechas cortas como mes/dia/anio.
+  const pcMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (pcMatch) return `${pad(pcMatch[2])}/${pad(pcMatch[1])}/${pcMatch[3]}`;
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
 
   return new Intl.DateTimeFormat("es-MX", {
     day: "2-digit",
@@ -278,6 +287,27 @@ function formatDate(value) {
 
 function compact(value) {
   return normalizeText(value).replace(/[^a-z0-9]/g, "");
+}
+
+function parsePcDateTimestamp(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return Date.UTC(Number(year), Number(month) - 1, Number(day));
+  }
+
+  // Sistema PC entrega sus fechas numericas como mes/dia/anio.
+  const pcMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (pcMatch) {
+    const [, month, day, year] = pcMatch;
+    return Date.UTC(Number(year), Number(month) - 1, Number(day));
+  }
+
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 function extractOpinionUrl(value) {
@@ -331,7 +361,10 @@ function buildRowView(row, sucursal) {
   const estatus = String(readField(row, ["estatus", "ESTATUS"]) || "").trim();
   const motivo = String(readField(row, ["motivo", "MOTIVO"]) || "").trim();
   const registroFecha = formatDate(readField(row, ["registro_fecha", "REGISTRO_FECHA"]));
-  const vigenciaFecha = formatDate(readField(row, ["vigencia_fecha_propuesta", "VIGENCIA_FECHA_PROPUESTA"]));
+  const vigenciaFechaRaw = String(
+    readField(row, ["vigencia_fecha_propuesta", "VIGENCIA_FECHA_PROPUESTA"]) || "",
+  ).trim();
+  const vigenciaFecha = formatDate(vigenciaFechaRaw);
   const opinionFavorableUrl = extractOpinionUrl(readField(row, ["OPINION FAVORABLE", "OPINION_FAVORABLE", "opinion_favorable"]));
 
   return {
@@ -347,6 +380,7 @@ function buildRowView(row, sucursal) {
     motivo,
     registroFecha,
     vigenciaFecha,
+    vigenciaFechaRaw,
     opinionFavorableUrl,
     etiquetaGrupo: tienda || razonSocial || municipioNombre || sucursalNombre || "SIN GRUPO",
     filtroTienda: compact(tienda),
@@ -439,6 +473,21 @@ export async function obtenerSistemaPcResumen(query = {}) {
     };
   }).filter((item) => item.solicitudId || item.sucursalId || item.sucursalNombre);
 
+  const latestExpirationByPcId = new Map();
+  allItems.forEach((item) => {
+    const pcId = String(item.sistemaPcSucursalId || "").trim();
+    const timestamp = parsePcDateTimestamp(item.vigenciaFechaRaw);
+    if (!pcId || timestamp === null) return;
+    const current = latestExpirationByPcId.get(pcId);
+    if (!current || timestamp > current.timestamp) {
+      latestExpirationByPcId.set(pcId, {
+        raw: item.vigenciaFechaRaw,
+        formatted: item.vigenciaFecha,
+        timestamp,
+      });
+    }
+  });
+
   const estatalYear = (row) => {
     const match = String(readField(row, ["FECHA", "fecha", "CAPACITACION"]) || "").match(/20\d{2}/);
     return match ? Number(match[0]) : null;
@@ -472,6 +521,7 @@ export async function obtenerSistemaPcResumen(query = {}) {
     const idPc = String(sucursal.idPc || "").trim();
     const estatal = readyEstatalBySucursal.get(String(sucursal.id));
     if (!idPc || !estatal || pcIdsForYear.has(idPc)) return [];
+    const expiration = latestExpirationByPcId.get(idPc) || null;
     return [{
       solicitudId: "",
       estatus: estatal.status.toUpperCase(),
@@ -484,7 +534,10 @@ export async function obtenerSistemaPcResumen(query = {}) {
       estadoNombre: sucursal.estado?.nombre || "",
       motivo: "",
       registroFecha: "",
-      vigenciaFecha: "",
+      vigenciaFecha: expiration?.formatted || "",
+      vigenciaFechaRaw: expiration?.raw || "",
+      vencimientoEstatal: expiration?.formatted || "Sin fecha de vencimiento",
+      vencimientoEstatalTimestamp: expiration?.timestamp ?? null,
       opinionFavorableUrl: "",
       etiquetaGrupo: sucursal.nombre || sucursal.tienda || "SIN GRUPO",
       filtroTienda: compact(sucursal.tienda),
@@ -546,15 +599,31 @@ export async function obtenerSistemaPcResumen(query = {}) {
     groupsMap.get(companyKey).items.push(item);
   });
 
-  const groups = [...groupsMap.values()].map((group) => ({
-    ...group,
-    total: group.items.length,
-    statuses: (section === "listos" ? [READY_TO_CREATE_STAGE] : WORKFLOW_STAGES).map((stage) => ({
-      ...stage,
-      items: group.items.filter((item) => item.stageKey === stage.key),
-      count: group.items.filter((item) => item.stageKey === stage.key).length,
-    })),
-  })).sort((a, b) => a.nombre.localeCompare(b.nombre, "es-MX"));
+  const expirationSortValue = (item) => Number.isFinite(item?.vencimientoEstatalTimestamp)
+    ? item.vencimientoEstatalTimestamp
+    : Number.POSITIVE_INFINITY;
+  const compareReadyItems = (a, b) => (
+    expirationSortValue(a) - expirationSortValue(b)
+    || a.sucursalNombre.localeCompare(b.sucursalNombre, "es-MX")
+  );
+  const groups = [...groupsMap.values()].map((group) => {
+    const sortedItems = section === "listos" ? [...group.items].sort(compareReadyItems) : group.items;
+    return {
+      ...group,
+      items: sortedItems,
+      total: sortedItems.length,
+      statuses: (section === "listos" ? [READY_TO_CREATE_STAGE] : WORKFLOW_STAGES).map((stage) => {
+        const stageItems = sortedItems.filter((item) => item.stageKey === stage.key);
+        return { ...stage, items: stageItems, count: stageItems.length };
+      }),
+    };
+  }).sort((a, b) => {
+    if (section === "listos") {
+      const expirationDifference = expirationSortValue(a.items[0]) - expirationSortValue(b.items[0]);
+      if (expirationDifference) return expirationDifference;
+    }
+    return a.nombre.localeCompare(b.nombre, "es-MX");
+  });
 
   const visibleStages = section === "listos" ? [READY_TO_CREATE_STAGE] : WORKFLOW_STAGES;
   const stageCounts = Object.fromEntries(visibleStages.map((stage) => [

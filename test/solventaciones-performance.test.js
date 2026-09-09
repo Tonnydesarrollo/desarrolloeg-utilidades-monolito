@@ -47,7 +47,12 @@ test("listos para crear cruza trabajo estatal e ID_PC sin mezclar expedientes", 
     item.readyToCreate === true
     && item.sistemaPcSucursalId
     && ["EN DRIVE", "IMPRESO", "ENTREGADO"].includes(item.estatus)
+    && typeof item.vencimientoEstatal === "string"
   )));
+  data.groups.forEach((group) => {
+    const order = group.items.map((item) => item.vencimientoEstatalTimestamp ?? Number.POSITIVE_INFINITY);
+    assert.deepEqual(order, [...order].sort((a, b) => a - b));
+  });
 });
 
 test("procesa evidencias con concurrencia acotada y conserva el orden", async () => {
@@ -107,6 +112,7 @@ test("el PDF no espera red inactiva y reutiliza Chromium", () => {
   assert.match(systemTemplate, /data-section="historico"/);
   assert.match(systemTemplate, /data-section="pendientes"/);
   assert.match(systemTemplate, /data-section="listos"/);
+  assert.match(systemTemplate, /Vencimiento estatal/);
   assert.match(systemTemplate, /opinionFavorableUrl/);
   assert.match(systemTemplate, /currentYear - 1/);
   assert.match(systemTemplate, /fetch\(`\/solventaciones\/api\/overview/);
