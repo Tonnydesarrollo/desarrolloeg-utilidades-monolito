@@ -29,7 +29,7 @@ services:
       retries: 8
       start_period: 10s
     volumes:
-      - ./data-dev:/app/data
+      - desarrolloeg-data-dev:/app/data
 
   monolito-dev:
     build:
@@ -102,4 +102,8 @@ services:
       - ./runtime-dev:/app/runtime
       - ./secrets:/app/secrets:ro
       - ./publicimg:/app/publicimg
-      - ./data-dev:/app/desarrolloeg-sync-data
+      - desarrolloeg-data-dev:/app/desarrolloeg-sync-data
+
+volumes:
+  desarrolloeg-data-dev:
+    name: desarrolloeg-data-dev

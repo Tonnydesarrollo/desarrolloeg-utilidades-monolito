@@ -41,6 +41,12 @@ function formatDate(value) {
   return date ? new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric" }).format(date) : text(value);
 }
 
+export function deriveTrainingStatus(value, now = new Date()) {
+  const trainingDate = parseDate(value);
+  if (!trainingDate) return "SIN CAPACITACION";
+  return dateKey(trainingDate) > dateKey(now) ? "FINALIZADA" : "PROGRAMADA";
+}
+
 function recordYear(row) {
   for (const value of [row.FECHA, row.VENCIMIENTO, row.CAPACITACION]) {
     const date = parseDate(value);
@@ -67,7 +73,12 @@ function latestTrainingBySucursal(capacitaciones) {
   capacitaciones.forEach((capacitacion) => {
     const date = parseDate(capacitacion["FECHA CAPACITACION"]);
     if (!date) return;
-    const entry = { date, formatted: formatDate(capacitacion["FECHA CAPACITACION"]), status: today > dateKey(date) ? "CAPACITADA" : "PROGRAMADA", capacitadores: text(capacitacion.CAPACITADORES) };
+    const entry = {
+      date,
+      formatted: formatDate(capacitacion["FECHA CAPACITACION"]),
+      status: dateKey(date) > today ? "FINALIZADA" : "PROGRAMADA",
+      capacitadores: text(capacitacion.CAPACITADORES),
+    };
     const sucursalIds = new Set([...splitRefs(capacitacion.SUCURSALES), text(capacitacion.CEDE)].filter(Boolean));
     sucursalIds.forEach((id) => { const current = bySucursal.get(id); if (!current || current.date < date) bySucursal.set(id, entry); });
   });
@@ -106,14 +117,15 @@ export function obtenerTrabajosResumen(tipo, query = {}) {
     const estado = estadoMap.get(text(row.ESTADO || sucursal.ESTADO)) || {};
     const selectedDocuments = splitRefs(row.DOCUMENTACION);
     const training = trainingMap.get(text(row.SUCURSAL));
+    const fallbackTrainingDate = text(row.CAPACITACION);
     return {
       id: text(row["Row ID"] || row.ID), virtual: false, year: recordYear(row), fecha: formatDate(row.FECHA), fechaRaw: text(row.FECHA),
       sucursalId: text(row.SUCURSAL), sucursal: text(sucursal.LABEL2 || sucursal.LABEL || row.TIENDA) || "Sucursal sin nombre", tienda: text(row.TIENDA || sucursal.TIENDA),
       empresaId, empresa: companyName(empresa, row["Razon Social"]), razonSocial: text(empresa["RAZON SOCIAL"]), logo: text(empresa.LOGOCALCULADO || empresa.LOGOURL || empresa.LOGO),
       municipio: text(municipio.NOMBRE || row.MUNICIPIO), estado: text(estado.NOMBRE || row.ESTADO),
       status: text(table === "ESTATALES" ? row.PIPC : row["PLAN DE CONTINGENCIA"]) || "SIN ESTATUS", drive: extractUrl(row.DRIVE),
-      capacitacionFecha: training?.formatted || formatDate(row.CAPACITACION),
-      capacitacionStatus: training?.status || (text(row["STATUS CAPACITACION"]) ? normalize(row["STATUS CAPACITACION"]).includes("final") ? "CAPACITADA" : "PROGRAMADA" : "SIN CAPACITACION"),
+      capacitacionFecha: training?.formatted || formatDate(fallbackTrainingDate),
+      capacitacionStatus: training?.status || deriveTrainingStatus(fallbackTrainingDate),
       capacitadores: text(row.CAPACITADORES || training?.capacitadores), selectedDocuments,
       missingDocuments: documentOptions.filter((document) => !selectedDocuments.includes(document.id)), faltantes: text(row.FALTANTES_TEXTO || row["DUCOMENTACION FALTANTE"]), notas: text(row.NOTAS),
     };
@@ -170,6 +182,6 @@ export function obtenerTrabajosResumen(tipo, query = {}) {
 
   const trainingCounts = new Map();
   yearItems.filter((item) => matchesFilters(item, "capacitacion")).forEach((item) => trainingCounts.set(item.capacitacionStatus, (trainingCounts.get(item.capacitacionStatus) || 0) + 1));
-  const trainingStatuses = ["CAPACITADA", "PROGRAMADA", "SIN CAPACITACION"].map((value) => ({ value, count: trainingCounts.get(value) || 0 }));
+  const trainingStatuses = ["FINALIZADA", "PROGRAMADA", "SIN CAPACITACION"].map((value) => ({ value, count: trainingCounts.get(value) || 0 }));
   return { tipo: normalizedType, table, selectedYear, years, companies, statuses, trainingStatuses, documentOptions, total: items.length, groups, items };
 }

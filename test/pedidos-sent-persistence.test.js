@@ -60,3 +60,14 @@ test("marcar un pedido enviado persiste el estado sin borrar el resto de la fila
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("marcar enviado invalida la clasificacion cacheada del dashboard", () => {
+  const source = fs.readFileSync(
+    new URL("../src/modules/pedidos-ley/services/pedidosLey.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /function updatePedidoLeySentCache[\s\S]*?dashboardCache\.clear\(\);/,
+  );
+});

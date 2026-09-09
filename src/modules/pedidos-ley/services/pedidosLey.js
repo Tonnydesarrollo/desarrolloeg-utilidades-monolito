@@ -2086,6 +2086,7 @@ function updatePedidoLeySentCache(pedido, enviado, sentLocalData = {}) {
   if (!pedidoKey) return;
   const sentValue = enviado === false ? '' : 'SI';
   const sentBool = enviado !== false;
+  dashboardCache.clear();
 
   if (Array.isArray(cache.rows)) {
     for (const row of cache.rows) {

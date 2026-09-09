@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getTrabajoTableName, obtenerTrabajosResumen } from "../src/modules/trabajos/trabajos.service.js";
+import { deriveTrainingStatus, getTrabajoTableName, obtenerTrabajosResumen } from "../src/modules/trabajos/trabajos.service.js";
+
+test("el estado de capacitacion aplica el contrato fecha mayor a hoy", () => {
+  const today = new Date(2026, 8, 9);
+  assert.equal(deriveTrainingStatus("09/08/2026", today), "PROGRAMADA");
+  assert.equal(deriveTrainingStatus("09/09/2026", today), "PROGRAMADA");
+  assert.equal(deriveTrainingStatus("09/12/2026", today), "FINALIZADA");
+  assert.equal(deriveTrainingStatus("", today), "SIN CAPACITACION");
+});
 
 test("municipales y estatales consultan sus tablas persistentes reales", () => {
   assert.equal(getTrabajoTableName("municipales"), "MUNICIPALES");
