@@ -41,6 +41,15 @@ function formatDate(value) {
   return date ? new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric" }).format(date) : text(value);
 }
 
+export function resolveWorkDate(value, relatedTrainingDate = null) {
+  const parsed = parseDate(value);
+  if (!parsed || !relatedTrainingDate || dateKey(parsed) === dateKey(relatedTrainingDate)) return parsed || value;
+  const parts = text(value).match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  if (!parts) return parsed;
+  const dayFirst = new Date(Number(parts[3]), Number(parts[2]) - 1, Number(parts[1]));
+  return dateKey(dayFirst) === dateKey(relatedTrainingDate) ? relatedTrainingDate : parsed;
+}
+
 export function deriveTrainingStatus(value, now = new Date()) {
   const trainingDate = parseDate(value);
   if (!trainingDate) return "SIN CAPACITACION";
@@ -120,8 +129,9 @@ export function obtenerTrabajosResumen(tipo, query = {}) {
     const selectedDocuments = splitRefs(row.DOCUMENTACION);
     const training = trainingMap.get(text(row.SUCURSAL));
     const fallbackTrainingDate = text(row.CAPACITACION);
+    const workDate = resolveWorkDate(row.FECHA, training?.date);
     return {
-      id: text(row["Row ID"] || row.ID), virtual: false, year: recordYear(row), fecha: formatDate(row.FECHA), fechaRaw: text(row.FECHA),
+      id: text(row["Row ID"] || row.ID), virtual: false, year: recordYear(row), fecha: formatDate(workDate), fechaRaw: text(row.FECHA),
       sucursalId: text(row.SUCURSAL), sucursal: text(sucursal.LABEL2 || sucursal.LABEL || row.TIENDA) || "Sucursal sin nombre", tienda: text(row.TIENDA || sucursal.TIENDA),
       empresaId, empresa: companyName(empresa, row["Razon Social"]), razonSocial: text(empresa["RAZON SOCIAL"]), logo: text(empresa.LOGOCALCULADO || empresa.LOGOURL || empresa.LOGO),
       municipio: text(municipio.NOMBRE || row.MUNICIPIO), estado: text(estado.NOMBRE || row.ESTADO),
