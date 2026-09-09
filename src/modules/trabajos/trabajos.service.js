@@ -44,7 +44,7 @@ function formatDate(value) {
 export function deriveTrainingStatus(value, now = new Date()) {
   const trainingDate = parseDate(value);
   if (!trainingDate) return "SIN CAPACITACION";
-  return dateKey(trainingDate) > dateKey(now) ? "FINALIZADA" : "PROGRAMADA";
+  return dateKey(trainingDate) < dateKey(now) ? "FINALIZADA" : "PROGRAMADA";
 }
 
 function recordYear(row) {
@@ -76,7 +76,7 @@ function latestTrainingBySucursal(capacitaciones) {
     const entry = {
       date,
       formatted: formatDate(capacitacion["FECHA CAPACITACION"]),
-      status: dateKey(date) > today ? "FINALIZADA" : "PROGRAMADA",
+      status: dateKey(date) < today ? "FINALIZADA" : "PROGRAMADA",
       capacitadores: text(capacitacion.CAPACITADORES),
     };
     const sucursalIds = new Set([...splitRefs(capacitacion.SUCURSALES), text(capacitacion.CEDE)].filter(Boolean));
@@ -98,11 +98,13 @@ export function obtenerTrabajosResumen(tipo, query = {}) {
   const municipios = readLocalOperationalTable("MUNICIPIOS");
   const estados = readLocalOperationalTable("ESTADOS");
   const capacitaciones = readLocalOperationalTable("CAPACITACIONES");
+  const empleados = readLocalOperationalTable("EMPLEADOS");
   const documentos = readLocalOperationalTable("DOCUMENTACION");
   const sucursalMap = buildCatalog(sucursales, ["ID", "Row ID"]);
   const empresaMap = buildCatalog(empresas, ["ID", "Row ID"]);
   const municipioMap = buildCatalog(municipios, ["ID", "Row ID"]);
   const estadoMap = buildCatalog(estados, ["ID", "Row ID"]);
+  const empleadoMap = buildCatalog(empleados, ["ID", "Row ID"]);
   const trainingMap = latestTrainingBySucursal(capacitaciones);
   const documentOptions = documentos
     .filter((row) => normalize(row.PROGRAMA).includes(normalizedType === "estatales" ? "estatal" : "municipal"))
@@ -126,7 +128,9 @@ export function obtenerTrabajosResumen(tipo, query = {}) {
       status: text(table === "ESTATALES" ? row.PIPC : row["PLAN DE CONTINGENCIA"]) || "SIN ESTATUS", drive: extractUrl(row.DRIVE),
       capacitacionFecha: training?.formatted || formatDate(fallbackTrainingDate),
       capacitacionStatus: training?.status || deriveTrainingStatus(fallbackTrainingDate),
-      capacitadores: text(row.CAPACITADORES || training?.capacitadores), selectedDocuments,
+      capacitadores: splitRefs(row.CAPACITADORES || training?.capacitadores)
+        .map((id) => text(empleadoMap.get(id)?.NOMBRE || id))
+        .join(", "), selectedDocuments,
       missingDocuments: documentOptions.filter((document) => !selectedDocuments.includes(document.id)), faltantes: text(row.FALTANTES_TEXTO || row["DUCOMENTACION FALTANTE"]), notas: text(row.NOTAS),
     };
   });
@@ -147,7 +151,8 @@ export function obtenerTrabajosResumen(tipo, query = {}) {
       sucursal: text(sucursal.LABEL2 || sucursal.LABEL) || "Sucursal sin nombre", tienda: text(sucursal.TIENDA), empresaId,
       empresa: companyName(empresa, sucursal["RAZON SOCIAL"]), razonSocial: text(empresa["RAZON SOCIAL"] || sucursal["RAZON SOCIAL"]), logo: text(empresa.LOGOCALCULADO || empresa.LOGOURL || empresa.LOGO),
       municipio: text(sucursal.MUNICIPIO_NOMBRE), estado: text(sucursal.ESTADO_NOMBRE), status: STATUS_PENDING_CREATE, drive: "",
-      capacitacionFecha: training?.formatted || "", capacitacionStatus: training?.status || "SIN CAPACITACION", capacitadores: training?.capacitadores || "",
+      capacitacionFecha: training?.formatted || "", capacitacionStatus: training?.status || "SIN CAPACITACION",
+      capacitadores: splitRefs(training?.capacitadores).map((id) => text(empleadoMap.get(id)?.NOMBRE || id)).join(", "),
       selectedDocuments: [], missingDocuments: documentOptions, faltantes: "", notas: "",
     });
   });
