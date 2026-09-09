@@ -39,6 +39,17 @@ test("historico abre el ano anterior y las firmadas exponen su opinion favorable
   assert.ok(signed.some((item) => /^https:\/\/pcsinaloa\.gob\.mx\//.test(item.opinionFavorableUrl)));
 });
 
+test("listos para crear cruza trabajo estatal e ID_PC sin mezclar expedientes", async () => {
+  const data = await obtenerSistemaPcResumen({ section: "listos", year: "2026" });
+  assert.equal(data.section, "listos");
+  assert.deepEqual(data.stages, [{ key: "lista", label: "Lista para crear" }]);
+  assert.ok(data.groups.flatMap((group) => group.items).every((item) => (
+    item.readyToCreate === true
+    && item.sistemaPcSucursalId
+    && ["EN DRIVE", "IMPRESO", "ENTREGADO"].includes(item.estatus)
+  )));
+});
+
 test("procesa evidencias con concurrencia acotada y conserva el orden", async () => {
   let active = 0;
   let maxActive = 0;
@@ -95,6 +106,7 @@ test("el PDF no espera red inactiva y reutiliza Chromium", () => {
   assert.match(systemTemplate, /data-section="proceso"/);
   assert.match(systemTemplate, /data-section="historico"/);
   assert.match(systemTemplate, /data-section="pendientes"/);
+  assert.match(systemTemplate, /data-section="listos"/);
   assert.match(systemTemplate, /opinionFavorableUrl/);
   assert.match(systemTemplate, /currentYear - 1/);
   assert.match(systemTemplate, /fetch\(`\/solventaciones\/api\/overview/);

@@ -244,6 +244,7 @@ async function mapaSucursales() {
     const empresa = empresas.get(empresaId) || null;
     const sucursal = {
       id: row.ID,
+      idPc: row.ID_PC || "",
       nombre: row.LABEL2 || row.LABEL || row.NOMBRE || "",
       tienda: row.TIENDA || "",
       razonSocial: empresa?.["RAZON SOCIAL"] || row["RAZON SOCIAL"] || "",
@@ -365,6 +366,8 @@ const WORKFLOW_STAGES = [
   { key: "autorizada", label: "Autorizada" },
   { key: "firmada", label: "Firmada" },
 ];
+const READY_TO_CREATE_STAGE = { key: "lista", label: "Lista para crear" };
+const READY_ESTATAL_STATUSES = new Set(["en drive", "impreso", "entregado"]);
 
 function getRecordYear(row) {
   const explicit = String(readField(row, ["AÑO", "ANIO", "ANO", "YEAR"]) || "").trim();
@@ -405,13 +408,17 @@ export async function obtenerSistemaPcResumen(query = {}) {
   await refreshCachesForDatabaseRevision();
   const currentYear = new Date().getFullYear();
   const requestedSection = normalizeText(query.section || query.seccion || "proceso");
-  const section = ["proceso", "historico", "pendientes"].includes(requestedSection)
+  const section = ["proceso", "historico", "pendientes", "listos"].includes(requestedSection)
     ? requestedSection
     : "proceso";
   const requestedYear = Number(query.year || query.anio || 0);
   const search = normalizeText(query.q || query.buscar || "");
   const requestedCompany = normalizeText(query.empresa || query.company || "");
-  const [rowsRaw, sucursalesMap] = await Promise.all([leerTablaAppSheet(APPSHEET_TABLE), mapaSucursales()]);
+  const [rowsRaw, sucursalesMap, estatalesRaw] = await Promise.all([
+    leerTablaAppSheet(APPSHEET_TABLE),
+    mapaSucursales(),
+    leerTablaAppSheet("ESTATALES"),
+  ]);
 
   const allItems = (Array.isArray(rowsRaw) ? rowsRaw : []).map((row) => {
     const localSucursalId = String(readField(row, ["SUCURSAL", "sucursal_local_id"]) || "").trim();
@@ -432,18 +439,78 @@ export async function obtenerSistemaPcResumen(query = {}) {
     };
   }).filter((item) => item.solicitudId || item.sucursalId || item.sucursalNombre);
 
-  const years = [...new Set(allItems.map((item) => item.year).filter(Number.isFinite))].sort((a, b) => b - a);
+  const estatalYear = (row) => {
+    const match = String(readField(row, ["FECHA", "fecha", "CAPACITACION"]) || "").match(/20\d{2}/);
+    return match ? Number(match[0]) : null;
+  };
+  const years = [...new Set([
+    ...allItems.map((item) => item.year),
+    ...(Array.isArray(estatalesRaw) ? estatalesRaw : []).map(estatalYear),
+  ].filter(Number.isFinite))].sort((a, b) => b - a);
   let selectedYear = Number.isFinite(requestedYear) && requestedYear > 0 ? requestedYear : currentYear;
   if (section === "historico" && !(Number.isFinite(requestedYear) && requestedYear > 0)) {
     selectedYear = years.find((year) => year < currentYear) || currentYear - 1;
   }
 
+  const pcIdsForYear = new Set(
+    allItems
+      .filter((item) => item.year === selectedYear)
+      .map((item) => String(item.sistemaPcSucursalId || "").trim())
+      .filter(Boolean),
+  );
+  const sucursales = [...new Map(
+    Object.values(sucursalesMap).filter((item) => item?.id).map((item) => [String(item.id), item]),
+  ).values()];
+  const readyEstatalBySucursal = new Map();
+  for (const row of Array.isArray(estatalesRaw) ? estatalesRaw : []) {
+    const sucursalId = String(readField(row, ["SUCURSAL", "sucursal_id"]) || "").trim();
+    const status = normalizeText(readField(row, ["PIPC", "ESTATUS", "STATUS"]));
+    if (!sucursalId || estatalYear(row) !== selectedYear || !READY_ESTATAL_STATUSES.has(status)) continue;
+    readyEstatalBySucursal.set(sucursalId, { row, status });
+  }
+  const readyItems = sucursales.flatMap((sucursal) => {
+    const idPc = String(sucursal.idPc || "").trim();
+    const estatal = readyEstatalBySucursal.get(String(sucursal.id));
+    if (!idPc || !estatal || pcIdsForYear.has(idPc)) return [];
+    return [{
+      solicitudId: "",
+      estatus: estatal.status.toUpperCase(),
+      razonSocial: sucursal.razonSocial || sucursal.empresa?.razonSocial || "",
+      tienda: sucursal.tienda || "",
+      sucursalId: String(sucursal.id),
+      sistemaPcSucursalId: idPc,
+      sucursalNombre: sucursal.nombre || "",
+      municipioNombre: sucursal.municipio?.nombre || "",
+      estadoNombre: sucursal.estado?.nombre || "",
+      motivo: "",
+      registroFecha: "",
+      vigenciaFecha: "",
+      opinionFavorableUrl: "",
+      etiquetaGrupo: sucursal.nombre || sucursal.tienda || "SIN GRUPO",
+      filtroTienda: compact(sucursal.tienda),
+      filtroRazonSocial: compact(sucursal.razonSocial),
+      filtroMunicipio: compact(sucursal.municipio?.nombre),
+      empresaId: sucursal.empresa?.id || "",
+      empresaNombre: sucursal.empresa?.nombreComercial || sucursal.razonSocial || "",
+      empresaLogo: sucursal.empresa?.logo || "",
+      rowId: "",
+      year: selectedYear,
+      stageKey: READY_TO_CREATE_STAGE.key,
+      stageLabel: READY_TO_CREATE_STAGE.label,
+      statusDetail: `Trabajo estatal: ${estatal.status.toUpperCase()}`,
+      reportReady: false,
+      readyToCreate: true,
+    }];
+  });
+
   const matchesSection = (item) => {
     if (section === "historico") return item.year === selectedYear && item.year < currentYear;
     if (section === "pendientes") return item.year === selectedYear && item.reportReady;
+    if (section === "listos") return item.year === selectedYear && item.readyToCreate;
     return item.year === selectedYear;
   };
-  const items = allItems.filter((item) => {
+  const sectionItems = section === "listos" ? readyItems : allItems;
+  const items = sectionItems.filter((item) => {
     if (!matchesSection(item)) return false;
     const companyText = `${item.empresaId} ${item.empresaNombre} ${item.razonSocial}`;
     if (requestedCompany && !normalizeText(companyText).includes(requestedCompany)) return false;
@@ -482,18 +549,19 @@ export async function obtenerSistemaPcResumen(query = {}) {
   const groups = [...groupsMap.values()].map((group) => ({
     ...group,
     total: group.items.length,
-    statuses: WORKFLOW_STAGES.map((stage) => ({
+    statuses: (section === "listos" ? [READY_TO_CREATE_STAGE] : WORKFLOW_STAGES).map((stage) => ({
       ...stage,
       items: group.items.filter((item) => item.stageKey === stage.key),
       count: group.items.filter((item) => item.stageKey === stage.key).length,
     })),
   })).sort((a, b) => a.nombre.localeCompare(b.nombre, "es-MX"));
 
-  const stageCounts = Object.fromEntries(WORKFLOW_STAGES.map((stage) => [
+  const visibleStages = section === "listos" ? [READY_TO_CREATE_STAGE] : WORKFLOW_STAGES;
+  const stageCounts = Object.fromEntries(visibleStages.map((stage) => [
     stage.key,
     items.filter((item) => item.stageKey === stage.key).length,
   ]));
-  const companies = [...new Map(allItems.map((item) => [
+  const companies = [...new Map([...allItems, ...readyItems].map((item) => [
     item.empresaId || normalizeText(item.razonSocial),
     { id: item.empresaId, nombre: item.empresaNombre || item.razonSocial, razonSocial: item.razonSocial },
   ])).values()].filter((item) => item.nombre).sort((a, b) => a.nombre.localeCompare(b.nombre, "es-MX"));
@@ -506,7 +574,7 @@ export async function obtenerSistemaPcResumen(query = {}) {
     selectedYear,
     years,
     companies,
-    stages: WORKFLOW_STAGES,
+    stages: visibleStages,
     counts: {
       total: items.length,
       companies: groups.length,

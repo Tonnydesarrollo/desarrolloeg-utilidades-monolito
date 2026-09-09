@@ -52,7 +52,7 @@
       .pc-year-mark { min-width: 126px; padding: 18px; border: 1px solid rgba(255,255,255,.2); border-radius: 22px; background: rgba(255,255,255,.08); backdrop-filter: blur(14px); text-align: center; }
       .pc-year-mark span { display: block; font: 800 .62rem/1 var(--portal-font-ui); letter-spacing: .14em; text-transform: uppercase; color: #bfe4e4; }
       .pc-year-mark strong { display: block; margin-top: 6px; font: 800 2rem/1 var(--portal-font-display); }
-      .pc-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px; border: 1px solid var(--pc-line); border-radius: 22px; background: rgba(255,255,255,.76); box-shadow: 0 14px 35px rgba(25, 55, 75, .08); backdrop-filter: blur(18px); }
+      .pc-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 8px; border: 1px solid var(--pc-line); border-radius: 22px; background: rgba(255,255,255,.76); box-shadow: 0 14px 35px rgba(25, 55, 75, .08); backdrop-filter: blur(18px); }
       .pc-tab { min-height: 54px; padding: 11px 15px; border: 0; border-radius: 16px; color: var(--pc-muted); background: transparent; cursor: pointer; font: 800 .78rem/1.2 var(--portal-font-ui); letter-spacing: .035em; text-transform: uppercase; transition: 180ms ease; }
       .pc-tab small { display: block; margin-top: 4px; font: 600 .65rem/1.2 var(--portal-font-body); letter-spacing: 0; text-transform: none; opacity: .8; }
       .pc-tab[aria-selected="true"] { color: #fff; background: linear-gradient(135deg, var(--pc-teal), #123649); box-shadow: 0 12px 25px rgba(15,89,97,.22); }
@@ -114,6 +114,7 @@
       .pc-selection button, .pc-selection a { min-height: 38px; padding: 0 12px; border: 1px solid rgba(255,255,255,.18); border-radius: 12px; color: #fff; background: rgba(255,255,255,.09); cursor: pointer; font: 800 .64rem/1 var(--portal-font-ui); text-decoration: none; text-transform: uppercase; }
       .pc-selection .primary { border-color: transparent; background: var(--pc-red); }
       @media (max-width: 900px) {
+        .pc-nav { grid-template-columns: repeat(2, 1fr); }
         .pc-toolbar { grid-template-columns: 1fr 1fr; }
         .pc-field--search { grid-column: 1 / -1; }
         .pc-summary { grid-template-columns: repeat(2,1fr); }
@@ -156,6 +157,7 @@
         <button class="pc-tab" type="button" role="tab" data-section="proceso" aria-selected="true">En proceso<small>Expedientes del año seleccionado</small></button>
         <button class="pc-tab" type="button" role="tab" data-section="historico" aria-selected="false">Historico<small>Años anteriores por empresa</small></button>
         <button class="pc-tab" type="button" role="tab" data-section="pendientes" aria-selected="false">Pendientes<small>Visitas listas para reporte</small></button>
+        <button class="pc-tab" type="button" role="tab" data-section="listos" aria-selected="false">Listos para crear<small>Trabajo estatal terminado, sin alta en PC</small></button>
       </nav>
 
       <section class="pc-toolbar" aria-label="Filtros">
@@ -185,8 +187,8 @@
       (() => {
         "use strict";
         const state = { section: "proceso", year: <%= currentYear %>, company: "", q: "", request: null, selected: new Set(), catalogReady: false };
-        const colors = { creada: "#718096", captura: "#d18b2c", revision: "#2774a6", visitada: "#ba332b", autorizada: "#16836f", firmada: "#335f3d" };
-        const titles = { proceso: ["Expedientes del año", "Seguimiento completo por empresa y etapa."], historico: ["Archivo historico", "Expedientes de años anteriores agrupados por empresa."], pendientes: ["Reportes pendientes", "Visitas y solventaciones listas para generar por tienda, empresa o selección."] };
+        const colors = { creada: "#718096", captura: "#d18b2c", revision: "#2774a6", visitada: "#ba332b", autorizada: "#16836f", firmada: "#335f3d", lista: "#0f5961" };
+        const titles = { proceso: ["Expedientes del año", "Seguimiento completo por empresa y etapa."], historico: ["Archivo historico", "Expedientes de años anteriores agrupados por empresa."], pendientes: ["Reportes pendientes", "Visitas y solventaciones listas para generar por tienda, empresa o selección."], listos: ["Listos para crear", "Sucursales con trabajo estatal terminado que aún no tienen alta en Protección Civil."] };
         const elements = {
           tabs: [...document.querySelectorAll(".pc-tab")], year: document.getElementById("yearFilter"), company: document.getElementById("companyFilter"), search: document.getElementById("searchFilter"), refresh: document.getElementById("refreshButton"), summary: document.getElementById("summary"), workflow: document.getElementById("workflow"), results: document.getElementById("results"), heroYear: document.getElementById("heroYear"), title: document.getElementById("sectionTitle"), description: document.getElementById("sectionDescription"), updated: document.getElementById("updatedAt"), selectionBar: document.getElementById("selectionBar"), selectionCount: document.getElementById("selectionCount"), clearSelection: document.getElementById("clearSelection"), selectionHtml: document.getElementById("selectionHtml"), selectionPdf: document.getElementById("selectionPdf")
         };
@@ -207,9 +209,9 @@
 
         function renderSummary(data) {
           const metrics = [
-            ["Expedientes", data.counts.total, "rgba(15,89,97,.09)"],
+            [state.section === "listos" ? "Listos para crear" : "Expedientes", data.counts.total, "rgba(15,89,97,.09)"],
             ["Empresas", data.counts.companies, "rgba(39,116,166,.09)"],
-            ["Listos para reporte", data.counts.reportReady, "rgba(186,51,43,.09)"],
+            [state.section === "listos" ? "Sin alta en PC" : "Listos para reporte", state.section === "listos" ? data.counts.total : data.counts.reportReady, "rgba(186,51,43,.09)"],
             ["Año", data.selectedYear, "rgba(233,180,76,.14)"],
           ];
           elements.summary.innerHTML = metrics.map(([label, value, color]) => `<article class="pc-metric" style="--metric-color:${color}"><span>${esc(label)}</span><strong>${esc(value)}</strong></article>`).join("");
@@ -318,7 +320,7 @@
         elements.clearSelection.addEventListener("click", () => { state.selected.clear(); document.querySelectorAll(".pc-check").forEach((input) => { input.checked = false; }); updateSelection(); });
 
         const initial = new URLSearchParams(location.search);
-        if (["proceso", "historico", "pendientes"].includes(initial.get("section"))) state.section = initial.get("section");
+        if (["proceso", "historico", "pendientes", "listos"].includes(initial.get("section"))) state.section = initial.get("section");
         if (Number(initial.get("year"))) state.year = Number(initial.get("year"));
         else if (state.section === "historico") state.year = <%= currentYear - 1 %>;
         state.company = initial.get("empresa") || "";
