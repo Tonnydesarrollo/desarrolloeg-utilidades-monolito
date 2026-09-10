@@ -678,7 +678,7 @@ async function notifyLocalReplica(table, action, row, before = {}) {
   }
 }
 
-function quoteRowFromInput(input, quoteId) {
+export function quoteRowFromInput(input, quoteId) {
   const centers = normalizeIds(input.centrosTrabajo);
   const recipient = String(input.empresaId || input.destinatario || "").trim();
   if (!recipient) throw new Error("Selecciona una empresa o captura el destinatario.");
@@ -687,7 +687,7 @@ function quoteRowFromInput(input, quoteId) {
   return {
     "Row ID": quoteId,
     "RAZON SOCIAL": recipient,
-    "CENTROS_DE_TRABAJO": centers.join(" , "),
+    "CENTROS_DE_TRABAJO": centers.join(", "),
     PROVEEDOR: String(input.proveedorId).trim(),
     FECHA: String(input.fecha || new Date().toISOString().slice(0, 10)).trim(),
   };

@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { conceptRowsFromInput } from "../src/modules/facturacion/services/appsheet.js";
+import { conceptRowsFromInput, quoteRowFromInput } from "../src/modules/facturacion/services/appsheet.js";
+
+test("serializa centros de trabajo con el formato EnumList de AppSheet", () => {
+  const row = quoteRowFromInput({
+    empresaId: "1",
+    centrosTrabajo: ["2", "1", "5"],
+    proveedorId: "FIRMA-1",
+    fecha: "2026-09-10",
+  }, "COT-1");
+
+  assert.equal(row.CENTROS_DE_TRABAJO, "2, 1, 5");
+});
 
 test("crear cotizacion replica cada concepto en todos los centros seleccionados", () => {
   const rows = conceptRowsFromInput({
