@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import https from "https";
+import crypto from "node:crypto";
 import auth from "../utils/auth.js";
 import { crearDriveClient, construirThumbnailDesdeLogoPath } from "../utils/drive.utils.js";
 import {
@@ -403,9 +404,13 @@ export async function mapaSucursales(forceFresh = false) {
     const est = estados[r.ESTADO] || {};
     map[r.ID] = {
       id: r.ID,
-      nombre: r.NOMBRE || "",
+      nombre: r.LABEL2 || r.LABEL || [r.TIENDA, r.NOMBRE].filter(Boolean).join(" ") || r.NOMBRE || "",
+      nombreCorto: r.NOMBRE || r.LABEL2 || r.LABEL || "",
       domicilio: r.DOMICILIO || r.DIRECCION || r["DIRECCION GOOGLE"] || "",
       tienda: r.TIENDA || "",
+      empresaId: r.EMPRESA || r["ID EMPRESA"] || "",
+      municipioId: r.MUNICIPIO || "",
+      estadoId: r.ESTADO || "",
       municipio: mun,
       estado: est
     };
@@ -425,7 +430,9 @@ export async function mapaCatalogo(forceFresh = false) {
       codigo: r.CODIGO || r["CODIGO"] || r["CÓDIGO"] || r.CLAVE || r["CLAVE"] || r.ID || "",
       nombre: r.NOMBRE || "",
       tipo: r.TIPO || "",
-      descripcion: r.DESCRIPCION || ""
+      descripcion: r.DESCRIPCION || "",
+      precioSugerido: r.PRECIO_SUGERIDO ?? r["PRECIO SUGERIDO"] ?? "",
+      iva: r.IVA ?? 0.16,
     };
   });
   return map;
@@ -438,6 +445,7 @@ export async function mapaProveedores(forceFresh = false) {
   const map = {};
   rows.forEach(r => {
     map[r["Row ID"] || r.ID] = {
+      id: r["Row ID"] || r.ID,
       nombre: r.NOMBRE,
       banco: r.BANCO,
       cuenta: r["CUENTA BANCARIA"],
@@ -506,7 +514,15 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
       mapaProveedores(forceFresh)
     ]);
 
-    const empresa = findEmpresaFromCotizacion(cotizacion, empresas);
+    const empresaRef = String(cotizacion["RAZON SOCIAL"] || cotizacion.RAZON_SOCIAL || cotizacion.EMPRESA || "").trim();
+    const empresaEncontrada = findEmpresaFromCotizacion(cotizacion, empresas);
+    const empresa = empresaEncontrada.id ? empresaEncontrada : {
+      id: "",
+      nombreComercial: empresaRef,
+      razonSocial: empresaRef,
+      logo: "",
+      logoUrl: "",
+    };
 
     if (empresa.logo && !empresa.logoUrl && /^https?:\/\//i.test(empresa.logo)) {
       empresa.logoUrl = empresa.logo;
@@ -561,6 +577,7 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
 
       const cat = catalogo[c.CONCEPTO] || {};
       porCentro[ctId].conceptos.push({
+        id: c["Row ID"] || c.ID || "",
         concepto_id: c.CONCEPTO,
         concepto_nombre: cat.nombre || c.CONCEPTO,
         tipo: cat.tipo || "",
@@ -581,6 +598,8 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
       cotizacion: {
         id: cotizacion["Row ID"] || cotizacion.ID || cacheKey,
         fecha: cotizacion.FECHA,
+        empresaRef,
+        proveedorId: cotizacion.PROVEEDOR || "",
         proveedor,
         titulo,
         formaPago,
@@ -608,6 +627,134 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
     if (!forceFresh) cachedCotizacionesCompletas.delete(cacheKey);
     throw err;
   }
+}
+
+function createRowId() {
+  return crypto.randomBytes(18).toString("base64url").slice(0, 22);
+}
+
+function normalizeNumber(value, fallback = 0) {
+  const normalized = Number(String(value ?? "").replace(/[$,\s]/g, ""));
+  return Number.isFinite(normalized) ? normalized : fallback;
+}
+
+function normalizeIds(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+async function writeAppSheetRows(tableName, action, rows) {
+  if (!rows.length) return;
+  const APP_ID = process.env.APPSHEET_APP_ID;
+  const API_KEY = process.env.APPSHEET_API_KEY;
+  if (!APP_ID || !API_KEY) throw new Error("Google AppSheet no esta configurado en este entorno.");
+  const url = `https://api.appsheet.com/api/v2/apps/${APP_ID}/tables/${encodeURIComponent(tableName)}/Action`;
+  const response = await withAppsheetConcurrency(() => fetchWithRetry(url, {
+    method: "POST",
+    headers: { ApplicationAccessKey: API_KEY, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      Action: action,
+      Properties: { Locale: "es-MX", Timezone: "America/Chihuahua" },
+      Rows: rows,
+    }),
+  }));
+  const body = await response.text();
+  if (!response.ok) throw new Error(`${tableName} ${action}: ${response.status} ${body}`);
+}
+
+async function notifyLocalReplica(table, action, row, before = {}) {
+  const baseUrl = String(process.env.BOLSA_SYNC_WEBHOOK_TARGET || "").replace(/\/$/, "");
+  const secret = process.env.BOLSA_SYNC_WEBHOOK_SECRET || process.env.DESARROLLOEG_SYNC_WEBHOOK_SECRET || "";
+  if (!baseUrl || !secret) return;
+  const id = String(row?.["Row ID"] || row?.ID || before?.["Row ID"] || before?.ID || "").trim();
+  try {
+    const response = await fetch(`${baseUrl}/webhooks/appsheet`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-webhook-secret": secret },
+      body: JSON.stringify({ tabla: table, accion: action, id, datos: row, antes: before }),
+    });
+    if (!response.ok) console.error("Replica local rechazo escritura de cotizacion:", await response.text());
+  } catch (error) {
+    console.error("No se pudo adelantar la replica local de cotizacion:", error?.message || error);
+  }
+}
+
+function quoteRowFromInput(input, quoteId) {
+  const centers = normalizeIds(input.centrosTrabajo);
+  const recipient = String(input.empresaId || input.destinatario || "").trim();
+  if (!recipient) throw new Error("Selecciona una empresa o captura el destinatario.");
+  if (!centers.length) throw new Error("Selecciona al menos un centro de trabajo.");
+  if (!String(input.proveedorId || "").trim()) throw new Error("Selecciona quien firma la cotizacion.");
+  return {
+    "Row ID": quoteId,
+    "RAZON SOCIAL": recipient,
+    "CENTROS_DE_TRABAJO": centers.join(" , "),
+    PROVEEDOR: String(input.proveedorId).trim(),
+    FECHA: String(input.fecha || new Date().toISOString().slice(0, 10)).trim(),
+  };
+}
+
+export function conceptRowsFromInput(input, quoteId) {
+  const centers = normalizeIds(input.centrosTrabajo);
+  if (Array.isArray(input.lineas)) {
+    return input.lineas.map((line) => ({
+      "Row ID": String(line.id || "").trim() || createRowId(),
+      COTIZACION: quoteId,
+      CENTRO_DE_TRABAJO: String(line.centroTrabajoId || "").trim(),
+      CONCEPTO: String(line.conceptoId || "").trim(),
+      CANTIDAD: Math.max(0, normalizeNumber(line.cantidad, 1)),
+      PRECIO: Math.max(0, normalizeNumber(line.precio, 0)),
+      IVA: Math.max(0, normalizeNumber(line.iva, 0.16)),
+    })).filter((line) => centers.includes(line.CENTRO_DE_TRABAJO) && line.CONCEPTO);
+  }
+  const concepts = Array.isArray(input.conceptos) ? input.conceptos : [];
+  return centers.flatMap((centerId) => concepts.map((concept) => ({
+    "Row ID": createRowId(),
+    COTIZACION: quoteId,
+    CENTRO_DE_TRABAJO: centerId,
+    CONCEPTO: String(concept.id || concept.conceptoId || "").trim(),
+    CANTIDAD: Math.max(0, normalizeNumber(concept.cantidad, 1)),
+    PRECIO: Math.max(0, normalizeNumber(concept.precio, 0)),
+    IVA: Math.max(0, normalizeNumber(concept.iva, 0.16)),
+  }))).filter((line) => line.CONCEPTO);
+}
+
+export async function guardarCotizacion(input = {}, quoteId = "") {
+  const id = String(quoteId || input.id || "").trim() || createRowId();
+  const existing = quoteId ? await obtenerCotizacion(id) : null;
+  const quoteRow = quoteRowFromInput(input, id);
+  const desiredConceptRows = conceptRowsFromInput(input, id);
+  if (!desiredConceptRows.length) throw new Error("Selecciona al menos un concepto.");
+  const centersWithoutConcepts = normalizeIds(input.centrosTrabajo).filter((centerId) => (
+    !desiredConceptRows.some((row) => row.CENTRO_DE_TRABAJO === centerId)
+  ));
+  if (centersWithoutConcepts.length) {
+    throw new Error("Cada centro de trabajo debe tener al menos un concepto.");
+  }
+
+  const currentConceptRows = quoteId ? await buscarConceptosPorCotizacion(id) : [];
+  const currentById = new Map(currentConceptRows.map((row) => [String(row["Row ID"] || row.ID), row]));
+  const desiredIds = new Set(desiredConceptRows.map((row) => row["Row ID"]));
+  const added = desiredConceptRows.filter((row) => !currentById.has(row["Row ID"]));
+  const edited = desiredConceptRows.filter((row) => currentById.has(row["Row ID"]));
+  const deleted = currentConceptRows.filter((row) => !desiredIds.has(String(row["Row ID"] || row.ID)));
+  const quoteAction = existing ? "Edit" : "Add";
+
+  await writeAppSheetRows("COTIZACIONES_VARIOS_CT", quoteAction, [quoteRow]);
+  try {
+    await writeAppSheetRows("CONCEPTOS_VARIOS_CT", "Add", added);
+    await writeAppSheetRows("CONCEPTOS_VARIOS_CT", "Edit", edited);
+    await writeAppSheetRows("CONCEPTOS_VARIOS_CT", "Delete", deleted.map((row) => ({ "Row ID": row["Row ID"] || row.ID })));
+  } catch (error) {
+    if (!existing) await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Delete", [{ "Row ID": id }]).catch(() => {});
+    throw error;
+  }
+
+  await notifyLocalReplica("COTIZACIONES_VARIOS_CT", quoteAction, quoteRow, existing || {});
+  for (const row of added) await notifyLocalReplica("CONCEPTOS_VARIOS_CT", "Add", row);
+  for (const row of edited) await notifyLocalReplica("CONCEPTOS_VARIOS_CT", "Edit", row, currentById.get(row["Row ID"]));
+  for (const row of deleted) await notifyLocalReplica("CONCEPTOS_VARIOS_CT", "Delete", {}, row);
+  invalidateFacturacionCaches(["COTIZACIONES_VARIOS_CT", "CONCEPTOS_VARIOS_CT"]);
+  return { id, created: !existing, conceptos: desiredConceptRows.length };
 }
 
 export function prewarmCotizacionesCaches() {

@@ -35,7 +35,6 @@
       links: [
         { label: "Pedidos", href: "/dashboard/pedidos", view: "pedidos" },
         { label: "Cotizaciones", href: "/cotizaciones/cotizacion/html", view: "facturacion" },
-        { label: "Facturacion", href: "/facturacion", view: "facturacion" },
       ],
     },
     {
