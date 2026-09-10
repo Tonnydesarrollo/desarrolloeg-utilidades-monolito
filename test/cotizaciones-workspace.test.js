@@ -53,6 +53,7 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(template, /Conceptos por centro de trabajo/);
   assert.match(template, /Agregar concepto a todos los centros/);
   assert.match(template, /addConceptToAllCenters/);
+  assert.match(template, /quote-form-actions/);
   assert.match(template, /\/cotizaciones\/api\/workspace/);
   assert.match(router, /post\("\/api\/cotizaciones"/);
   assert.match(router, /put\("\/api\/cotizaciones\/:id"/);
