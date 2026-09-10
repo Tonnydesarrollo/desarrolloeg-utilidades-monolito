@@ -687,7 +687,9 @@ export function quoteRowFromInput(input, quoteId) {
   return {
     "Row ID": quoteId,
     "RAZON SOCIAL": recipient,
-    "CENTROS_DE_TRABAJO": centers.join(", "),
+    // AppSheet REST rejects multi-value EnumLists that have a Valid_If expression.
+    // Every selected center remains represented by its CONCEPTOS_VARIOS_CT rows.
+    "CENTROS_DE_TRABAJO": centers[0],
     PROVEEDOR: String(input.proveedorId).trim(),
     FECHA: String(input.fecha || new Date().toISOString().slice(0, 10)).trim(),
   };
