@@ -674,8 +674,8 @@ async function writeAppSheetRows(tableName, action, rows) {
     if (tableName === "COTIZACIONES_VARIOS_CT" && invalidEnumMatch) {
       const column = invalidEnumMatch[1].trim();
       const error = new Error(
-        `AppSheet rechazo ${column}. En COTIZACIONES_VARIOS_CT conserva el selector en Suggested values y cambia `
-        + "el Valid_If del EnumList a una expresion booleana que valide [_THIS] contra esa lista.",
+        `AppSheet rechazo ${column}. Los valores enviados no corresponden con la empresa, `
+        + "los estados, los municipios o los centros de trabajo seleccionados.",
       );
       error.code = "APPSHEET_ENUMLIST_VALIDATION";
       error.column = column;
@@ -756,14 +756,10 @@ export function quoteRowFromInput(input, quoteId, branchesById = {}) {
   if (!String(input.proveedorId || "").trim()) throw new Error("Selecciona quien firma la cotizacion.");
 
   const selectedBranches = centers.map((centerId) => branchesById[centerId]).filter(Boolean);
-  const states = normalizeIds([
-    ...(Array.isArray(input.estados) ? input.estados : []),
-    ...selectedBranches.map((branch) => branch.estadoId),
-  ]);
-  const municipalities = normalizeIds([
-    ...(Array.isArray(input.municipios) ? input.municipios : []),
-    ...selectedBranches.map((branch) => branch.municipioId),
-  ]);
+  // Estados y municipios son filtros de interfaz; la fila persistida siempre
+  // se deriva de los centros seleccionados para respetar los Valid_If encadenados.
+  const states = normalizeIds(selectedBranches.map((branch) => branch.estadoId));
+  const municipalities = normalizeIds(selectedBranches.map((branch) => branch.municipioId));
 
   return {
     ...(quoteId ? { "Row ID": quoteId } : {}),

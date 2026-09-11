@@ -36,6 +36,23 @@ test("deja que AppSheet genere el Row ID de una cotizacion nueva", () => {
   assert.equal(Object.hasOwn(row, "Row ID"), false);
 });
 
+test("deriva estados y municipios de los centros y no de los filtros visuales", () => {
+  const row = quoteRowFromInput({
+    empresaId: "1",
+    estados: ["25", "26"],
+    municipios: ["1878", "2001"],
+    centrosTrabajo: ["1"],
+    conceptos: [{ id: "PIPC" }],
+    proveedorId: "FIRMA-1",
+    fecha: "2026-09-10",
+  }, "", {
+    1: { estadoId: "25", municipioId: "1878" },
+  });
+
+  assert.equal(row.ESTADOS, "25");
+  assert.equal(row.MUNICIPIOS, "1878");
+});
+
 test("crear cotizacion replica cada concepto en todos los centros seleccionados", () => {
   const rows = conceptRowsFromInput({
     centrosTrabajo: ["CENTRO-A", "CENTRO-B"],
@@ -104,6 +121,12 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(template, /Conceptos por centro de trabajo/);
   assert.match(template, /Agregar concepto a todos los centros/);
   assert.match(template, /addConceptToAllCenters/);
+  assert.match(template, /selectedStates:new Set/);
+  assert.match(template, /selectedMunicipalities:new Set/);
+  assert.match(template, /Seleccionar todas las resultantes/);
+  assert.match(template, /clearVisibleCenters/);
+  assert.doesNotMatch(template, /estados:\[\.\.\.state\.selectedStates\]/);
+  assert.doesNotMatch(template, /municipios:\[\.\.\.state\.selectedMunicipalities\]/);
   assert.match(template, /selectedConcepts:new Map/);
   assert.match(template, /conceptos:\[\.\.\.state\.selectedConcepts\.values\(\)\]/);
   assert.match(template, /Según sucursal/);
