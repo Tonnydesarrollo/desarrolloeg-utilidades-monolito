@@ -3,15 +3,37 @@ import fs from "node:fs";
 import test from "node:test";
 import { conceptRowsFromInput, quoteRowFromInput } from "../src/modules/facturacion/services/appsheet.js";
 
-test("evita el fallo REST de AppSheet para EnumList con Valid_If", () => {
+test("crea la cabecera completa que activa el bot de conceptos en AppSheet", () => {
   const row = quoteRowFromInput({
     empresaId: "1",
     centrosTrabajo: ["2", "1", "5"],
+    conceptos: [{ id: "PIPC" }, { id: "CAP" }],
     proveedorId: "FIRMA-1",
     fecha: "2026-09-10",
-  }, "COT-1");
+  }, "COT-1", {
+    1: { estadoId: "25", municipioId: "1878" },
+    2: { estadoId: "25", municipioId: "1874" },
+    5: { estadoId: "25", municipioId: "1878" },
+  });
 
-  assert.equal(row.CENTROS_DE_TRABAJO, "2");
+  assert.equal(row.ESTADOS, "25");
+  assert.equal(row.MUNICIPIOS, "1874 , 1878");
+  assert.equal(row.CENTROS_DE_TRABAJO, "2 , 1 , 5");
+  assert.equal(row.CONCEPTOS, "PIPC , CAP");
+});
+
+test("deja que AppSheet genere el Row ID de una cotizacion nueva", () => {
+  const row = quoteRowFromInput({
+    empresaId: "1",
+    centrosTrabajo: ["1"],
+    conceptos: [{ id: "PIPC" }],
+    proveedorId: "FIRMA-1",
+    fecha: "2026-09-10",
+  }, "", {
+    1: { estadoId: "25", municipioId: "1878" },
+  });
+
+  assert.equal(Object.hasOwn(row, "Row ID"), false);
 });
 
 test("crear cotizacion replica cada concepto en todos los centros seleccionados", () => {
@@ -42,10 +64,39 @@ test("editar cotizacion conserva IDs y permite valores diferentes por centro", (
   assert.deepEqual(rows.map((row) => row.PRECIO), [1000, 900]);
 });
 
+test("calcula pagos de derechos con el precio de cada centro de trabajo", () => {
+  const rows = conceptRowsFromInput({
+    centrosTrabajo: ["CENTRO-A", "CENTRO-B"],
+    conceptos: [
+      { id: "DERECHO-ESTATAL", cantidad: 1, precio: "", precioManual: false, iva: 0.16 },
+      { id: "DERECHO-MUNICIPAL", cantidad: 1, precio: "", precioManual: false, iva: 0.16 },
+      { id: "SERVICIO", cantidad: 1, precio: 750, precioManual: false, iva: 0.16 },
+    ],
+  }, "COT-1", {
+    branchesById: {
+      "CENTRO-A": { precioEstatal: "32,967.49", precioMunicipal: "11,000.00" },
+      "CENTRO-B": { precioEstatal: "35,000.00", precioMunicipal: "12,500.00" },
+    },
+    catalogById: {
+      "DERECHO-ESTATAL": { nombre: "PAGO DE DERECHOS ESTATAL", precioSugerido: 16 },
+      "DERECHO-MUNICIPAL": { nombre: "PAGO DE DERECHOS MUNICIPAL", precioSugerido: 16 },
+      SERVICIO: { nombre: "SERVICIO", precioSugerido: 750 },
+    },
+  });
+
+  const prices = Object.fromEntries(rows.map((row) => [`${row.CENTRO_DE_TRABAJO}|${row.CONCEPTO}`, row.PRECIO]));
+  assert.equal(prices["CENTRO-A|DERECHO-ESTATAL"], 32967.49);
+  assert.equal(prices["CENTRO-B|DERECHO-ESTATAL"], 35000);
+  assert.equal(prices["CENTRO-A|DERECHO-MUNICIPAL"], 11000);
+  assert.equal(prices["CENTRO-B|DERECHO-MUNICIPAL"], 12500);
+  assert.equal(prices["CENTRO-A|SERVICIO"], 750);
+});
+
 test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion", () => {
   const template = fs.readFileSync(new URL("../src/modules/facturacion/views/cotizacion_editable.ejs", import.meta.url), "utf8");
   const router = fs.readFileSync(new URL("../src/modules/facturacion/facturacion.router.js", import.meta.url), "utf8");
   const menu = fs.readFileSync(new URL("../src/public/ui/portal-shell.js", import.meta.url), "utf8");
+  const service = fs.readFileSync(new URL("../src/modules/facturacion/services/appsheet.js", import.meta.url), "utf8");
 
   assert.match(template, /Empresa registrada/);
   assert.match(template, /No registrada/);
@@ -53,9 +104,26 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(template, /Conceptos por centro de trabajo/);
   assert.match(template, /Agregar concepto a todos los centros/);
   assert.match(template, /addConceptToAllCenters/);
+  assert.match(template, /selectedConcepts:new Map/);
+  assert.match(template, /conceptos:\[\.\.\.state\.selectedConcepts\.values\(\)\]/);
+  assert.match(template, /Según sucursal/);
+  assert.match(template, /body\.portal-shell a\.quote-button--dark[^\{]*\{[^}]*color:#fff/);
+  assert.match(template, /quote-card-action--view/);
+  assert.match(template, />Ver cotización<\/a>/);
+  assert.match(template, /data-edit-quote/);
+  assert.match(template, /showSavedQuote\(p\.data\)/);
+  assert.doesNotMatch(template, /<button class="quote-card"/);
   assert.match(template, /quote-form-actions/);
   assert.match(template, /\/cotizaciones\/api\/workspace/);
   assert.match(router, /post\("\/api\/cotizaciones"/);
   assert.match(router, /put\("\/api\/cotizaciones\/:id"/);
+  assert.match(service, /conceptosGestionadosPor: "plataforma"/);
+  assert.match(service, /persistedQuoteRow\.CONCEPTOS = ""/);
+  assert.match(service, /cachedBranchPrices/);
+  assert.match(service, /notifyLocalReplicas/);
+  assert.match(service, /writeAppSheetRowsPartitioned/);
+  assert.doesNotMatch(service, /waitForGeneratedConcepts/);
+  assert.doesNotMatch(template, /await loadWorkspace\(\);await loadQuote/);
+  assert.doesNotMatch(template, /await loadQuote\(p\.data\.id\)/);
   assert.doesNotMatch(menu, /label: "Facturacion"/);
 });

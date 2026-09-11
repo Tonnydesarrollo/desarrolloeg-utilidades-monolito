@@ -26,6 +26,9 @@ const appsheetAgent = new https.Agent({
 const cachedTables = new Map();
 const cachedCotizacionesCompletas = new Map();
 let cotizacionesWarmupStarted = false;
+let cachedBranchPrices = null;
+let cachedBranchPricesPromise = null;
+let cachedBranchPricesExpiresAt = 0;
 
 const TABLE_CACHE_NAMESPACES = {
   COTIZACIONES_VARIOS_CT: "facturacion.tables.cotizaciones_varios_ct",
@@ -58,6 +61,12 @@ export function invalidateFacturacionCaches(tableNames = []) {
   if (tables.some((tableName) => ["COTIZACIONES_VARIOS_CT", "CONCEPTOS_VARIOS_CT"].includes(tableName))) {
     cachedCotizacionesCompletas.clear();
     deletePersistentCacheNamespace(COTIZACION_CACHE_NAMESPACE);
+  }
+
+  if (tables.includes("SUCURSALES")) {
+    cachedBranchPrices = null;
+    cachedBranchPricesPromise = null;
+    cachedBranchPricesExpiresAt = 0;
   }
 
   cotizacionesWarmupStarted = false;
@@ -411,6 +420,8 @@ export async function mapaSucursales(forceFresh = false) {
       empresaId: r.EMPRESA || r["ID EMPRESA"] || "",
       municipioId: r.MUNICIPIO || "",
       estadoId: r.ESTADO || "",
+      precioEstatal: r["PRECIO ESTATAL"] ?? r.PRECIO_ESTATAL ?? "",
+      precioMunicipal: r["PRECIO MUNICIPAL"] ?? r.PRECIO_MUNICIPAL ?? "",
       municipio: mun,
       estado: est
     };
@@ -643,7 +654,7 @@ function normalizeIds(values) {
 }
 
 async function writeAppSheetRows(tableName, action, rows) {
-  if (!rows.length) return;
+  if (!rows.length && action !== "Find") return { Rows: [] };
   const APP_ID = process.env.APPSHEET_APP_ID;
   const API_KEY = process.env.APPSHEET_API_KEY;
   if (!APP_ID || !API_KEY) throw new Error("Google AppSheet no esta configurado en este entorno.");
@@ -653,12 +664,41 @@ async function writeAppSheetRows(tableName, action, rows) {
     headers: { ApplicationAccessKey: API_KEY, "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
       Action: action,
-      Properties: { Locale: "es-MX", Timezone: "America/Chihuahua" },
+      Properties: { Locale: "en-US", Timezone: "America/Chihuahua" },
       Rows: rows,
     }),
   }));
   const body = await response.text();
-  if (!response.ok) throw new Error(`${tableName} ${action}: ${response.status} ${body}`);
+  if (!response.ok) {
+    const invalidEnumMatch = body.match(/Invalid value for column\s+([A-Z0-9_ ]+):/i);
+    if (tableName === "COTIZACIONES_VARIOS_CT" && invalidEnumMatch) {
+      const column = invalidEnumMatch[1].trim();
+      const error = new Error(
+        `AppSheet rechazo ${column}. En COTIZACIONES_VARIOS_CT conserva el selector en Suggested values y cambia `
+        + "el Valid_If del EnumList a una expresion booleana que valide [_THIS] contra esa lista.",
+      );
+      error.code = "APPSHEET_ENUMLIST_VALIDATION";
+      error.column = column;
+      throw error;
+    }
+    throw new Error(`${tableName} ${action}: ${response.status} ${body}`);
+  }
+  if (!body.trim()) return { Rows: [] };
+  try {
+    return JSON.parse(body);
+  } catch {
+    return { Rows: [] };
+  }
+}
+
+async function writeAppSheetRowsPartitioned(tableName, action, rows) {
+  if (!rows.length) return [];
+  const partitionCount = Math.min(APPSHEET_MAX_CONCURRENCY, rows.length);
+  if (partitionCount <= 1) return [await writeAppSheetRows(tableName, action, rows)];
+
+  const partitions = Array.from({ length: partitionCount }, () => []);
+  rows.forEach((row, index) => partitions[index % partitionCount].push(row));
+  return Promise.all(partitions.map((partition) => writeAppSheetRows(tableName, action, partition)));
 }
 
 async function notifyLocalReplica(table, action, row, before = {}) {
@@ -678,25 +718,144 @@ async function notifyLocalReplica(table, action, row, before = {}) {
   }
 }
 
-export function quoteRowFromInput(input, quoteId) {
+async function notifyLocalReplicas(events = [], concurrency = 6) {
+  const pending = [...events];
+  const workerCount = Math.min(Math.max(1, concurrency), pending.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (pending.length > 0) {
+      const event = pending.shift();
+      await notifyLocalReplica(event.table, event.action, event.row, event.before);
+    }
+  }));
+}
+
+function enumListValue(values) {
+  return normalizeIds(values).join(" , ");
+}
+
+function conceptIdsFromInput(input) {
+  const source = Array.isArray(input.lineas) ? input.lineas : input.conceptos;
+  return normalizeIds((Array.isArray(source) ? source : []).map((item) => (
+    item?.conceptoId || item?.id
+  )));
+}
+
+function formatAppSheetDate(value) {
+  const normalized = String(value || "").trim();
+  const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return isoMatch ? `${isoMatch[2]}/${isoMatch[3]}/${isoMatch[1]}` : normalized;
+}
+
+export function quoteRowFromInput(input, quoteId, branchesById = {}) {
   const centers = normalizeIds(input.centrosTrabajo);
+  const concepts = conceptIdsFromInput(input);
   const recipient = String(input.empresaId || input.destinatario || "").trim();
   if (!recipient) throw new Error("Selecciona una empresa o captura el destinatario.");
   if (!centers.length) throw new Error("Selecciona al menos un centro de trabajo.");
+  if (!concepts.length) throw new Error("Selecciona al menos un concepto.");
   if (!String(input.proveedorId || "").trim()) throw new Error("Selecciona quien firma la cotizacion.");
+
+  const selectedBranches = centers.map((centerId) => branchesById[centerId]).filter(Boolean);
+  const states = normalizeIds([
+    ...(Array.isArray(input.estados) ? input.estados : []),
+    ...selectedBranches.map((branch) => branch.estadoId),
+  ]);
+  const municipalities = normalizeIds([
+    ...(Array.isArray(input.municipios) ? input.municipios : []),
+    ...selectedBranches.map((branch) => branch.municipioId),
+  ]);
+
   return {
-    "Row ID": quoteId,
+    ...(quoteId ? { "Row ID": quoteId } : {}),
     "RAZON SOCIAL": recipient,
-    // AppSheet REST rejects multi-value EnumLists that have a Valid_If expression.
-    // Every selected center remains represented by its CONCEPTOS_VARIOS_CT rows.
-    "CENTROS_DE_TRABAJO": centers[0],
+    ESTADOS: enumListValue(states),
+    MUNICIPIOS: enumListValue(municipalities),
+    "CENTROS_DE_TRABAJO": enumListValue(centers),
+    CONCEPTOS: enumListValue(concepts),
     PROVEEDOR: String(input.proveedorId).trim(),
-    FECHA: String(input.fecha || new Date().toISOString().slice(0, 10)).trim(),
+    FECHA: formatAppSheetDate(input.fecha || new Date().toISOString().slice(0, 10)),
   };
 }
 
-export function conceptRowsFromInput(input, quoteId) {
+function conceptPriceForCenter(concept, centerId, branchesById, catalogById) {
+  const conceptId = String(concept.id || concept.conceptoId || "").trim();
+  const catalogConcept = catalogById[conceptId] || {};
+  const conceptName = normalizeLookupText(catalogConcept.nombre || concept.nombre || "");
+  const branch = branchesById[centerId] || {};
+
+  // A manual value always wins. New rows explicitly send false while the
+  // price remains automatic, preserving compatibility with older clients.
+  if (concept.precioManual !== false) return normalizeNumber(concept.precio, 0);
+  if (conceptName === "PAGO DE DERECHOS ESTATAL" && branch.precioEstatal !== "") {
+    return normalizeNumber(branch.precioEstatal, 0);
+  }
+  if (conceptName === "PAGO DE DERECHOS MUNICIPAL" && branch.precioMunicipal !== "") {
+    return normalizeNumber(branch.precioMunicipal, 0);
+  }
+  return normalizeNumber(concept.precio, normalizeNumber(catalogConcept.precioSugerido, 0));
+}
+
+async function loadBranchPrices() {
+  const now = Date.now();
+  if (cachedBranchPrices && cachedBranchPricesExpiresAt > now) return cachedBranchPrices;
+  if (cachedBranchPricesPromise) return cachedBranchPricesPromise;
+
+  cachedBranchPricesPromise = writeAppSheetRows("SUCURSALES", "Find", [])
+    .then((result) => {
+      const rows = Array.isArray(result) ? result : result?.Rows || [];
+      const pricesById = new Map();
+      rows.forEach((row) => {
+        const centerId = String(row.ID || row["Row ID"] || "").trim();
+        if (!centerId) return;
+        pricesById.set(centerId, {
+          precioEstatal: row["PRECIO ESTATAL"] ?? row.PRECIO_ESTATAL ?? "",
+          precioMunicipal: row["PRECIO MUNICIPAL"] ?? row.PRECIO_MUNICIPAL ?? "",
+        });
+      });
+      cachedBranchPrices = pricesById;
+      cachedBranchPricesExpiresAt = Date.now() + APPSHEET_CACHE_TTL_MS;
+      return pricesById;
+    })
+    .finally(() => {
+      cachedBranchPricesPromise = null;
+    });
+  return cachedBranchPricesPromise;
+}
+
+async function hydrateRequiredBranchPrices(input, branchesById, catalogById) {
+  if (!Array.isArray(input.conceptos)) return;
+  const selectedConceptNames = input.conceptos.map((concept) => {
+    const conceptId = String(concept.id || concept.conceptoId || "").trim();
+    return normalizeLookupText(catalogById[conceptId]?.nombre || concept.nombre || "");
+  });
+  const needsStatePrice = selectedConceptNames.includes("PAGO DE DERECHOS ESTATAL");
+  const needsMunicipalPrice = selectedConceptNames.includes("PAGO DE DERECHOS MUNICIPAL");
+  if (!needsStatePrice && !needsMunicipalPrice) return;
+
+  const centerIds = normalizeIds(input.centrosTrabajo);
+  const hasMissingPrice = centerIds.some((centerId) => {
+    const branch = branchesById[centerId] || {};
+    return (needsStatePrice && String(branch.precioEstatal ?? "").trim() === "")
+      || (needsMunicipalPrice && String(branch.precioMunicipal ?? "").trim() === "");
+  });
+  if (!hasMissingPrice) return;
+
+  // Los precios son columnas calculadas de AppSheet y pueden no estar todavia
+  // materializados en SQLite. Se consultan solo al crear conceptos de derechos.
+  const pricesById = await loadBranchPrices();
+  centerIds.forEach((centerId) => {
+    const prices = pricesById.get(centerId);
+    if (!prices) return;
+    branchesById[centerId] ||= { id: centerId };
+    branchesById[centerId].precioEstatal = prices.precioEstatal;
+    branchesById[centerId].precioMunicipal = prices.precioMunicipal;
+  });
+}
+
+export function conceptRowsFromInput(input, quoteId, context = {}) {
   const centers = normalizeIds(input.centrosTrabajo);
+  const branchesById = context.branchesById || {};
+  const catalogById = context.catalogById || {};
   if (Array.isArray(input.lineas)) {
     return input.lineas.map((line) => ({
       "Row ID": String(line.id || "").trim() || createRowId(),
@@ -715,16 +874,24 @@ export function conceptRowsFromInput(input, quoteId) {
     CENTRO_DE_TRABAJO: centerId,
     CONCEPTO: String(concept.id || concept.conceptoId || "").trim(),
     CANTIDAD: Math.max(0, normalizeNumber(concept.cantidad, 1)),
-    PRECIO: Math.max(0, normalizeNumber(concept.precio, 0)),
+    PRECIO: Math.max(0, conceptPriceForCenter(concept, centerId, branchesById, catalogById)),
     IVA: Math.max(0, normalizeNumber(concept.iva, 0.16)),
   }))).filter((line) => line.CONCEPTO);
 }
 
 export async function guardarCotizacion(input = {}, quoteId = "") {
-  const id = String(quoteId || input.id || "").trim() || createRowId();
+  const startedAt = Date.now();
+  const timings = {};
+  const mark = (stage) => {
+    timings[stage] = Date.now() - startedAt;
+  };
+  let id = String(quoteId || input.id || "").trim();
   const existing = quoteId ? await obtenerCotizacion(id) : null;
-  const quoteRow = quoteRowFromInput(input, id);
-  const desiredConceptRows = conceptRowsFromInput(input, id);
+  const [branchesById, catalogById] = await Promise.all([mapaSucursales(), mapaCatalogo()]);
+  await hydrateRequiredBranchPrices(input, branchesById, catalogById);
+  mark("preparacion");
+  const quoteRow = quoteRowFromInput(input, id, branchesById);
+  let desiredConceptRows = conceptRowsFromInput(input, id, { branchesById, catalogById });
   if (!desiredConceptRows.length) throw new Error("Selecciona al menos un concepto.");
   const centersWithoutConcepts = normalizeIds(input.centrosTrabajo).filter((centerId) => (
     !desiredConceptRows.some((row) => row.CENTRO_DE_TRABAJO === centerId)
@@ -741,22 +908,114 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
   const deleted = currentConceptRows.filter((row) => !desiredIds.has(String(row["Row ID"] || row.ID)));
   const quoteAction = existing ? "Edit" : "Add";
 
-  await writeAppSheetRows("COTIZACIONES_VARIOS_CT", quoteAction, [quoteRow]);
-  try {
-    await writeAppSheetRows("CONCEPTOS_VARIOS_CT", "Add", added);
-    await writeAppSheetRows("CONCEPTOS_VARIOS_CT", "Edit", edited);
-    await writeAppSheetRows("CONCEPTOS_VARIOS_CT", "Delete", deleted.map((row) => ({ "Row ID": row["Row ID"] || row.ID })));
-  } catch (error) {
-    if (!existing) await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Delete", [{ "Row ID": id }]).catch(() => {});
-    throw error;
+  let quoteResult;
+  let persistedQuoteRow = quoteRow;
+  if (!existing) {
+    const firstCenterId = normalizeIds(input.centrosTrabajo)[0];
+    const firstConceptId = conceptIdsFromInput(input)[0];
+    persistedQuoteRow = quoteRowFromInput({
+      ...input,
+      centrosTrabajo: [firstCenterId],
+      conceptos: [{ id: firstConceptId }],
+      lineas: undefined,
+    }, "", branchesById);
+    // En altas de la plataforma CONCEPTOS queda vacio intencionalmente. Asi el
+    // bot reservado para AppSheet no procesa la fila y el backend crea todos
+    // los hijos en una sola operacion, sin esperas ni duplicados.
+    persistedQuoteRow.CONCEPTOS = "";
+    quoteResult = await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Add", [persistedQuoteRow]);
+  } else {
+    quoteResult = await writeAppSheetRows("COTIZACIONES_VARIOS_CT", quoteAction, [quoteRow]);
+  }
+  mark("cabeceraAppSheet");
+
+  if (!existing) {
+    const createdQuote = quoteResult?.Rows?.[0] || {};
+    id = String(createdQuote["Row ID"] || createdQuote.ID || "").trim();
+    if (!id) throw new Error("AppSheet creo la cotizacion pero no devolvio su Row ID.");
+    desiredConceptRows = conceptRowsFromInput(input, id, { branchesById, catalogById });
+    try {
+      await writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Add", desiredConceptRows);
+    } catch (error) {
+      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Delete", [{ "Row ID": id }]).catch(() => {});
+      throw error;
+    }
+    mark("conceptosAppSheet");
+
+    await notifyLocalReplica("COTIZACIONES_VARIOS_CT", quoteAction, {
+      ...persistedQuoteRow,
+      ...createdQuote,
+      "Row ID": id,
+    });
+    await notifyLocalReplicas(desiredConceptRows.map((row) => ({
+      table: "CONCEPTOS_VARIOS_CT",
+      action: "Add",
+      row,
+    })));
+    mark("replicaLocal");
+    invalidateFacturacionCaches(["COTIZACIONES_VARIOS_CT", "CONCEPTOS_VARIOS_CT"]);
+    console.info(`[cotizaciones] alta ${id}: ${JSON.stringify(timings)}`);
+    return {
+      id,
+      created: true,
+      conceptos: desiredConceptRows.length,
+      conceptosEsperados: desiredConceptRows.length,
+      conceptosGestionadosPor: "plataforma",
+      duracionesMs: timings,
+      lineas: desiredConceptRows.map((row) => ({
+        id: row["Row ID"],
+        centroTrabajoId: row.CENTRO_DE_TRABAJO,
+        conceptoId: row.CONCEPTO,
+        cantidad: row.CANTIDAD,
+        precio: row.PRECIO,
+        iva: row.IVA,
+      })),
+    };
   }
 
+  try {
+    await Promise.all([
+      writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Add", added),
+      writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Edit", edited),
+      writeAppSheetRowsPartitioned(
+        "CONCEPTOS_VARIOS_CT",
+        "Delete",
+        deleted.map((row) => ({ "Row ID": row["Row ID"] || row.ID })),
+      ),
+    ]);
+  } catch (error) {
+    throw error;
+  }
+  mark("conceptosAppSheet");
+
   await notifyLocalReplica("COTIZACIONES_VARIOS_CT", quoteAction, quoteRow, existing || {});
-  for (const row of added) await notifyLocalReplica("CONCEPTOS_VARIOS_CT", "Add", row);
-  for (const row of edited) await notifyLocalReplica("CONCEPTOS_VARIOS_CT", "Edit", row, currentById.get(row["Row ID"]));
-  for (const row of deleted) await notifyLocalReplica("CONCEPTOS_VARIOS_CT", "Delete", {}, row);
+  await notifyLocalReplicas([
+    ...added.map((row) => ({ table: "CONCEPTOS_VARIOS_CT", action: "Add", row })),
+    ...edited.map((row) => ({
+      table: "CONCEPTOS_VARIOS_CT",
+      action: "Edit",
+      row,
+      before: currentById.get(row["Row ID"]),
+    })),
+    ...deleted.map((row) => ({ table: "CONCEPTOS_VARIOS_CT", action: "Delete", row: {}, before: row })),
+  ]);
+  mark("replicaLocal");
   invalidateFacturacionCaches(["COTIZACIONES_VARIOS_CT", "CONCEPTOS_VARIOS_CT"]);
-  return { id, created: !existing, conceptos: desiredConceptRows.length };
+  console.info(`[cotizaciones] edicion ${id}: ${JSON.stringify(timings)}`);
+  return {
+    id,
+    created: !existing,
+    conceptos: desiredConceptRows.length,
+    duracionesMs: timings,
+    lineas: desiredConceptRows.map((row) => ({
+      id: row["Row ID"],
+      centroTrabajoId: row.CENTRO_DE_TRABAJO,
+      conceptoId: row.CONCEPTO,
+      cantidad: row.CANTIDAD,
+      precio: row.PRECIO,
+      iva: row.IVA,
+    })),
+  };
 }
 
 export function prewarmCotizacionesCaches() {
@@ -773,6 +1032,7 @@ export function prewarmCotizacionesCaches() {
       mapaSucursales(),
       mapaCatalogo(),
       mapaProveedores(),
+      loadBranchPrices(),
     ]);
   }, 1500);
 }
