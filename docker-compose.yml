@@ -19,6 +19,7 @@ services:
       NODE_ENV: production
       APP_ENVIRONMENT: prod
       PORT: 7000
+      COMPANY_ADDRESS: ${COMPANY_ADDRESS:-Río Tehuantepec 1704-1, Morelos, Los Pinos, 80170 Culiacán Rosales, Sin.}
       PUBLICIMG_PATH: /app/publicimg
       FACTURACION_GOOGLE_CREDENTIALS_PATH: /app/secrets/facturacion/credentials.json
       FACTURACION_GOOGLE_TOKEN_PATH: /app/runtime/facturacion/token.json
@@ -94,6 +95,7 @@ services:
       NODE_ENV: production
       APP_ENVIRONMENT: qa
       PORT: 7001
+      COMPANY_ADDRESS: ${COMPANY_ADDRESS:-Río Tehuantepec 1704-1, Morelos, Los Pinos, 80170 Culiacán Rosales, Sin.}
       CLUSTER_ENABLED: 0
       CLUSTER_PUBLIC_HEALTH_URL: https://qa.apps.desarrolloeg.com/health
       PORTAL_SESSION_COOKIE_NAME: desarrolloeg_portal_session_qa

@@ -3,9 +3,7 @@
   "companySubtitle": "",
   "logoPath": "../assets/logo.png",
   "footerLeftLines": [
-    "Rio Tehuantepec 1704-1, Morelos,",
-    "Los Pinos, 80170 Culiacan Rosales,",
-    "Sin."
+    "La dirección se obtiene de COMPANY_ADDRESS"
   ],
   "footerRightLines": [
     "WhatsApp: (667) 305 9813",

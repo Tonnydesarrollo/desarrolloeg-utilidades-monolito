@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import puppeteer from "puppeteer-core";
+import { getCompanyAddress } from "../../config/company.js";
 import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -563,7 +564,6 @@ function buildReportSummary(selectedBranch, inspections, dataset) {
 const COMPANY_BRANDING = {
   legalName: "González Gámez y Asociados",
   rfc: "GGA230218GL3",
-  address: "Río Tehuantepec 1397, Local 6, Col. Morelos, C.P. 80170, Culiacán Rosales, Sinaloa.",
   contact: "WhatsApp: (667) 305 9813 · Cel: (667) 495 0697 · Oficina: (667) 690 2218",
   logoUrl: "https://drive.google.com/thumbnail?id=15YmFa3PwCXcZCdgzrtlFGcdIGXXF0XvL&sz=w400",
 };
@@ -572,7 +572,7 @@ let companyLogoPromise = null;
 
 async function getCompanyBranding() {
   companyLogoPromise ||= remoteUrlToDataUri(COMPANY_BRANDING.logoUrl).catch(() => "");
-  return { ...COMPANY_BRANDING, logo: await companyLogoPromise };
+  return { ...COMPANY_BRANDING, address: getCompanyAddress(), logo: await companyLogoPromise };
 }
 
 function buildReportHtml({ selectedBranch, inspections, summary, branding }) {

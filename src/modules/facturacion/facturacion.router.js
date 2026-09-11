@@ -1,5 +1,6 @@
 import express from "express";
 import fetch from "node-fetch";
+import { getCompanyAddress } from "../../config/company.js";
 import driveRoutes from "./routes/drive.js";
 import { construirDataHTML } from "./services/construirDataHTML.js";
 import {
@@ -226,7 +227,10 @@ cotizacionesRouter.get("/cotizacion/:id/html", async (req, res) => {
     const data = construirDataHTML(json);
     const empresaId = String(json.empresaId || "").trim();
     const usarPlantillaLey = empresaId === "1" || empresaId === "25";
-    res.render(usarPlantillaLey ? "cotizacion_ley" : "cotizacion", { data });
+    res.render(usarPlantillaLey ? "cotizacion_ley" : "cotizacion", {
+      data,
+      companyAddress: getCompanyAddress(),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).send("Error");

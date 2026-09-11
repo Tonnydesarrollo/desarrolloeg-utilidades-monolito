@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import puppeteer from "puppeteer-core";
+import { getCompanyAddressLines } from "../../src/config/company.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -471,6 +472,7 @@ async function main() {
 
   const row = matches[0];
   const branding = await loadJson(args.branding, "branding");
+  branding.footerLeftLines = getCompanyAddressLines();
 
   await ensureFile(args.template, "plantilla principal");
   await ensureFile(args.body, "cuerpo del documento");

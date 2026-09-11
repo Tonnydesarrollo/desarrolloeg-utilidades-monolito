@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import puppeteer from "puppeteer-core";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { getCompanyAddressLines } from "../../config/company.js";
 import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -710,6 +711,7 @@ function normalizeEditableFields(fields = {}) {
 async function loadBranding(config) {
   await ensureFile(config.brandingPath, "branding");
   const branding = JSON.parse(await fs.readFile(config.brandingPath, "utf8"));
+  branding.footerLeftLines = getCompanyAddressLines();
   const defaultLogoPath = path.join(standaloneRoot, "assets", "logo.png");
   const resolvedLogoPath = branding.logoPath
     ? path.isAbsolute(branding.logoPath)

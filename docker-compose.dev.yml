@@ -54,6 +54,7 @@ services:
       NODE_ENV: production
       APP_ENVIRONMENT: dev
       PORT: 7001
+      COMPANY_ADDRESS: ${COMPANY_ADDRESS:-Río Tehuantepec 1704-1, Morelos, Los Pinos, 80170 Culiacán Rosales, Sin.}
       CLUSTER_ENABLED: 0
       CLOUDFLARED_ENABLED: 0
       PORTAL_DEV_AUTH_BYPASS: 1

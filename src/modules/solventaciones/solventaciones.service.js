@@ -4,6 +4,7 @@ import path from "path";
 import https from "https";
 import { fileURLToPath } from "url";
 import sharp from "sharp";
+import { getCompanyAddress, getCompanyAddressLines } from "../../config/company.js";
 import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,11 +30,8 @@ const COMPANY_BRANDING = {
   companyName: "DESARROLLO EG",
   companySubtitle: "",
   logoUrl: "https://drive.google.com/thumbnail?id=15YmFa3PwCXcZCdgzrtlFGcdIGXXF0XvL&sz=w400",
-  footerLeftLines: [
-    "Rio Tehuantepec 1704-1, Morelos,",
-    "Los Pinos, 80170 Culiacan Rosales,",
-    "Sin.",
-  ],
+  address: getCompanyAddress(),
+  footerLeftLines: getCompanyAddressLines(),
   footerRightLines: [
     "WhatsApp: (667) 3059813",
     "Cel: (667) 3059813 y (667) 4950697",
