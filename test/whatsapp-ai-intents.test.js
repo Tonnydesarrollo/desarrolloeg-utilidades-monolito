@@ -6,6 +6,7 @@ import {
   isNaturalDriveRequest,
   isPendingConstanciasRequest,
   isSucursalInformationRequest,
+  scoreSucursalCandidate,
 } from "../src/modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
 
 test("detecta la consulta natural de constancias pendientes", () => {
@@ -34,4 +35,14 @@ test("detecta solicitudes de informacion general de sucursal sin confundir docum
   assert.equal(isSucursalInformationRequest("Quiero informacion de la tienda 1366"), true);
   assert.equal(isSucursalInformationRequest("Dame los datos de la sucursal Mendoza"), true);
   assert.equal(isSucursalInformationRequest("Dame el link de Drive de la tienda 1366"), false);
+});
+
+test("prioriza un numero de tienda incluido en una frase completa", () => {
+  const score = scoreSucursalCandidate("Dame informacion sobre la tienda 1002", {
+    tienda: "1002",
+    key: "1",
+    searchText: "casa ley ley 1002 rubi",
+    tokens: ["casa", "ley", "1002", "rubi"],
+  });
+  assert.equal(score, 1);
 });

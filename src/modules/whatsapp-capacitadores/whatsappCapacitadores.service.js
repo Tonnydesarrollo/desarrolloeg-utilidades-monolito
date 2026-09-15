@@ -249,16 +249,20 @@ function getFieldValues(row, fields) {
     .filter(Boolean);
 }
 
-function scoreSucursalCandidate(query, candidate) {
+export function scoreSucursalCandidate(query, candidate) {
   const normalizedQuery = normalizeText(query);
   const searchText = candidate.searchText || "";
   if (!normalizedQuery || !searchText) return 0;
+
+  const queryTokens = splitWords(normalizedQuery);
+  if (candidate.tienda && queryTokens.includes(normalizeText(candidate.tienda))) return 1;
+  if (candidate.key && queryTokens.includes(normalizeText(candidate.key))) return 0.99;
 
   let score = 0;
   const exactText = stringSimilarity(normalizedQuery, searchText);
   score = Math.max(score, exactText * 0.8);
 
-  for (const token of splitWords(normalizedQuery)) {
+  for (const token of queryTokens) {
     if (!token) continue;
     if (searchText.includes(token)) {
       score += 0.16;
@@ -278,7 +282,7 @@ function scoreSucursalCandidate(query, candidate) {
     }
   }
 
-  const normalizedTokens = splitWords(normalizedQuery);
+  const normalizedTokens = queryTokens;
   if (normalizedTokens.length) {
     const hits = normalizedTokens.filter((token) => searchText.includes(token)).length;
     score += (hits / normalizedTokens.length) * 0.18;
@@ -1554,14 +1558,36 @@ export function isSucursalInformationRequest(text) {
 async function handleSucursalInformationRequest(client, jid, text, identity) {
   const normalized = normalizeText(text);
   const isGeneralFollowUp = /^(informacion general|general|datos generales|detalles generales)$/.test(normalized);
-  if (!isSucursalInformationRequest(text) && !(isGeneralFollowUp && sucursalInformationContext.has(jid))) return false;
+  const previous = sucursalInformationContext.get(jid) || null;
+  const isSearchFollowUp = Boolean(previous?.candidates?.length);
+  if (!isSucursalInformationRequest(text) && !(isGeneralFollowUp && previous?.candidate) && !isSearchFollowUp) return false;
   if (!hasSucursalDocumentAccess(identity)) {
     await client.sendMessage(jid, "No tienes permiso para consultar informacion de sucursales.");
     return true;
   }
 
   let candidate = null;
-  if (isGeneralFollowUp) candidate = sucursalInformationContext.get(jid) || null;
+  if (isGeneralFollowUp) candidate = previous?.candidate || null;
+  if (isSearchFollowUp) {
+    const choice = Number.parseInt(normalized, 10);
+    if (/^\d+$/.test(normalized) && choice >= 1 && choice <= previous.candidates.length) {
+      candidate = previous.candidates[choice - 1];
+    } else {
+      const clarified = previous.candidates
+        .map((item) => ({ ...item, score: scoreSucursalCandidate(text, item) }))
+        .sort((left, right) => right.score - left.score);
+      if (clarified[0]?.score >= 0.35 && (!clarified[1] || clarified[0].score - clarified[1].score >= 0.08)) {
+        [candidate] = clarified;
+      } else {
+        const freshMatches = await findSucursalCandidates(text);
+        if (freshMatches[0] && isStrongSucursalMatch(freshMatches[0], freshMatches[1])) [candidate] = freshMatches;
+      }
+    }
+    if (!candidate) {
+      await client.sendMessage(jid, `No pude identificar la opcion. Responde con el numero o nombre:\n${formatSucursalChoices(previous.candidates)}`);
+      return true;
+    }
+  }
   if (!candidate) {
     const matches = await findSucursalCandidates(text);
     if (!matches.length) {
@@ -1569,13 +1595,14 @@ async function handleSucursalInformationRequest(client, jid, text, identity) {
       return true;
     }
     if (!isStrongSucursalMatch(matches[0], matches[1])) {
+      sucursalInformationContext.set(jid, { candidates: matches });
       await client.sendMessage(jid, `Encontre varias sucursales. Indica una opcion:\n${formatSucursalChoices(matches)}`);
       return true;
     }
     [candidate] = matches;
   }
 
-  sucursalInformationContext.set(jid, candidate);
+  sucursalInformationContext.set(jid, { candidate });
   aiConversationContext.delete(jid);
   const record = buildSucursalContextRecord(candidate);
   const location = uniqueDisplayParts([record.municipio, record.estado]).join(", ") || "No registrada";
