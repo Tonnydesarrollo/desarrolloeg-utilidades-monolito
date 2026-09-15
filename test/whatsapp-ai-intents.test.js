@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  isBulkPendingAttendanceRequest,
   isNaturalDriveRequest,
   isPendingConstanciasRequest,
 } from "../src/modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
@@ -10,6 +11,13 @@ test("detecta la consulta natural de constancias pendientes", () => {
   assert.equal(isPendingConstanciasRequest("Dame la lista de constancias pendientes de Gilberto"), true);
   assert.equal(isPendingConstanciasRequest("Cuales son mis diplomas faltantes?"), true);
   assert.equal(isPendingConstanciasRequest("Siguientes capacitaciones"), false);
+});
+
+test("detecta la solicitud compuesta de listas pendientes por capacitador", () => {
+  assert.equal(
+    isBulkPendingAttendanceRequest("DAME TODAS LAS LISTAS DE ASISTENCIA DE TODAS LAS SUCURSALES QUE ESTAN PEDNIENTES DE CONSTANCIA Y QUE FUERON CAPACITADAS POR GILBERTO"),
+    true
+  );
 });
 
 test("detecta solicitudes de documentos de sucursal", () => {

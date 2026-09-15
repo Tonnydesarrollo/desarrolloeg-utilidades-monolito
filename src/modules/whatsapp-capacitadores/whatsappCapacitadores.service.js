@@ -1441,6 +1441,14 @@ export function isNaturalDriveRequest(text) {
   return mentionsDocument && identifiesBranch;
 }
 
+export function isBulkPendingAttendanceRequest(text) {
+  const normalized = normalizeText(text);
+  return /\blistas? de asistencia\b/.test(normalized)
+    && /\b(todas|todos|cada)\b/.test(normalized)
+    && /\bconstancias?\b/.test(normalized)
+    && /\b(capacitada|capacitadas|capacitado|capacitados|capacitador|capacitadora)\b/.test(normalized);
+}
+
 function extractRequestedDocumentQuery(text) {
   const normalized = normalizeText(text);
   const knownTypes = [
@@ -1613,6 +1621,88 @@ async function sendSelectedDriveDocuments(client, jid, files) {
       await client.sendMessage(jid, `No pude enviar ${file.name}: ${error?.message || "error de lectura"}`);
     }
   }
+}
+
+async function handleBulkPendingAttendanceRequest(client, jid, text, identity) {
+  if (!isBulkPendingAttendanceRequest(text)) return false;
+  const constanciasPermission = identity?.accessProfile?.views?.["constancias-faltantes"];
+  if (!constanciasPermission?.actions?.includes("view") || !hasSucursalDocumentAccess(identity)) {
+    await client.sendMessage(jid, "No tienes permiso para consultar constancias y documentos de sucursales.");
+    return true;
+  }
+
+  const config = ensureRuntimeConfig();
+  const [rows, employees, sucursales] = await Promise.all([
+    loadCapacitacionesRows(),
+    loadEmployeesCache(),
+    loadSucursalesCache(),
+  ]);
+  const mentionedIds = findMentionedEmployeeIds(text, employees.nameByKey);
+  if (!mentionedIds.length) {
+    await client.sendMessage(jid, "No encontre al capacitador mencionado.");
+    return true;
+  }
+
+  const employeeId = String(identity?.id || "");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const pendingRows = rows.filter((row) => {
+    const assignedIds = new Set(splitEnumList(row[config.capacitacionesCapacitadoresCol]).map(String));
+    const isAuthorized = identity?.role === "admin" || assignedIds.has(employeeId);
+    const isTarget = mentionedIds.some((id) => assignedIds.has(id));
+    const date = parseBusinessDate(row[config.capacitacionesDateCol]);
+    return isAuthorized && isTarget && !Number.isNaN(date.getTime()) && date < today && !readBooleanValue(row.DIPLOMAS);
+  });
+
+  const sucursalIds = [...new Set(pendingRows.flatMap((row) => (
+    splitEnumList(row[config.capacitacionesSucursalesCol]).map(String)
+  )))];
+  const sucursalesById = new Map(sucursales.rows.map((row) => [String(row.key), row]));
+  const targetNames = mentionedIds.map((id) => employees.nameByKey.get(id)).filter(Boolean).join(", ");
+  await client.sendMessage(jid, `Buscando listas de asistencia de ${sucursalIds.length} sucursales con constancias pendientes de ${targetNames || "el capacitador"}.`);
+
+  const foundFiles = [];
+  const missing = [];
+  const seenFileIds = new Set();
+  for (const sucursalId of sucursalIds) {
+    const sucursal = sucursalesById.get(sucursalId);
+    const folderId = extractDriveId(sucursal?.drive);
+    if (!sucursal || !folderId) {
+      missing.push(sucursal ? buildSucursalDisplay(sucursal) : `Sucursal sin etiqueta (${sucursalId})`);
+      continue;
+    }
+    try {
+      const files = await listSucursalDriveDocuments(folderId);
+      const matches = files.filter((file) => {
+        const name = normalizeText(file.path || file.name);
+        return name.includes("lista") && name.includes("asistencia");
+      });
+      if (!matches.length) {
+        missing.push(buildSucursalDisplay(sucursal));
+        continue;
+      }
+      for (const file of matches) {
+        if (seenFileIds.has(file.id)) continue;
+        seenFileIds.add(file.id);
+        foundFiles.push({ ...file, path: `${buildSucursalDisplay(sucursal)} / ${file.path || file.name}` });
+      }
+    } catch (error) {
+      getLogger().error({ error: error?.message || String(error), sucursalId }, "bulk attendance Drive search failed");
+      missing.push(buildSucursalDisplay(sucursal));
+    }
+  }
+
+  aiConversationContext.delete(jid);
+  if (!foundFiles.length) {
+    await client.sendMessage(jid, `No encontre listas de asistencia en las ${sucursalIds.length} sucursales pendientes de ${targetNames}.`);
+    return true;
+  }
+  await client.sendMessage(jid, `Encontre ${foundFiles.length} lista(s) de asistencia. Las enviare a continuacion.`);
+  await sendSelectedDriveDocuments(client, jid, foundFiles);
+  if (missing.length) {
+    await client.sendMessage(jid, `Sin lista de asistencia localizada (${missing.length}):\n${missing.map((name) => `- ${name}`).join("\n")}`.slice(0, 12000));
+  }
+  return true;
 }
 
 async function handleNaturalDriveRequest(client, jid, text, identity) {
@@ -2435,6 +2525,7 @@ async function handleText(client, jid, text, identity = null) {
   }
 
   if (await handleDriveLookupChoice(client, jid, text)) return;
+  if (await handleBulkPendingAttendanceRequest(client, jid, text, identity)) return;
   if (await handleNaturalDriveRequest(client, jid, text, identity)) return;
   if (await handlePendingConstanciasRequest(client, jid, text, identity)) return;
 
