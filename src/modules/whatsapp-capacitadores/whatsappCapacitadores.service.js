@@ -42,6 +42,7 @@ const menuContext = new Map();
 const uploadContext = new Map();
 const storePhotosContext = new Map();
 const archivoContext = new Map();
+const driveLookupContext = new Map();
 const aiConversationContext = new Map();
 
 const employeesCache = {
@@ -709,7 +710,7 @@ async function handleAiText(client, jid, text, identity) {
   const config = ensureRuntimeConfig();
   if (!config.aiServerUrl || !config.aiClientId || !config.aiClientToken) return false;
 
-  const businessContext = await buildAuthorizedAiContext(identity);
+  const businessContext = await buildAuthorizedAiContext(identity, text);
   const history = aiConversationContext.get(jid) || [];
   history.push({ role: "user", content: String(text).slice(0, 4000) });
   const messages = history.slice(-10);
@@ -738,7 +739,7 @@ async function handleAiText(client, jid, text, identity) {
   return true;
 }
 
-async function buildAuthorizedAiContext(identity) {
+async function buildAuthorizedAiContext(identity, queryText = "") {
   if (!identity || identity.role === "sin-acceso") {
     return { access: "denied", reason: "No se encontro un empleado con acceso autorizado." };
   }
@@ -799,11 +800,37 @@ async function buildAuthorizedAiContext(identity) {
       capacitadores: aiLabelList(row[config.capacitacionesCapacitadoresCol], "Sin capacitadores etiquetados"),
     }));
 
+  const constanciasPermission = views["constancias-faltantes"] || { actions: [], scope: "none" };
+  const mentionedEmployeeIds = identity.role === "admin"
+    ? findMentionedEmployeeIds(queryText, employeesCache.nameByKey)
+    : [];
+  const pendingRows = resolvedRows
+    .filter((row, index) => {
+      const rawRow = visibleRows[index];
+      const date = parseBusinessDate(rawRow[config.capacitacionesDateCol]);
+      if (Number.isNaN(date.getTime()) || date >= today || readBooleanValue(rawRow.DIPLOMAS)) return false;
+      if (!mentionedEmployeeIds.length) return true;
+      const assignedIds = new Set(splitEnumList(rawRow[config.capacitacionesCapacitadoresCol]).map(String));
+      return mentionedEmployeeIds.some((employeeId) => assignedIds.has(employeeId));
+    })
+    .sort((a, b) => parseBusinessDate(b[config.capacitacionesDateCol]) - parseBusinessDate(a[config.capacitacionesDateCol]));
+  const pendingConstancias = constanciasPermission.actions.includes("view")
+    ? pendingRows.slice(0, 50).map((row) => ({
+        fecha: formatAiDate(row[config.capacitacionesDateCol]),
+        sede: aiLabel(row[config.capacitacionesCedeCol], "Sede sin etiqueta"),
+        sucursales: aiLabelList(row[config.capacitacionesSucursalesCol], "Sin sucursales etiquetadas"),
+        capacitadores: aiLabelList(row[config.capacitacionesCapacitadoresCol], "Sin capacitadores etiquetados"),
+      }))
+    : [];
+
   const context = {
     generatedAt: new Date().toISOString(),
     employee: { nombre: identity.name, puesto: identity.position, rol: identity.role },
     authorizedModules,
     capacitaciones: { visibleTotal: visibleRows.length, proximas: upcoming },
+    constanciasPendientes: constanciasPermission.actions.includes("view")
+      ? { total: pendingRows.length, registros: pendingConstancias }
+      : { acceso: "sin permiso" },
   };
 
   if (identity.role === "admin") {
@@ -818,6 +845,20 @@ async function buildAuthorizedAiContext(identity) {
     };
   }
   return context;
+}
+
+function findMentionedEmployeeIds(queryText, namesByKey) {
+  const query = normalizeText(queryText);
+  if (!query) return [];
+  const matches = [];
+  for (const [employeeId, employeeName] of namesByKey.entries()) {
+    const normalizedName = normalizeText(employeeName);
+    const meaningfulParts = normalizedName.split(" ").filter((part) => part.length >= 4);
+    if (query.includes(normalizedName) || meaningfulParts.some((part) => query.includes(part))) {
+      matches.push(String(employeeId));
+    }
+  }
+  return matches;
 }
 
 function formatAiDate(value) {
@@ -856,12 +897,12 @@ function businessDateParts(raw) {
     const first = Number(localMatch[1]);
     const second = Number(localMatch[2]);
     year = Number(localMatch[3]);
-    if (second > 12 && first <= 12) {
-      month = first;
-      day = second;
-    } else {
+    if (first > 12 && second <= 12) {
       day = first;
       month = second;
+    } else {
+      month = first;
+      day = second;
     }
   }
   const candidate = new Date(Date.UTC(year, month - 1, day));
@@ -1316,6 +1357,88 @@ function formatSucursalChoices(matches) {
       return `${index + 1}. ${label}`;
     })
     .join("\n");
+}
+
+function hasSucursalDocumentAccess(identity) {
+  const permission = identity?.accessProfile?.views?.["informacion-sucursales"];
+  return Boolean(permission?.actions?.includes("view"));
+}
+
+function isNaturalDriveRequest(text) {
+  const normalized = normalizeText(text);
+  return /\b(DOCUMENTO|DOCUMENTOS|ARCHIVO|ARCHIVOS|DRIVE)\b/.test(normalized)
+    && /\b(SUCURSAL|TIENDA|DRIVE|DOCUMENTO|ARCHIVO)\b/.test(normalized);
+}
+
+function extractSucursalDocumentQuery(text) {
+  return String(text || "")
+    .replace(/\b(dame|envia(?:me)?|manda(?:me)?|comparte(?:me)?|necesito|quiero|busca(?:me)?|muestra(?:me)?)\b/gi, " ")
+    .replace(/\b(los|las|el|un|una|del|de|en|para|por|favor)\b/gi, " ")
+    .replace(/\b(documentos?|archivos?|drive|carpeta|sucursal|tienda)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function driveFolderLink(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw);
+    const structured = String(parsed?.Url || parsed?.url || "").trim();
+    if (structured) return structured;
+  } catch {
+    // Plain Drive URLs and folder IDs are expected here too.
+  }
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const folderId = extractDriveId(raw);
+  return folderId ? `https://drive.google.com/drive/folders/${folderId}` : "";
+}
+
+async function sendSucursalDriveLink(client, jid, candidate) {
+  const link = driveFolderLink(candidate?.drive);
+  if (!link) {
+    await client.sendMessage(jid, `La sucursal ${buildSucursalDisplay(candidate)} no tiene una carpeta de Drive configurada.`);
+    return;
+  }
+  await client.sendMessage(jid, `Documentos de ${buildSucursalDisplay(candidate)}:\n${link}`);
+}
+
+async function handleNaturalDriveRequest(client, jid, text, identity) {
+  if (!isNaturalDriveRequest(text)) return false;
+  if (!hasSucursalDocumentAccess(identity)) {
+    await client.sendMessage(jid, "No tienes permiso para consultar documentos de sucursales.");
+    return true;
+  }
+  const query = extractSucursalDocumentQuery(text);
+  if (!query) {
+    await client.sendMessage(jid, "Indica el nombre o numero de la sucursal cuyos documentos necesitas.");
+    return true;
+  }
+  const candidates = await findSucursalCandidates(query);
+  if (!candidates.length) {
+    await client.sendMessage(jid, "No encontre una sucursal con esa referencia. Escribe el nombre comercial o numero de tienda.");
+    return true;
+  }
+  if (candidates.length === 1 || isStrongSucursalMatch(candidates[0], candidates[1])) {
+    await sendSucursalDriveLink(client, jid, candidates[0]);
+    return true;
+  }
+  driveLookupContext.set(jid, candidates.slice(0, 3));
+  await client.sendMessage(jid, `Encontre varias sucursales. Responde 1, 2 o 3:\n${formatSucursalChoices(candidates)}`);
+  return true;
+}
+
+async function handleDriveLookupChoice(client, jid, text) {
+  const candidates = driveLookupContext.get(jid);
+  if (!candidates) return false;
+  const selection = Number(String(text || "").trim());
+  if (!Number.isInteger(selection) || selection < 1 || selection > candidates.length) {
+    driveLookupContext.delete(jid);
+    return false;
+  }
+  driveLookupContext.delete(jid);
+  await sendSucursalDriveLink(client, jid, candidates[selection - 1]);
+  return true;
 }
 
 function getArchivoContext(jid) {
@@ -2072,6 +2195,9 @@ async function handleText(client, jid, text, identity = null) {
     );
     return;
   }
+
+  if (await handleDriveLookupChoice(client, jid, text)) return;
+  if (await handleNaturalDriveRequest(client, jid, text, identity)) return;
 
   if (normalized === config.keywordCapacitaciones) {
     setMenuContext(jid);
