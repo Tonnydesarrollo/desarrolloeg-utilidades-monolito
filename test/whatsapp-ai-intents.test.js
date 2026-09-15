@@ -15,5 +15,7 @@ test("detecta la consulta natural de constancias pendientes", () => {
 test("detecta solicitudes de documentos de sucursal", () => {
   assert.equal(isNaturalDriveRequest("Dame los documentos de la sucursal Las Torres"), true);
   assert.equal(isNaturalDriveRequest("Busca archivos de la tienda 1197"), true);
+  assert.equal(isNaturalDriveRequest("Dame la lista de asistencia de la 1366"), true);
+  assert.equal(isNaturalDriveRequest("Necesito la DC3 de la sucursal 1240"), true);
   assert.equal(isNaturalDriveRequest("Dame las capacitaciones"), false);
 });

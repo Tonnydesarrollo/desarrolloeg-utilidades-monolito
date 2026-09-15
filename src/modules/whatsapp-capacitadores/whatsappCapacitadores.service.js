@@ -1430,14 +1430,35 @@ function hasSucursalDocumentAccess(identity) {
 
 export function isNaturalDriveRequest(text) {
   const normalized = normalizeText(text);
-  return /\b(documento|documentos|archivo|archivos|drive)\b/.test(normalized)
-    && /\b(sucursal|tienda|drive|documento|archivo)\b/.test(normalized);
+  const mentionsDocument = /\b(documento|documentos|archivo|archivos|drive|dc3|bitacora|bitacoras|inventario|cedula|cedulas|acta|actas|fotografia|fotografias)\b/.test(normalized)
+    || /\blista de asistencia\b/.test(normalized)
+    || /\breporte de servicio\b/.test(normalized);
+  const identifiesBranch = /\b(sucursal|tienda|drive|documento|archivo)\b/.test(normalized)
+    || /\b\d{3,}\b/.test(normalized);
+  return mentionsDocument && identifiesBranch;
+}
+
+function extractRequestedDocumentQuery(text) {
+  const normalized = normalizeText(text);
+  const knownTypes = [
+    "lista de asistencia",
+    "acta constitutiva",
+    "reporte de servicio",
+    "dc3",
+    "bitacora",
+    "inventario",
+    "cedula",
+    "fotografia",
+  ];
+  return knownTypes.find((type) => normalized.includes(type)) || "";
 }
 
 function extractSucursalDocumentQuery(text) {
   return String(text || "")
     .replace(/\b(dame|envia(?:me)?|manda(?:me)?|comparte(?:me)?|necesito|quiero|busca(?:me)?|muestra(?:me)?)\b/gi, " ")
-    .replace(/\b(los|las|el|un|una|del|de|en|para|por|favor)\b/gi, " ")
+    .replace(/\b(lista\s+de\s+asistencia|acta\s+constitutiva|reporte\s+de\s+servicio)\b/gi, " ")
+    .replace(/\b(los|las|la|el|un|una|del|de|en|para|por|favor)\b/gi, " ")
+    .replace(/\b(dc3|bitacoras?|inventarios?|cedulas?|fotografias?)\b/gi, " ")
     .replace(/\b(documentos?|archivos?|drive|carpeta|sucursal|tienda)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -1496,16 +1517,28 @@ async function listSucursalDriveDocuments(folderId, limit = 20) {
   return files;
 }
 
-async function presentSucursalDriveDocuments(client, jid, candidate) {
+async function presentSucursalDriveDocuments(client, jid, candidate, documentQuery = "") {
   const folderId = extractDriveId(candidate?.drive);
   if (!folderId) {
     await sendSucursalDriveLink(client, jid, candidate);
     return;
   }
   try {
-    const files = await listSucursalDriveDocuments(folderId);
+    const allFiles = await listSucursalDriveDocuments(folderId);
+    const queryTokens = normalizeText(documentQuery).split(" ").filter((token) => token.length >= 3);
+    const files = queryTokens.length
+      ? allFiles.filter((file) => {
+          const haystack = normalizeText(file.path || file.name);
+          return queryTokens.every((token) => haystack.includes(token));
+        })
+      : allFiles;
     if (!files.length) {
-      await client.sendMessage(jid, `No encontre archivos dentro de ${buildSucursalDisplay(candidate)}. Te comparto la carpeta para revisarla:\n${driveFolderLink(candidate.drive)}`);
+      const detail = documentQuery ? ` que coincidan con "${documentQuery}"` : "";
+      await client.sendMessage(jid, `No encontre archivos${detail} dentro de ${buildSucursalDisplay(candidate)}. Te comparto la carpeta para revisarla:\n${driveFolderLink(candidate.drive)}`);
+      return;
+    }
+    if (files.length === 1 && documentQuery) {
+      await sendSelectedDriveDocuments(client, jid, files);
       return;
     }
     driveLookupContext.set(jid, { step: "file", candidate, files });
@@ -1552,6 +1585,7 @@ async function handleNaturalDriveRequest(client, jid, text, identity) {
     return true;
   }
   const query = extractSucursalDocumentQuery(text);
+  const documentQuery = extractRequestedDocumentQuery(text);
   if (!query) {
     await client.sendMessage(jid, "Indica el nombre o numero de la sucursal cuyos documentos necesitas.");
     return true;
@@ -1562,10 +1596,10 @@ async function handleNaturalDriveRequest(client, jid, text, identity) {
     return true;
   }
   if (candidates.length === 1 || isStrongSucursalMatch(candidates[0], candidates[1])) {
-    await presentSucursalDriveDocuments(client, jid, candidates[0]);
+    await presentSucursalDriveDocuments(client, jid, candidates[0], documentQuery);
     return true;
   }
-  driveLookupContext.set(jid, { step: "branch", candidates: candidates.slice(0, 3) });
+  driveLookupContext.set(jid, { step: "branch", candidates: candidates.slice(0, 3), documentQuery });
   await client.sendMessage(jid, `Encontre varias sucursales. Responde 1, 2 o 3:\n${formatSucursalChoices(candidates)}`);
   return true;
 }
@@ -1586,7 +1620,7 @@ async function handleDriveLookupChoice(client, jid, text) {
   if (context.step === "file") {
     await sendSelectedDriveDocuments(client, jid, [context.files[selection - 1]]);
   } else {
-    await presentSucursalDriveDocuments(client, jid, context.candidates[selection - 1]);
+    await presentSucursalDriveDocuments(client, jid, context.candidates[selection - 1], context.documentQuery || "");
   }
   return true;
 }
