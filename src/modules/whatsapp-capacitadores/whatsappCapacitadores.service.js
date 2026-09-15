@@ -823,11 +823,8 @@ async function buildAuthorizedAiContext(identity) {
 function formatAiDate(value) {
   const raw = String(value || "").trim();
   if (!raw) return "Fecha no indicada";
-  const match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/) || raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
-  let date;
-  if (match && match[1].length === 4) date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  else if (match) date = new Date(Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])));
-  else date = new Date(raw);
+  const parts = businessDateParts(raw);
+  const date = parts ? new Date(Date.UTC(parts.year, parts.month - 1, parts.day)) : new Date(raw);
   if (Number.isNaN(date.getTime())) return raw;
   return new Intl.DateTimeFormat("es-MX", {
     day: "numeric",
@@ -839,11 +836,37 @@ function formatAiDate(value) {
 
 function parseBusinessDate(value) {
   const raw = String(value || "").trim();
-  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (isoMatch) return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
-  const localMatch = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
-  if (localMatch) return new Date(Number(localMatch[3]), Number(localMatch[2]) - 1, Number(localMatch[1]));
+  const parts = businessDateParts(raw);
+  if (parts) return new Date(parts.year, parts.month - 1, parts.day);
   return new Date(raw || 0);
+}
+
+function businessDateParts(raw) {
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  let year;
+  let month;
+  let day;
+  if (isoMatch) {
+    year = Number(isoMatch[1]);
+    month = Number(isoMatch[2]);
+    day = Number(isoMatch[3]);
+  } else {
+    const localMatch = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if (!localMatch) return null;
+    const first = Number(localMatch[1]);
+    const second = Number(localMatch[2]);
+    year = Number(localMatch[3]);
+    if (second > 12 && first <= 12) {
+      month = first;
+      day = second;
+    } else {
+      day = first;
+      month = second;
+    }
+  }
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) return null;
+  return { year, month, day };
 }
 
 function aiLabel(value, fallback) {
