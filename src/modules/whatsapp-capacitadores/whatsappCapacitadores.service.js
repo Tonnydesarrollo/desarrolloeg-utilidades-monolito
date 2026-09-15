@@ -11,7 +11,7 @@ import { readLocalRows } from "../../services/desarrolloegLocalDb.js";
 import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
 import { resolvePortalAccessProfile } from "../home/portalAccessPolicy.js";
 
-const { Client, LocalAuth } = pkg;
+const { Client, LocalAuth, MessageMedia } = pkg;
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 const WHATSAPP_BOOT_WATCHDOG_MS = 90000;
 
@@ -1043,8 +1043,14 @@ async function loadCapacitacionesRows() {
 }
 
 function extractDriveId(value) {
-  const raw = String(value || "").trim();
+  let raw = String(value || "").trim();
   if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw);
+    raw = String(parsed?.Url || parsed?.url || raw).trim();
+  } catch {
+    // Plain Drive URLs and folder IDs are expected too.
+  }
   if (!raw.includes("/")) return raw;
 
   try {
@@ -1403,6 +1409,84 @@ async function sendSucursalDriveLink(client, jid, candidate) {
   await client.sendMessage(jid, `Documentos de ${buildSucursalDisplay(candidate)}:\n${link}`);
 }
 
+async function listSucursalDriveDocuments(folderId, limit = 20) {
+  const drive = await getDriveClient();
+  const queue = [{ id: folderId, path: "" }];
+  const files = [];
+  const visited = new Set();
+  while (queue.length && files.length < limit) {
+    const folder = queue.shift();
+    if (!folder?.id || visited.has(folder.id)) continue;
+    visited.add(folder.id);
+    const response = await drive.files.list({
+      q: `'${folder.id.replace(/'/g, "\\'")}' in parents and trashed=false`,
+      fields: "files(id,name,mimeType,size,webViewLink)",
+      pageSize: 100,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+    });
+    for (const item of response.data.files || []) {
+      const itemPath = [folder.path, item.name].filter(Boolean).join(" / ");
+      if (item.mimeType === "application/vnd.google-apps.folder") {
+        if (queue.length + visited.size < 100) queue.push({ id: item.id, path: itemPath });
+      } else {
+        files.push({ ...item, path: itemPath });
+        if (files.length >= limit) break;
+      }
+    }
+  }
+  return files;
+}
+
+async function presentSucursalDriveDocuments(client, jid, candidate) {
+  const folderId = extractDriveId(candidate?.drive);
+  if (!folderId) {
+    await sendSucursalDriveLink(client, jid, candidate);
+    return;
+  }
+  try {
+    const files = await listSucursalDriveDocuments(folderId);
+    if (!files.length) {
+      await client.sendMessage(jid, `No encontre archivos dentro de ${buildSucursalDisplay(candidate)}. Te comparto la carpeta para revisarla:\n${driveFolderLink(candidate.drive)}`);
+      return;
+    }
+    driveLookupContext.set(jid, { step: "file", candidate, files });
+    const choices = files.slice(0, 20).map((file, index) => `${index + 1}. ${file.path || file.name}`).join("\n");
+    await client.sendMessage(jid, `Documentos de ${buildSucursalDisplay(candidate)}:\n${choices}\n\nResponde con el numero del archivo o TODOS para recibir hasta 5 documentos.`);
+  } catch (error) {
+    getLogger().error({ error: error?.message || String(error), jid }, "drive document listing failed");
+    await sendSucursalDriveLink(client, jid, candidate);
+  }
+}
+
+async function downloadDriveDocument(file) {
+  const drive = await getDriveClient();
+  let mimeType = String(file.mimeType || "application/octet-stream");
+  let fileName = String(file.name || "documento");
+  let response;
+  if (mimeType.startsWith("application/vnd.google-apps.")) {
+    mimeType = "application/pdf";
+    if (!fileName.toLowerCase().endsWith(".pdf")) fileName += ".pdf";
+    response = await drive.files.export({ fileId: file.id, mimeType }, { responseType: "arraybuffer" });
+  } else {
+    response = await drive.files.get({ fileId: file.id, alt: "media", supportsAllDrives: true }, { responseType: "arraybuffer" });
+  }
+  const buffer = Buffer.from(response.data);
+  if (buffer.length > 15 * 1024 * 1024) throw new Error("El archivo supera el limite de 15 MB para WhatsApp.");
+  return new MessageMedia(mimeType, buffer.toString("base64"), fileName);
+}
+
+async function sendSelectedDriveDocuments(client, jid, files) {
+  for (const file of files) {
+    try {
+      const media = await downloadDriveDocument(file);
+      await client.sendMessage(jid, media, { caption: file.path || file.name });
+    } catch (error) {
+      await client.sendMessage(jid, `No pude enviar ${file.name}: ${error?.message || "error de lectura"}`);
+    }
+  }
+}
+
 async function handleNaturalDriveRequest(client, jid, text, identity) {
   if (!isNaturalDriveRequest(text)) return false;
   if (!hasSucursalDocumentAccess(identity)) {
@@ -1420,24 +1504,32 @@ async function handleNaturalDriveRequest(client, jid, text, identity) {
     return true;
   }
   if (candidates.length === 1 || isStrongSucursalMatch(candidates[0], candidates[1])) {
-    await sendSucursalDriveLink(client, jid, candidates[0]);
+    await presentSucursalDriveDocuments(client, jid, candidates[0]);
     return true;
   }
-  driveLookupContext.set(jid, candidates.slice(0, 3));
+  driveLookupContext.set(jid, { step: "branch", candidates: candidates.slice(0, 3) });
   await client.sendMessage(jid, `Encontre varias sucursales. Responde 1, 2 o 3:\n${formatSucursalChoices(candidates)}`);
   return true;
 }
 
 async function handleDriveLookupChoice(client, jid, text) {
-  const candidates = driveLookupContext.get(jid);
-  if (!candidates) return false;
-  const selection = Number(String(text || "").trim());
-  if (!Number.isInteger(selection) || selection < 1 || selection > candidates.length) {
+  const context = driveLookupContext.get(jid);
+  if (!context) return false;
+  const normalized = normalizeText(text);
+  if (context.step === "file" && normalized === "TODOS") {
     driveLookupContext.delete(jid);
-    return false;
+    await sendSelectedDriveDocuments(client, jid, context.files.slice(0, 5));
+    return true;
   }
+  const selection = Number(String(text || "").trim());
+  const options = context.step === "file" ? context.files : context.candidates;
+  if (!Number.isInteger(selection) || selection < 1 || selection > options.length) return false;
   driveLookupContext.delete(jid);
-  await sendSucursalDriveLink(client, jid, candidates[selection - 1]);
+  if (context.step === "file") {
+    await sendSelectedDriveDocuments(client, jid, [context.files[selection - 1]]);
+  } else {
+    await presentSucursalDriveDocuments(client, jid, context.candidates[selection - 1]);
+  }
   return true;
 }
 
