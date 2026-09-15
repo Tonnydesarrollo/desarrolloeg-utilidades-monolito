@@ -47,6 +47,7 @@ const storePhotosContext = new Map();
 const archivoContext = new Map();
 const driveLookupContext = new Map();
 const aiConversationContext = new Map();
+const sucursalInformationContext = new Map();
 
 const employeesCache = {
   ts: 0,
@@ -550,6 +551,20 @@ function mapLocalSucursalRow(row = {}) {
     LABEL: String(row.address || row.nombre || row.tienda || "").trim(),
     LABEL2: String(row.tienda || row.nombre || "").trim(),
     DIRECCION: String(row.direccion || "").trim(),
+    MUNICIPIO: String(row.municipio_nombre || "").trim(),
+    ESTADO: String(row.estado_nombre || "").trim(),
+    LATITUD: String(row.lat ?? "").trim(),
+    LONGITUD: String(row.lng ?? "").trim(),
+    TIPO: String(row.tipo || "").trim(),
+    "NIVEL DE RIESGO": String(row.nivel_riesgo || "").trim(),
+    TRABAJOS: String(row.trabajos || "").trim(),
+    CAPACITADORES: String(row.capacitadores || "").trim(),
+    "ID PC": String(row.id_pc || "").trim(),
+    "MES PLANEACION": String(row.mes_planeacion ?? "").trim(),
+    "VENCIMIENTO ESTATAL": String(row.vencimiento_estatal || "").trim(),
+    "VENCIMIENTO MUNICIPAL": String(row.vencimiento_municipal || "").trim(),
+    PEDIDO: String(row.pedido || "").trim(),
+    "ESTATUS PLANEACION": String(row.planeacion_status || "").trim(),
     DRIVE: String(row.drive || "").trim(),
   };
 }
@@ -607,6 +622,18 @@ function loadLocalWhatsAppRows(tableName) {
           s.lat,
           s.lng,
           s.drive,
+          s.mes_planeacion,
+          s.capacitadores,
+          s.id_pc,
+          s.vencimiento_estatal,
+          s.vencimiento_municipal,
+          s.trabajos,
+          s.tipo,
+          s.nivel_riesgo,
+          s.pedido,
+          s.planeacion_status,
+          m.nombre AS municipio_nombre,
+          es.nombre AS estado_nombre,
           TRIM(
             COALESCE(s.nombre, '') ||
             CASE WHEN m.nombre IS NOT NULL AND m.nombre <> '' THEN ', ' || m.nombre ELSE '' END ||
@@ -830,6 +857,30 @@ async function buildAuthorizedAiContext(identity, queryText = "") {
   const context = {
     generatedAt: new Date().toISOString(),
     employee: { nombre: identity.name, puesto: identity.position, rol: identity.role },
+    systemModel: {
+      entities: {
+        empresa: "Cliente que agrupa sucursales y razones sociales.",
+        sucursal: "Centro de trabajo identificado por tienda; pertenece a una empresa y relaciona ubicacion, riesgo, trabajos, planeacion, capacitaciones y carpeta Drive.",
+        capacitacion: "Evento con fecha, sede, sucursales participantes, capacitadores, horario, notas y estatus de constancias.",
+        empleado: "Usuario interno con puesto, rol, permisos y alcance propio o global.",
+        documento: "Archivo almacenado en la carpeta Drive de una sucursal.",
+        trabajo: "Servicio estatal, municipal, dictamen u otra operacion contratada para una sucursal.",
+        cotizacion: "Operacion comercial relacionada con empresas, sucursales, conceptos y precios.",
+      },
+      relations: [
+        "Una empresa tiene muchas sucursales.",
+        "Una sucursal puede participar en muchas capacitaciones y cada capacitacion puede incluir varias sucursales.",
+        "Una capacitacion tiene una sede y uno o varios capacitadores.",
+        "Los documentos pertenecen a la carpeta Drive de la sucursal.",
+        "Los permisos del empleado determinan las entidades, registros y operaciones disponibles.",
+      ],
+      responseRules: [
+        "Usar nombres y etiquetas, nunca IDs internos salvo que el usuario los pida.",
+        "Expresar fechas como dia, mes y anio.",
+        "No pedir URL ni acceso a sistemas: los datos autorizados ya estan en este contexto.",
+        "No inventar campos ausentes; indicar claramente cuando un dato no esta registrado.",
+      ],
+    },
     authorizedModules,
     capacitaciones: { visibleTotal: visibleRows.length, proximas: upcoming },
     constanciasPendientes: constanciasPermission.actions.includes("view")
@@ -847,6 +898,13 @@ async function buildAuthorizedAiContext(identity, queryText = "") {
       sucursales: sucursales.length,
       capacitaciones: rows.length,
     };
+  }
+
+  if (hasSucursalDocumentAccess(identity)) {
+    const candidates = await findSucursalCandidates(queryText).catch(() => []);
+    if (candidates[0] && isStrongSucursalMatch(candidates[0], candidates[1])) {
+      context.requestedSucursal = buildSucursalContextRecord(candidates[0]);
+    }
   }
   return context;
 }
@@ -1081,6 +1139,21 @@ async function loadSucursalesCache() {
       empresa,
       label,
       nombreComercial,
+      direccion: normalizeDisplay(row.DIRECCION),
+      municipio: normalizeDisplay(getFirstFlexible(row, ["MUNICIPIO_NOMBRE", "MUNICIPIO NOMBRE", "Municipio Nombre"])),
+      estado: normalizeDisplay(getFirstFlexible(row, ["ESTADO_NOMBRE", "ESTADO NOMBRE", "Estado Nombre"])),
+      latitud: normalizeDisplay(getFirstFlexible(row, ["LATITUD", "LAT"])),
+      longitud: normalizeDisplay(getFirstFlexible(row, ["LONGITUD", "LNG"])),
+      tipo: normalizeDisplay(row.TIPO),
+      nivelRiesgo: normalizeDisplay(row["NIVEL DE RIESGO"]),
+      trabajos: normalizeDisplay(row.TRABAJOS),
+      capacitadores: normalizeDisplay(row.CAPACITADORES),
+      idPc: normalizeDisplay(getFirstFlexible(row, ["ID PC", "ID_PC"])),
+      mesPlaneacion: normalizeDisplay(row["MES PLANEACION"]),
+      vencimientoEstatal: normalizeDisplay(row["VENCIMIENTO ESTATAL"]),
+      vencimientoMunicipal: normalizeDisplay(row["VENCIMIENTO MUNICIPAL"]),
+      pedido: normalizeDisplay(row.PEDIDO),
+      estatusPlaneacion: normalizeDisplay(getFirstFlexible(row, ["ESTATUS PLANEACION", "STATUS"])),
       searchText,
       tokens,
       raw: row,
@@ -1397,6 +1470,21 @@ async function findSucursalCandidates(query) {
         empresa: row.empresa,
         label: row.label,
         nombreComercial: row.nombreComercial,
+        direccion: row.direccion,
+        municipio: row.municipio,
+        estado: row.estado,
+        latitud: row.latitud,
+        longitud: row.longitud,
+        tipo: row.tipo,
+        nivelRiesgo: row.nivelRiesgo,
+        trabajos: row.trabajos,
+        capacitadores: row.capacitadores,
+        idPc: row.idPc,
+        mesPlaneacion: row.mesPlaneacion,
+        vencimientoEstatal: row.vencimientoEstatal,
+        vencimientoMunicipal: row.vencimientoMunicipal,
+        pedido: row.pedido,
+        estatusPlaneacion: row.estatusPlaneacion,
         searchText: row.searchText,
         tokens: row.tokens || [],
       };
@@ -1429,6 +1517,89 @@ function formatSucursalChoices(matches) {
 function hasSucursalDocumentAccess(identity) {
   const permission = identity?.accessProfile?.views?.["informacion-sucursales"];
   return Boolean(permission?.actions?.includes("view"));
+}
+
+function buildSucursalContextRecord(candidate) {
+  return {
+    etiqueta: buildSucursalDisplay(candidate),
+    tienda: candidate.tienda || "No registrada",
+    nombre: candidate.name || candidate.nombreComercial || "No registrado",
+    tipo: candidate.tipo || "No registrado",
+    empresa: candidate.empresa || "No registrada",
+    razonSocial: candidate.razonSocial || "No registrada",
+    direccion: candidate.direccion || "No registrada",
+    municipio: candidate.municipio || "No registrado",
+    estado: candidate.estado || "No registrado",
+    nivelRiesgo: candidate.nivelRiesgo || "No registrado",
+    trabajos: candidate.trabajos || "No registrados",
+    capacitadores: candidate.capacitadores || "No registrados",
+    idProteccionCivil: candidate.idPc || "No registrado",
+    mesPlaneacion: candidate.mesPlaneacion || "No registrado",
+    estatusPlaneacion: candidate.estatusPlaneacion || "No registrado",
+    vencimientoEstatal: candidate.vencimientoEstatal || "No registrado",
+    vencimientoMunicipal: candidate.vencimientoMunicipal || "No registrado",
+    pedido: candidate.pedido || "No registrado",
+    drive: driveFolderLink(candidate.drive) || "No configurado",
+  };
+}
+
+export function isSucursalInformationRequest(text) {
+  const normalized = normalizeText(text);
+  const asksInformation = /\b(informacion|datos|detalle|detalles|informacion general|general)\b/.test(normalized);
+  const mentionsSucursal = /\b(sucursal|tienda|centro de trabajo)\b/.test(normalized) || /\b\d{3,}\b/.test(normalized);
+  const asksDocument = /\b(documento|archivo|drive|lista de asistencia|dc3|bitacora|inventario)\b/.test(normalized);
+  return asksInformation && mentionsSucursal && !asksDocument;
+}
+
+async function handleSucursalInformationRequest(client, jid, text, identity) {
+  const normalized = normalizeText(text);
+  const isGeneralFollowUp = /^(informacion general|general|datos generales|detalles generales)$/.test(normalized);
+  if (!isSucursalInformationRequest(text) && !(isGeneralFollowUp && sucursalInformationContext.has(jid))) return false;
+  if (!hasSucursalDocumentAccess(identity)) {
+    await client.sendMessage(jid, "No tienes permiso para consultar informacion de sucursales.");
+    return true;
+  }
+
+  let candidate = null;
+  if (isGeneralFollowUp) candidate = sucursalInformationContext.get(jid) || null;
+  if (!candidate) {
+    const matches = await findSucursalCandidates(text);
+    if (!matches.length) {
+      await client.sendMessage(jid, "No encontre una sucursal con esa referencia. Escribe el numero de tienda o su nombre.");
+      return true;
+    }
+    if (!isStrongSucursalMatch(matches[0], matches[1])) {
+      await client.sendMessage(jid, `Encontre varias sucursales. Indica una opcion:\n${formatSucursalChoices(matches)}`);
+      return true;
+    }
+    [candidate] = matches;
+  }
+
+  sucursalInformationContext.set(jid, candidate);
+  aiConversationContext.delete(jid);
+  const record = buildSucursalContextRecord(candidate);
+  const location = uniqueDisplayParts([record.municipio, record.estado]).join(", ") || "No registrada";
+  const lines = [
+    `Informacion general de ${record.etiqueta}`,
+    `Tienda: ${record.tienda}`,
+    `Nombre: ${record.nombre}`,
+    `Tipo: ${record.tipo}`,
+    `Empresa: ${record.empresa}`,
+    `Razon social: ${record.razonSocial}`,
+    `Direccion: ${record.direccion}`,
+    `Ubicacion: ${location}`,
+    `Nivel de riesgo: ${record.nivelRiesgo}`,
+    `Trabajos: ${record.trabajos}`,
+    `Capacitadores: ${record.capacitadores}`,
+    `ID Proteccion Civil: ${record.idProteccionCivil}`,
+    `Planeacion: mes ${record.mesPlaneacion}; estatus ${record.estatusPlaneacion}`,
+    `Vencimiento estatal: ${record.vencimientoEstatal}`,
+    `Vencimiento municipal: ${record.vencimientoMunicipal}`,
+    `Pedido: ${record.pedido}`,
+    `Documentos: ${record.drive}`,
+  ];
+  await client.sendMessage(jid, lines.join("\n"));
+  return true;
 }
 
 export function isNaturalDriveRequest(text) {
@@ -2526,6 +2697,7 @@ async function handleText(client, jid, text, identity = null) {
 
   if (await handleDriveLookupChoice(client, jid, text)) return;
   if (await handleBulkPendingAttendanceRequest(client, jid, text, identity)) return;
+  if (await handleSucursalInformationRequest(client, jid, text, identity)) return;
   if (await handleNaturalDriveRequest(client, jid, text, identity)) return;
   if (await handlePendingConstanciasRequest(client, jid, text, identity)) return;
 

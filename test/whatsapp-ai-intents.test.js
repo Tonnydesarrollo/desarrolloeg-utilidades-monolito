@@ -5,6 +5,7 @@ import {
   isBulkPendingAttendanceRequest,
   isNaturalDriveRequest,
   isPendingConstanciasRequest,
+  isSucursalInformationRequest,
 } from "../src/modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
 
 test("detecta la consulta natural de constancias pendientes", () => {
@@ -27,4 +28,10 @@ test("detecta solicitudes de documentos de sucursal", () => {
   assert.equal(isNaturalDriveRequest("Necesito la DC3 de la sucursal 1240"), true);
   assert.equal(isNaturalDriveRequest("Dame el link de drive de la tienda 1366"), true);
   assert.equal(isNaturalDriveRequest("Dame las capacitaciones"), false);
+});
+
+test("detecta solicitudes de informacion general de sucursal sin confundir documentos", () => {
+  assert.equal(isSucursalInformationRequest("Quiero informacion de la tienda 1366"), true);
+  assert.equal(isSucursalInformationRequest("Dame los datos de la sucursal Mendoza"), true);
+  assert.equal(isSucursalInformationRequest("Dame el link de Drive de la tienda 1366"), false);
 });
