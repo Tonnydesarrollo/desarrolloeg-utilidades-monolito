@@ -3,7 +3,7 @@ import {
   getWhatsAppCapacitadoresStatus,
   startWhatsAppCapacitadoresService,
   stopWhatsAppCapacitadoresService,
-} from "../modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
+} from "../modules/whatsapp-capacitadores/whatsappCapacitadores.facade.js";
 import {
   getCloudflaredTunnelStatus,
   startCloudflaredTunnel,

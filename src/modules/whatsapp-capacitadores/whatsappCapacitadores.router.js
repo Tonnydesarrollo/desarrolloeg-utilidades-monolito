@@ -3,9 +3,15 @@ import {
   getWhatsAppCapacitadoresQrScreenshot,
   getWhatsAppCapacitadoresStatus,
   restartWhatsAppCapacitadoresForQr,
-} from "./whatsappCapacitadores.service.js";
+  refreshWhatsAppCapacitadoresStatus,
+} from "./whatsappCapacitadores.facade.js";
 
 export const whatsappCapacitadoresRouter = express.Router();
+
+whatsappCapacitadoresRouter.use(async (_req, _res, next) => {
+  await refreshWhatsAppCapacitadoresStatus();
+  next();
+});
 
 function escapeHtml(value) {
   return String(value ?? "")

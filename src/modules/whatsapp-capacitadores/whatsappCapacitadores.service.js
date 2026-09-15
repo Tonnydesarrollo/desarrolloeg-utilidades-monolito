@@ -9,6 +9,7 @@ import pkg from "whatsapp-web.js";
 import { google } from "googleapis";
 import { readLocalRows } from "../../services/desarrolloegLocalDb.js";
 import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
+import { resolvePortalAccessProfile } from "../home/portalAccessPolicy.js";
 
 const { Client, LocalAuth } = pkg;
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
@@ -41,12 +42,14 @@ const menuContext = new Map();
 const uploadContext = new Map();
 const storePhotosContext = new Map();
 const archivoContext = new Map();
+const aiConversationContext = new Map();
 
 const employeesCache = {
   ts: 0,
   phoneSet: new Set(),
   phoneToEmployeeKeys: new Map(),
   nameByKey: new Map(),
+  profileByPhone: new Map(),
 };
 
 const empresasCache = {
@@ -90,6 +93,18 @@ function readEnv(names, fallback = "") {
   return fallback;
 }
 
+function readSecret(names, fileNames) {
+  const direct = readEnv(names, "");
+  if (direct) return direct;
+  const filePath = readEnv(fileNames, "");
+  if (!filePath) return "";
+  try {
+    return fs.readFileSync(filePath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
 function readBoolean(names, fallback = false) {
   const value = readEnv(names, "");
   if (!value) return fallback;
@@ -106,6 +121,15 @@ function readNumber(names, fallback) {
 
 function normalizePhone(raw) {
   return String(raw || "").replace(/\D/g, "");
+}
+
+function phoneIdentityKey(raw) {
+  const phone = normalizePhone(raw);
+  return phone.length >= 10 ? phone.slice(-10) : phone;
+}
+
+function readBooleanValue(value) {
+  return ["1", "true", "yes", "si", "sí", "on"].includes(String(value || "").trim().toLowerCase());
 }
 
 function normalizeText(text) {
@@ -331,6 +355,13 @@ function getConfig() {
     saveMedia: readBoolean(["WHATSAPP_CAP_SAVE_MEDIA", "SAVE_MEDIA"], false),
     allowedNumbers: splitList(readEnv(["WHATSAPP_CAP_ALLOWED_NUMBERS", "ALLOWED_NUMBERS"], "")).map(normalizePhone),
     allowLidFallback: readBoolean(["WHATSAPP_CAP_ALLOW_LID_FALLBACK", "ALLOW_LID_FALLBACK"], true),
+    aiServerUrl: readEnv(["WHATSAPP_CAP_AI_SERVER_URL", "AI_SERVER_URL"], "").replace(/\/$/, ""),
+    aiClientId: readEnv(["WHATSAPP_CAP_AI_CLIENT_ID", "AI_CLIENT_ID"], ""),
+    aiClientToken: readSecret(
+      ["WHATSAPP_CAP_AI_CLIENT_TOKEN", "AI_CLIENT_TOKEN"],
+      ["WHATSAPP_CAP_AI_CLIENT_TOKEN_FILE", "AI_CLIENT_TOKEN_FILE"]
+    ),
+    aiTimeoutMs: readNumber(["WHATSAPP_CAP_AI_TIMEOUT_MS", "AI_TIMEOUT_MS"], 180000),
     sessionDir,
     tmpDir,
     chromePath: readEnv(
@@ -635,6 +666,7 @@ async function loadEmployeesCache() {
   const phoneSet = new Set();
   const phoneToEmployeeKeys = new Map();
   const nameByKey = new Map();
+  const profileByPhone = new Map();
 
   for (const row of rows || []) {
     const key = row[config.empleadosKeyCol];
@@ -645,7 +677,20 @@ async function loadEmployeesCache() {
     if (key && name) nameByKey.set(String(key), String(name));
     for (const phone of [phone1, phone2]) {
       if (!phone) continue;
+      const accessProfile = resolvePortalAccessProfile({
+        puesto: row.PUESTO,
+        capacita: readBooleanValue(row.CAPACITA),
+      });
+      const profile = {
+        id: String(key || ""),
+        name: String(name || ""),
+        position: String(row.PUESTO || ""),
+        role: accessProfile.role,
+        accessProfile,
+      };
       phoneSet.add(phone);
+      profileByPhone.set(phone, profile);
+      profileByPhone.set(phoneIdentityKey(phone), profile);
       const list = phoneToEmployeeKeys.get(phone) || [];
       if (key && !list.includes(key)) list.push(key);
       phoneToEmployeeKeys.set(phone, list);
@@ -656,7 +701,40 @@ async function loadEmployeesCache() {
   employeesCache.phoneSet = phoneSet;
   employeesCache.phoneToEmployeeKeys = phoneToEmployeeKeys;
   employeesCache.nameByKey = nameByKey;
+  employeesCache.profileByPhone = profileByPhone;
   return employeesCache;
+}
+
+async function handleAiText(client, jid, text, identity) {
+  const config = ensureRuntimeConfig();
+  if (!config.aiServerUrl || !config.aiClientId || !config.aiClientToken) return false;
+
+  const history = aiConversationContext.get(jid) || [];
+  history.push({ role: "user", content: String(text).slice(0, 4000) });
+  const messages = history.slice(-10);
+  try {
+    const response = await fetch(`${config.aiServerUrl}/v1/respond`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-ai-client-id": config.aiClientId,
+        authorization: `Bearer ${config.aiClientToken}`,
+      },
+      body: JSON.stringify({ identity, messages }),
+      signal: AbortSignal.timeout(config.aiTimeoutMs),
+    });
+    if (!response.ok) throw new Error(`ai_http_${response.status}`);
+    const payload = await response.json();
+    const answer = String(payload?.content || "").trim();
+    if (!answer) throw new Error("ai_empty_response");
+    history.push({ role: "assistant", content: answer });
+    aiConversationContext.set(jid, history.slice(-10));
+    await client.sendMessage(jid, answer.slice(0, 12000));
+  } catch (error) {
+    getLogger().error({ error, jid }, "local AI request failed");
+    await client.sendMessage(jid, "El asistente inteligente no esta disponible en este momento. Intenta de nuevo en unos minutos.");
+  }
+  return true;
 }
 
 async function loadEmpresasCache() {
@@ -1834,7 +1912,7 @@ async function cancelFlow(jid, client) {
   return false;
 }
 
-async function handleText(client, jid, text) {
+async function handleText(client, jid, text, identity = null) {
   const config = ensureRuntimeConfig();
   const normalized = normalizeText(text);
 
@@ -2053,7 +2131,10 @@ async function handleText(client, jid, text) {
 
   if (hasMenuContext(jid)) {
     await client.sendMessage(jid, `Comando no reconocido. Escribe "${config.keywordCapacitaciones}" o "ayuda".`);
+    return;
   }
+
+  await handleAiText(client, jid, text, identity);
 }
 
 async function refreshAuthorizedNumbers() {
@@ -2316,9 +2397,15 @@ async function handleIncomingMessage(msg) {
   let lidFallback = false;
   if (jid.endsWith("@lid")) {
     try {
-      const contact = await msg.getContact();
-      if (contact?.number) resolvedNumber = contact.number;
-      else if (contact?.id?._serialized) resolvedNumber = contact.id._serialized.split("@")[0];
+      const mappings = await runtime.client?.getContactLidAndPhone?.([jid]);
+      const phoneJid = mappings?.[0]?.pn;
+      if (phoneJid) {
+        resolvedNumber = phoneJid.split("@")[0];
+      } else {
+        const contact = await msg.getContact();
+        if (contact?.number) resolvedNumber = contact.number;
+        else if (contact?.id?._serialized) resolvedNumber = contact.id._serialized.split("@")[0];
+      }
     } catch (error) {
       logger.warn({ error, from: jid }, "failed to resolve @lid contact");
     }
@@ -2363,7 +2450,10 @@ async function handleIncomingMessage(msg) {
   }
 
   const text = getTextMessage(msg);
-  if (text) await handleText(runtime.client, jid, text);
+  const identity = employees?.profileByPhone?.get(normalizedNumber)
+    || employees?.profileByPhone?.get(phoneIdentityKey(normalizedNumber))
+    || null;
+  if (text) await handleText(runtime.client, jid, text, identity);
 }
 
 async function bootWhatsAppService(config) {

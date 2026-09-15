@@ -46,6 +46,8 @@ services:
     depends_on:
       desarrolloeg-sync-dev:
         condition: service_healthy
+      whatsapp-dev:
+        condition: service_healthy
     ports:
       - "127.0.0.1:7001:7001"
     env_file:
@@ -86,9 +88,8 @@ services:
       CASALEY_EXPORT_ALL_ENABLED: 0
       CASALEY_EXPORT_ALL_RUN_ON_START: 0
       WHATSAPP_CAP_ENABLED: 0
-      WHATSAPP_CAP_SESSION_DIR: /app/runtime/whatsapp-capacitadores/session
-      WHATSAPP_CAP_TMP_DIR: /app/runtime/whatsapp-capacitadores/tmp
-      WHATSAPP_CAP_CHROME_PATH: /usr/bin/chromium
+      WHATSAPP_CAP_SERVICE_URL: http://whatsapp-dev:7010
+      WHATSAPP_CAP_SERVICE_TOKEN_FILE: /app/runtime/whatsapp-dev/service-token
     healthcheck:
       test:
         [
@@ -103,6 +104,48 @@ services:
       - ./runtime-dev:/app/runtime
       - ./secrets:/app/secrets:ro
       - ./publicimg:/app/publicimg
+      - desarrolloeg-data-dev:/app/desarrolloeg-sync-data
+
+  whatsapp-dev:
+    build:
+      context: .
+      dockerfile: standalone/whatsapp-dev/Dockerfile
+    image: desarrolloeg-whatsapp:dev
+    container_name: desarrolloeg-whatsapp-dev
+    restart: unless-stopped
+    stop_grace_period: 35s
+    env_file:
+      - .env.dev.docker
+    environment:
+      NODE_ENV: production
+      APP_ENVIRONMENT: dev
+      WHATSAPP_CAP_ENABLED: 1
+      WHATSAPP_CAP_ALLOWED_NUMBERS: "6677953883,526677953883,5216677953883"
+      WHATSAPP_CAP_ALLOW_LID_FALLBACK: 0
+      WHATSAPP_CAP_AI_SERVER_URL: http://100.70.121.47:7020
+      WHATSAPP_CAP_AI_CLIENT_ID: pc-a-dev
+      WHATSAPP_CAP_AI_CLIENT_TOKEN_FILE: /app/runtime/whatsapp-dev/ai-client-token
+      WHATSAPP_CAP_SESSION_DIR: /app/runtime/whatsapp-dev/session
+      WHATSAPP_CAP_TMP_DIR: /app/runtime/whatsapp-dev/tmp
+      WHATSAPP_CAP_SERVICE_TOKEN_FILE: /app/runtime/whatsapp-dev/service-token
+      WHATSAPP_CAP_CHROME_PATH: /usr/bin/chromium
+      WHATSAPP_CAP_GOOGLE_SERVICE_ACCOUNT_JSON: /app/secrets/whatsapp/credentials.json
+      WHATSAPP_CAP_GOOGLE_OAUTH_TOKEN_PATH: /app/runtime/whatsapp-dev/google-token.json
+      DESARROLLOEG_LOCAL_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
+      DESARROLLOEG_SYNC_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:7010/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    volumes:
+      - ./runtime-dev:/app/runtime
+      - ./secrets:/app/secrets:ro
       - desarrolloeg-data-dev:/app/desarrolloeg-sync-data
 
 volumes:

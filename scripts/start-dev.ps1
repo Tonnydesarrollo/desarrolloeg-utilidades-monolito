@@ -29,3 +29,4 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Portal local: http://localhost:7001"
 Write-Host "Salud sync:  http://localhost:8788/health"
+Write-Host "WhatsApp:    http://localhost:7001/whatsapp-capacitadores"
