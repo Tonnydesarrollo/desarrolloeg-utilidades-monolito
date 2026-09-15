@@ -861,6 +861,63 @@ function findMentionedEmployeeIds(queryText, namesByKey) {
   return matches;
 }
 
+function isPendingConstanciasRequest(text) {
+  const normalized = normalizeText(text);
+  return /\b(CONSTANCIA|CONSTANCIAS|DIPLOMA|DIPLOMAS)\b/.test(normalized)
+    && /\b(PENDIENTE|PENDIENTES|FALTANTE|FALTANTES)\b/.test(normalized);
+}
+
+async function handlePendingConstanciasRequest(client, jid, text, identity) {
+  if (!isPendingConstanciasRequest(text)) return false;
+  const permission = identity?.accessProfile?.views?.["constancias-faltantes"];
+  if (!permission?.actions?.includes("view")) {
+    await client.sendMessage(jid, "No tienes permiso para consultar constancias pendientes.");
+    return true;
+  }
+
+  const config = ensureRuntimeConfig();
+  const [rows, employees] = await Promise.all([loadCapacitacionesRows(), loadEmployeesCache()]);
+  const mentionedIds = findMentionedEmployeeIds(text, employees.nameByKey);
+  const employeeId = String(identity?.id || "");
+  let authorizedRows = identity?.role === "admin"
+    ? rows
+    : rows.filter((row) => splitEnumList(row[config.capacitacionesCapacitadoresCol]).map(String).includes(employeeId));
+  if (mentionedIds.length) {
+    authorizedRows = authorizedRows.filter((row) => {
+      const assignedIds = new Set(splitEnumList(row[config.capacitacionesCapacitadoresCol]).map(String));
+      return mentionedIds.some((id) => assignedIds.has(id));
+    });
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const pending = (await resolveNames(authorizedRows))
+    .filter((row) => {
+      const date = parseBusinessDate(row[config.capacitacionesDateCol]);
+      return !Number.isNaN(date.getTime()) && date < today && !readBooleanValue(row.DIPLOMAS);
+    })
+    .sort((a, b) => parseBusinessDate(b[config.capacitacionesDateCol]) - parseBusinessDate(a[config.capacitacionesDateCol]));
+
+  aiConversationContext.delete(jid);
+  if (!pending.length) {
+    const target = mentionedIds.length ? " para la persona indicada" : "";
+    await client.sendMessage(jid, `No hay constancias pendientes${target}.`);
+    return true;
+  }
+
+  const targetNames = mentionedIds.map((id) => employees.nameByKey.get(id)).filter(Boolean);
+  const title = targetNames.length
+    ? `Constancias pendientes de ${targetNames.join(", ")}: ${pending.length}`
+    : `Constancias pendientes: ${pending.length}`;
+  const lines = pending.map((row, index) => [
+    `${index + 1}. ${formatAiDate(row[config.capacitacionesDateCol])}`,
+    `Sede: ${aiLabel(row[config.capacitacionesCedeCol], "Sin sede")}`,
+    `Sucursales: ${aiLabelList(row[config.capacitacionesSucursalesCol], "Sin sucursales etiquetadas")}`,
+  ].join(" | "));
+  await client.sendMessage(jid, `${title}\n\n${lines.join("\n")}`.slice(0, 12000));
+  return true;
+}
+
 function formatAiDate(value) {
   const raw = String(value || "").trim();
   if (!raw) return "Fecha no indicada";
@@ -2290,6 +2347,7 @@ async function handleText(client, jid, text, identity = null) {
 
   if (await handleDriveLookupChoice(client, jid, text)) return;
   if (await handleNaturalDriveRequest(client, jid, text, identity)) return;
+  if (await handlePendingConstanciasRequest(client, jid, text, identity)) return;
 
   if (normalized === config.keywordCapacitaciones) {
     setMenuContext(jid);
