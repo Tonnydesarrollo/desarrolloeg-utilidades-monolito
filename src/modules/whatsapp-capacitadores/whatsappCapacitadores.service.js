@@ -12,7 +12,10 @@ import { readLocalOperationalTable } from "../../services/localOperationalReposi
 import { resolvePortalAccessProfile } from "../home/portalAccessPolicy.js";
 
 const { Client, LocalAuth, MessageMedia } = pkg;
-const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
+const SCOPES = [
+  "https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/drive.file",
+];
 const WHATSAPP_BOOT_WATCHDOG_MS = 90000;
 
 const serviceState = {
