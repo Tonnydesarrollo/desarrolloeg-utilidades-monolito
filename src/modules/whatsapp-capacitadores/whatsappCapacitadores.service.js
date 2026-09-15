@@ -130,6 +130,7 @@ function phoneIdentityKey(raw) {
 }
 
 function readBooleanValue(value) {
+  if (String(value || "").trim().toLowerCase() === "y") return true;
   return ["1", "true", "yes", "si", "sí", "on"].includes(String(value || "").trim().toLowerCase());
 }
 
@@ -861,10 +862,10 @@ function findMentionedEmployeeIds(queryText, namesByKey) {
   return matches;
 }
 
-function isPendingConstanciasRequest(text) {
+export function isPendingConstanciasRequest(text) {
   const normalized = normalizeText(text);
-  return /\b(CONSTANCIA|CONSTANCIAS|DIPLOMA|DIPLOMAS)\b/.test(normalized)
-    && /\b(PENDIENTE|PENDIENTES|FALTANTE|FALTANTES)\b/.test(normalized);
+  return /\b(constancia|constancias|diploma|diplomas)\b/.test(normalized)
+    && /\b(pendiente|pendientes|faltante|faltantes)\b/.test(normalized);
 }
 
 async function handlePendingConstanciasRequest(client, jid, text, identity) {
@@ -1427,10 +1428,10 @@ function hasSucursalDocumentAccess(identity) {
   return Boolean(permission?.actions?.includes("view"));
 }
 
-function isNaturalDriveRequest(text) {
+export function isNaturalDriveRequest(text) {
   const normalized = normalizeText(text);
-  return /\b(DOCUMENTO|DOCUMENTOS|ARCHIVO|ARCHIVOS|DRIVE)\b/.test(normalized)
-    && /\b(SUCURSAL|TIENDA|DRIVE|DOCUMENTO|ARCHIVO)\b/.test(normalized);
+  return /\b(documento|documentos|archivo|archivos|drive)\b/.test(normalized)
+    && /\b(sucursal|tienda|drive|documento|archivo)\b/.test(normalized);
 }
 
 function extractSucursalDocumentQuery(text) {
