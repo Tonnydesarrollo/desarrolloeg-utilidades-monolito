@@ -17,5 +17,6 @@ test("detecta solicitudes de documentos de sucursal", () => {
   assert.equal(isNaturalDriveRequest("Busca archivos de la tienda 1197"), true);
   assert.equal(isNaturalDriveRequest("Dame la lista de asistencia de la 1366"), true);
   assert.equal(isNaturalDriveRequest("Necesito la DC3 de la sucursal 1240"), true);
+  assert.equal(isNaturalDriveRequest("Dame el link de drive de la tienda 1366"), true);
   assert.equal(isNaturalDriveRequest("Dame las capacitaciones"), false);
 });

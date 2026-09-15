@@ -1453,6 +1453,11 @@ function extractRequestedDocumentQuery(text) {
   return knownTypes.find((type) => normalized.includes(type)) || "";
 }
 
+function isDriveLinkRequest(text) {
+  const normalized = normalizeText(text);
+  return /\b(link|enlace|liga|url)\b/.test(normalized) && /\bdrive\b/.test(normalized);
+}
+
 function extractSucursalDocumentQuery(text) {
   return String(text || "")
     .replace(/\b(dame|envia(?:me)?|manda(?:me)?|comparte(?:me)?|necesito|quiero|busca(?:me)?|muestra(?:me)?)\b/gi, " ")
@@ -1488,7 +1493,7 @@ async function sendSucursalDriveLink(client, jid, candidate) {
   await client.sendMessage(jid, `Documentos de ${buildSucursalDisplay(candidate)}:\n${link}`);
 }
 
-async function listSucursalDriveDocuments(folderId, limit = 20) {
+async function listSucursalDriveDocuments(folderId, limit = 500) {
   const drive = await getDriveClient();
   const queue = [{ id: folderId, path: "" }];
   const files = [];
@@ -1497,24 +1502,51 @@ async function listSucursalDriveDocuments(folderId, limit = 20) {
     const folder = queue.shift();
     if (!folder?.id || visited.has(folder.id)) continue;
     visited.add(folder.id);
-    const response = await drive.files.list({
-      q: `'${folder.id.replace(/'/g, "\\'")}' in parents and trashed=false`,
-      fields: "files(id,name,mimeType,size,webViewLink)",
-      pageSize: 100,
-      includeItemsFromAllDrives: true,
-      supportsAllDrives: true,
-    });
-    for (const item of response.data.files || []) {
-      const itemPath = [folder.path, item.name].filter(Boolean).join(" / ");
-      if (item.mimeType === "application/vnd.google-apps.folder") {
-        if (queue.length + visited.size < 100) queue.push({ id: item.id, path: itemPath });
-      } else {
-        files.push({ ...item, path: itemPath });
-        if (files.length >= limit) break;
+    let pageToken = undefined;
+    do {
+      const response = await drive.files.list({
+        q: `'${folder.id.replace(/'/g, "\\'")}' in parents and trashed=false`,
+        fields: "nextPageToken,files(id,name,mimeType,size,webViewLink)",
+        pageSize: 100,
+        pageToken,
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+      });
+      for (const item of response.data.files || []) {
+        const itemPath = [folder.path, item.name].filter(Boolean).join(" / ");
+        if (item.mimeType === "application/vnd.google-apps.folder") {
+          if (queue.length + visited.size < 200) queue.push({ id: item.id, path: itemPath });
+        } else {
+          files.push({ ...item, path: itemPath });
+          if (files.length >= limit) break;
+        }
       }
-    }
+      pageToken = response.data.nextPageToken || undefined;
+    } while (pageToken && files.length < limit);
   }
   return files;
+}
+
+function findSimilarDriveFiles(files, query, limit = 10) {
+  const normalizedQuery = normalizeText(query);
+  const queryTokens = normalizedQuery.split(" ").filter((token) => token.length >= 3);
+  return files
+    .map((file) => {
+      const haystack = normalizeText(file.path || file.name);
+      const tokenHits = queryTokens.filter((token) => haystack.includes(token)).length;
+      const tokenScore = queryTokens.length ? tokenHits / queryTokens.length : 0;
+      return { file, score: Math.max(tokenScore, stringSimilarity(normalizedQuery, haystack)) };
+    })
+    .filter((item) => item.score >= 0.2)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => item.file);
+}
+
+async function presentDriveFileChoices(client, jid, candidate, files, documentQuery = "") {
+  driveLookupContext.set(jid, { step: "file", candidate, files, documentQuery });
+  const choices = files.slice(0, 20).map((file, index) => `${index + 1}. ${file.path || file.name}`).join("\n");
+  await client.sendMessage(jid, `Documentos de ${buildSucursalDisplay(candidate)}:\n${choices}\n\nResponde con el numero del archivo o TODOS para recibir hasta 5 documentos.`);
 }
 
 async function presentSucursalDriveDocuments(client, jid, candidate, documentQuery = "") {
@@ -1533,17 +1565,19 @@ async function presentSucursalDriveDocuments(client, jid, candidate, documentQue
         })
       : allFiles;
     if (!files.length) {
-      const detail = documentQuery ? ` que coincidan con "${documentQuery}"` : "";
-      await client.sendMessage(jid, `No encontre archivos${detail} dentro de ${buildSucursalDisplay(candidate)}. Te comparto la carpeta para revisarla:\n${driveFolderLink(candidate.drive)}`);
+      if (documentQuery && allFiles.length) {
+        driveLookupContext.set(jid, { step: "search", candidate, files: allFiles, documentQuery });
+      }
+      const similarHint = documentQuery && allFiles.length ? " Puedes responder BUSCA COINCIDENCIAS SIMILARES." : "";
+      const detail = documentQuery ? ` que coincidan exactamente con "${documentQuery}"` : "";
+      await client.sendMessage(jid, `No encontre archivos${detail} dentro de ${buildSucursalDisplay(candidate)}.${similarHint}\n${driveFolderLink(candidate.drive)}`);
       return;
     }
     if (files.length === 1 && documentQuery) {
       await sendSelectedDriveDocuments(client, jid, files);
       return;
     }
-    driveLookupContext.set(jid, { step: "file", candidate, files });
-    const choices = files.slice(0, 20).map((file, index) => `${index + 1}. ${file.path || file.name}`).join("\n");
-    await client.sendMessage(jid, `Documentos de ${buildSucursalDisplay(candidate)}:\n${choices}\n\nResponde con el numero del archivo o TODOS para recibir hasta 5 documentos.`);
+    await presentDriveFileChoices(client, jid, candidate, files, documentQuery);
   } catch (error) {
     getLogger().error({ error: error?.message || String(error), jid }, "drive document listing failed");
     await sendSucursalDriveLink(client, jid, candidate);
@@ -1596,6 +1630,10 @@ async function handleNaturalDriveRequest(client, jid, text, identity) {
     return true;
   }
   if (candidates.length === 1 || isStrongSucursalMatch(candidates[0], candidates[1])) {
+    if (isDriveLinkRequest(text)) {
+      await sendSucursalDriveLink(client, jid, candidates[0]);
+      return true;
+    }
     await presentSucursalDriveDocuments(client, jid, candidates[0], documentQuery);
     return true;
   }
@@ -1608,6 +1646,19 @@ async function handleDriveLookupChoice(client, jid, text) {
   const context = driveLookupContext.get(jid);
   if (!context) return false;
   const normalized = normalizeText(text);
+  if (context.step === "search") {
+    const requested = extractRequestedDocumentQuery(text) || context.documentQuery;
+    const wantsSimilar = /\b(similar|similares|parecido|parecidos|coincidencia|coincidencias)\b/.test(normalized)
+      || /\barchivos? con (el )?texto\b/.test(normalized);
+    if (!wantsSimilar) return false;
+    const similar = findSimilarDriveFiles(context.files, requested);
+    if (!similar.length) {
+      await client.sendMessage(jid, `No encontre nombres similares a "${requested}" en esa sucursal.`);
+      return true;
+    }
+    await presentDriveFileChoices(client, jid, context.candidate, similar, requested);
+    return true;
+  }
   if (context.step === "file" && normalized === "TODOS") {
     driveLookupContext.delete(jid);
     await sendSelectedDriveDocuments(client, jid, context.files.slice(0, 5));
