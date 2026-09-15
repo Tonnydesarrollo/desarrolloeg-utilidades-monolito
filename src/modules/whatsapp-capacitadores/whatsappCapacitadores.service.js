@@ -709,6 +709,7 @@ async function handleAiText(client, jid, text, identity) {
   const config = ensureRuntimeConfig();
   if (!config.aiServerUrl || !config.aiClientId || !config.aiClientToken) return false;
 
+  const businessContext = await buildAuthorizedAiContext(identity);
   const history = aiConversationContext.get(jid) || [];
   history.push({ role: "user", content: String(text).slice(0, 4000) });
   const messages = history.slice(-10);
@@ -720,7 +721,7 @@ async function handleAiText(client, jid, text, identity) {
         "x-ai-client-id": config.aiClientId,
         authorization: `Bearer ${config.aiClientToken}`,
       },
-      body: JSON.stringify({ identity, messages }),
+      body: JSON.stringify({ identity, businessContext, messages }),
       signal: AbortSignal.timeout(config.aiTimeoutMs),
     });
     if (!response.ok) throw new Error(`ai_http_${response.status}`);
@@ -735,6 +736,57 @@ async function handleAiText(client, jid, text, identity) {
     await client.sendMessage(jid, "El asistente inteligente no esta disponible en este momento. Intenta de nuevo en unos minutos.");
   }
   return true;
+}
+
+async function buildAuthorizedAiContext(identity) {
+  if (!identity || identity.role === "sin-acceso") {
+    return { access: "denied", reason: "No se encontro un empleado con acceso autorizado." };
+  }
+
+  const views = identity.accessProfile?.views || {};
+  const authorizedModules = Object.entries(views).map(([module, permission]) => ({
+    module,
+    actions: permission.actions || [],
+    scope: permission.scope || "none",
+  }));
+  const config = ensureRuntimeConfig();
+  const rows = await loadCapacitacionesRows().catch(() => []);
+  const employeeId = String(identity.id || "");
+  const visibleRows = identity.role === "admin" ? rows : rows.filter((row) => {
+    return splitEnumList(row[config.capacitacionesCapacitadoresCol]).map(String).includes(employeeId);
+  });
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcoming = visibleRows
+    .filter((row) => new Date(row[config.capacitacionesDateCol] || 0) >= today)
+    .sort((a, b) => new Date(a[config.capacitacionesDateCol] || 0) - new Date(b[config.capacitacionesDateCol] || 0))
+    .slice(0, 12)
+    .map((row) => ({
+      fecha: row[config.capacitacionesDateCol] || "",
+      sede: row[config.capacitacionesCedeCol] || "",
+      sucursales: row[config.capacitacionesSucursalesCol] || "",
+      capacitadores: row[config.capacitacionesCapacitadoresCol] || "",
+    }));
+
+  const context = {
+    generatedAt: new Date().toISOString(),
+    employee: { id: identity.id, name: identity.name, position: identity.position, role: identity.role },
+    authorizedModules,
+    capacitaciones: { visibleTotal: visibleRows.length, proximas: upcoming },
+  };
+
+  if (identity.role === "admin") {
+    const [empresas, sucursales] = await Promise.all([
+      loadCachedAppSheetRows({ table: "EMPRESAS" }).catch(() => []),
+      loadCachedAppSheetRows({ table: "SUCURSALES" }).catch(() => []),
+    ]);
+    context.organizationSummary = {
+      empresas: empresas.length,
+      sucursales: sucursales.length,
+      capacitaciones: rows.length,
+    };
+  }
+  return context;
 }
 
 async function loadEmpresasCache() {
