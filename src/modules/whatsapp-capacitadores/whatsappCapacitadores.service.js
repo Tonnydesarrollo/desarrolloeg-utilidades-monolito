@@ -2910,7 +2910,7 @@ function createWhatsAppClient(config) {
     runtime.logger.info({ state }, "whatsapp state changed");
   });
 
-  client.on("ready", () => {
+  client.on("ready", async () => {
     clearReconnectTimer();
     serviceState.status = "ready";
     serviceState.connected = true;
@@ -2918,6 +2918,15 @@ function createWhatsAppClient(config) {
     serviceState.qrPayload = null;
     serviceState.lastError = null;
     runtime.logger.info("whatsapp connected");
+
+    if (config.botName) {
+      try {
+        const updated = await client.setDisplayName(config.botName);
+        runtime.logger.info({ botName: config.botName, updated }, "whatsapp display name configured");
+      } catch (error) {
+        runtime.logger.warn({ error, botName: config.botName }, "whatsapp display name update failed");
+      }
+    }
   });
 
   client.on("auth_failure", (message) => {
