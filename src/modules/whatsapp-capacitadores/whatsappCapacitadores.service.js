@@ -744,10 +744,40 @@ async function buildAuthorizedAiContext(identity) {
   }
 
   const views = identity.accessProfile?.views || {};
+  const moduleLabels = {
+    calendario: "Calendario",
+    capacitaciones: "Capacitaciones",
+    "constancias-faltantes": "Constancias faltantes",
+    "crear-constancias-por-capacitador": "Constancias por capacitador",
+    "crear-constancias-por-capacitacion": "Constancias por capacitacion",
+    "informacion-sucursales": "Informacion de sucursales",
+    notas: "Notas",
+    pedidos: "Pedidos",
+    "faltantes-ley": "Faltantes Ley",
+    gestion: "Gestion",
+    jobs: "Procesos programados",
+    whatsapp: "WhatsApp",
+    facturacion: "Facturacion y cotizaciones",
+    planeacion: "Planeacion",
+    documentos: "Documentos",
+    reportes: "Reportes",
+    poliza: "Polizas",
+  };
+  const actionLabels = {
+    view: "consultar",
+    create: "crear",
+    edit: "editar",
+    delete: "eliminar",
+  };
+  const scopeLabels = {
+    all: "todos los registros",
+    own: "solo sus registros",
+    none: "sin acceso",
+  };
   const authorizedModules = Object.entries(views).map(([module, permission]) => ({
-    module,
-    actions: permission.actions || [],
-    scope: permission.scope || "none",
+    nombre: moduleLabels[module] || module,
+    acciones: (permission.actions || []).map((action) => actionLabels[action] || action),
+    alcance: scopeLabels[permission.scope] || scopeLabels.none,
   }));
   const config = ensureRuntimeConfig();
   const rows = await loadCapacitacionesRows().catch(() => []);
@@ -757,20 +787,21 @@ async function buildAuthorizedAiContext(identity) {
   });
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const upcoming = visibleRows
+  const resolvedRows = await resolveNames(visibleRows);
+  const upcoming = resolvedRows
     .filter((row) => new Date(row[config.capacitacionesDateCol] || 0) >= today)
     .sort((a, b) => new Date(a[config.capacitacionesDateCol] || 0) - new Date(b[config.capacitacionesDateCol] || 0))
     .slice(0, 12)
     .map((row) => ({
-      fecha: row[config.capacitacionesDateCol] || "",
-      sede: row[config.capacitacionesCedeCol] || "",
-      sucursales: row[config.capacitacionesSucursalesCol] || "",
-      capacitadores: row[config.capacitacionesCapacitadoresCol] || "",
+      fecha: formatAiDate(row[config.capacitacionesDateCol]),
+      sede: aiLabel(row[config.capacitacionesCedeCol], "Sede sin etiqueta"),
+      sucursales: aiLabelList(row[config.capacitacionesSucursalesCol], "Sin sucursales etiquetadas"),
+      capacitadores: aiLabelList(row[config.capacitacionesCapacitadoresCol], "Sin capacitadores etiquetados"),
     }));
 
   const context = {
     generatedAt: new Date().toISOString(),
-    employee: { id: identity.id, name: identity.name, position: identity.position, role: identity.role },
+    employee: { nombre: identity.name, puesto: identity.position, rol: identity.role },
     authorizedModules,
     capacitaciones: { visibleTotal: visibleRows.length, proximas: upcoming },
   };
@@ -787,6 +818,33 @@ async function buildAuthorizedAiContext(identity) {
     };
   }
   return context;
+}
+
+function formatAiDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "Fecha no indicada";
+  const match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/) || raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  let date;
+  if (match && match[1].length === 4) date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  else if (match) date = new Date(Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])));
+  else date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+function aiLabel(value, fallback) {
+  const label = normalizeDisplay(value);
+  return !label || isLikelyIdentifier(label) ? fallback : label;
+}
+
+function aiLabelList(value, fallback) {
+  const labels = splitEnumList(value).map(normalizeDisplay).filter((item) => item && !isLikelyIdentifier(item));
+  return labels.length ? labels.join(", ") : fallback;
 }
 
 async function loadEmpresasCache() {
