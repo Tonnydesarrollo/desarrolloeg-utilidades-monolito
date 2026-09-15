@@ -732,7 +732,7 @@ async function handleAiText(client, jid, text, identity) {
     aiConversationContext.set(jid, history.slice(-10));
     await client.sendMessage(jid, answer.slice(0, 12000));
   } catch (error) {
-    getLogger().error({ error, jid }, "local AI request failed");
+    getLogger().error({ error: error?.message || String(error), jid }, "local AI request failed");
     await client.sendMessage(jid, "El asistente inteligente no esta disponible en este momento. Intenta de nuevo en unos minutos.");
   }
   return true;
@@ -789,8 +789,8 @@ async function buildAuthorizedAiContext(identity) {
   today.setHours(0, 0, 0, 0);
   const resolvedRows = await resolveNames(visibleRows);
   const upcoming = resolvedRows
-    .filter((row) => new Date(row[config.capacitacionesDateCol] || 0) >= today)
-    .sort((a, b) => new Date(a[config.capacitacionesDateCol] || 0) - new Date(b[config.capacitacionesDateCol] || 0))
+    .filter((row) => parseBusinessDate(row[config.capacitacionesDateCol]) >= today)
+    .sort((a, b) => parseBusinessDate(a[config.capacitacionesDateCol]) - parseBusinessDate(b[config.capacitacionesDateCol]))
     .slice(0, 12)
     .map((row) => ({
       fecha: formatAiDate(row[config.capacitacionesDateCol]),
@@ -835,6 +835,15 @@ function formatAiDate(value) {
     year: "numeric",
     timeZone: "UTC",
   }).format(date);
+}
+
+function parseBusinessDate(value) {
+  const raw = String(value || "").trim();
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+  const localMatch = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  if (localMatch) return new Date(Number(localMatch[3]), Number(localMatch[2]) - 1, Number(localMatch[1]));
+  return new Date(raw || 0);
 }
 
 function aiLabel(value, fallback) {
@@ -1038,11 +1047,7 @@ function formatCapacitaciones(rows, fields) {
   return rows.map((row) => {
     const parts = selectedFields.map((field) => {
       if (field === config.capacitacionesDateCol) {
-        const dateValue = new Date(row[field] || "");
-        const formatted = Number.isNaN(dateValue.getTime())
-          ? (row[field] ?? "")
-          : dateValue.toLocaleDateString("es-MX");
-        return `Fecha: ${formatted}`;
+        return `Fecha: ${formatAiDate(row[field])}`;
       }
       if (field === config.capacitacionesCedeCol) return `Cede: ${row[field] ?? ""}`;
       if (field === config.capacitacionesSucursalesCol) return `Sucursales: ${row[field] ?? ""}`;
@@ -1056,8 +1061,8 @@ function formatCapacitaciones(rows, fields) {
 function sortByDate(rows) {
   const config = ensureRuntimeConfig();
   return rows.sort((a, b) => {
-    const aDate = new Date(a[config.capacitacionesDateCol] || 0);
-    const bDate = new Date(b[config.capacitacionesDateCol] || 0);
+    const aDate = parseBusinessDate(a[config.capacitacionesDateCol]);
+    const bDate = parseBusinessDate(b[config.capacitacionesDateCol]);
     return aDate - bDate;
   });
 }
@@ -2168,8 +2173,8 @@ async function handleText(client, jid, text, identity = null) {
 
     const ordered = sortByDate(await resolveNames(filteredRows));
     const today = new Date();
-    const finalizadas = ordered.filter((row) => new Date(row[config.capacitacionesDateCol] || 0) < today);
-    const programadas = ordered.filter((row) => new Date(row[config.capacitacionesDateCol] || 0) >= today);
+    const finalizadas = ordered.filter((row) => parseBusinessDate(row[config.capacitacionesDateCol]) < today);
+    const programadas = ordered.filter((row) => parseBusinessDate(row[config.capacitacionesDateCol]) >= today);
 
     const blocks = [];
     if (finalizadas.length) {
@@ -2189,7 +2194,7 @@ async function handleText(client, jid, text, identity = null) {
   if (normalized === "2") {
     const rows = await loadCapacitacionesRows();
     const today = new Date();
-    const filteredRows = rows.filter((row) => new Date(row[config.capacitacionesDateCol] || 0) >= today);
+    const filteredRows = rows.filter((row) => parseBusinessDate(row[config.capacitacionesDateCol]) >= today);
     if (!filteredRows?.length) {
       await client.sendMessage(jid, "Sin capacitaciones para mostrar.");
       return;
