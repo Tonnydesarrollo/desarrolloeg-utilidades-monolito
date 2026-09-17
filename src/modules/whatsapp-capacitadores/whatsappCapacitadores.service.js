@@ -17,6 +17,8 @@ const SCOPES = [
   "https://www.googleapis.com/auth/drive.file",
 ];
 const WHATSAPP_BOOT_WATCHDOG_MS = 90000;
+const WHATSAPP_AUTH_WATCHDOG_MS = 120000;
+const WHATSAPP_AUTH_WATCHDOG_INTERVAL_MS = 15000;
 
 const serviceState = {
   enabled: false,
@@ -38,6 +40,9 @@ const runtime = {
   driveClientPromise: null,
   refreshTimer: null,
   reconnectTimer: null,
+  authWatchdogTimer: null,
+  authenticatedAt: null,
+  recovering: false,
   intentionalStop: false,
 };
 
@@ -3012,6 +3017,36 @@ function clearReconnectTimer() {
   runtime.reconnectTimer = null;
 }
 
+export function isWhatsAppAuthenticationStalled(status, authenticatedAt, now = Date.now()) {
+  return status === "authenticated"
+    && Number.isFinite(authenticatedAt)
+    && now - authenticatedAt >= WHATSAPP_AUTH_WATCHDOG_MS;
+}
+
+function clearAuthenticationWatchdog() {
+  clearInterval(runtime.authWatchdogTimer);
+  runtime.authWatchdogTimer = null;
+  runtime.authenticatedAt = null;
+}
+
+function startAuthenticationWatchdog() {
+  clearAuthenticationWatchdog();
+  runtime.authWatchdogTimer = setInterval(() => {
+    if (runtime.intentionalStop || runtime.recovering || !runtime.client) return;
+    if (!isWhatsAppAuthenticationStalled(serviceState.status, runtime.authenticatedAt)) return;
+    const client = runtime.client;
+    runtime.logger?.error({ stalledMs: Date.now() - runtime.authenticatedAt }, "whatsapp authenticated without ready; recovering session");
+    void Promise.race([
+      recoverWhatsAppClient(client, "authenticated_without_ready"),
+      wait(30000).then(() => { throw new Error("whatsapp recovery timed out"); }),
+    ]).catch((error) => {
+      runtime.logger?.fatal({ error: serializeError(error) }, "whatsapp watchdog recovery failed; restarting container");
+      process.exit(1);
+    });
+  }, WHATSAPP_AUTH_WATCHDOG_INTERVAL_MS);
+  runtime.authWatchdogTimer.unref();
+}
+
 function scheduleWhatsAppReconnect(reason) {
   const config = runtime.config;
   if (!config?.enabled || runtime.reconnectTimer) return;
@@ -3047,14 +3082,21 @@ async function clearWhatsAppLocalSession(config, reason) {
 }
 
 async function recoverWhatsAppClient(client, reason) {
+  if (runtime.recovering || runtime.client !== client) return;
+  runtime.recovering = true;
   const config = runtime.config;
   serviceState.startPromise = null;
   if (runtime.client === client) runtime.client = null;
 
-  await destroyWhatsAppClient(client);
-  if (runtime.intentionalStop) return;
-  if (config) await clearWhatsAppLocalSession(config, reason);
-  scheduleWhatsAppReconnect(reason || "disconnected");
+  runtime.authenticatedAt = null;
+  try {
+    await destroyWhatsAppClient(client);
+    if (runtime.intentionalStop) return;
+    if (config) await clearWhatsAppLocalSession(config, reason);
+    scheduleWhatsAppReconnect(reason || "disconnected");
+  } finally {
+    runtime.recovering = false;
+  }
 }
 
 function createWhatsAppClient(config) {
@@ -3090,6 +3132,7 @@ function createWhatsAppClient(config) {
   });
 
   client.on("authenticated", () => {
+    runtime.authenticatedAt = Date.now();
     serviceState.status = "authenticated";
     serviceState.connected = true;
     serviceState.qrPayload = null;
@@ -3099,6 +3142,7 @@ function createWhatsAppClient(config) {
 
   client.on("change_state", (state) => {
     if (String(state || "").toUpperCase() === "CONNECTED") {
+      runtime.authenticatedAt = null;
       serviceState.connected = true;
       if (serviceState.status === "authenticated") {
         serviceState.status = "ready";
@@ -3110,6 +3154,7 @@ function createWhatsAppClient(config) {
   });
 
   client.on("ready", async () => {
+    runtime.authenticatedAt = null;
     clearReconnectTimer();
     serviceState.status = "ready";
     serviceState.connected = true;
@@ -3274,6 +3319,7 @@ async function bootWhatsAppService(config) {
   serviceState.connected = false;
   serviceState.sessionDir = config.sessionDir;
   serviceState.lastError = null;
+  startAuthenticationWatchdog();
 
   // Drive OAuth can require interactive consent. It must never block creation of
   // the WhatsApp client or the QR needed to establish the primary session.
@@ -3408,6 +3454,7 @@ export async function startWhatsAppCapacitadoresService() {
 
 export async function stopWhatsAppCapacitadoresService() {
   clearReconnectTimer();
+  clearAuthenticationWatchdog();
   clearInterval(runtime.refreshTimer);
   runtime.refreshTimer = null;
 

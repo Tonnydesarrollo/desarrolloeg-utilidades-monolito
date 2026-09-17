@@ -7,6 +7,7 @@ import {
   isPendingConstanciasRequest,
   isSucursalInformationRequest,
   scoreSucursalCandidate,
+  isWhatsAppAuthenticationStalled,
 } from "../src/modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
 
 test("detecta la consulta natural de constancias pendientes", () => {
@@ -45,4 +46,12 @@ test("prioriza un numero de tienda incluido en una frase completa", () => {
     tokens: ["casa", "ley", "1002", "rubi"],
   });
   assert.equal(score, 1);
+});
+
+test("detecta autenticacion atascada sin reiniciar sesiones listas", () => {
+  const now = 1_000_000;
+  assert.equal(isWhatsAppAuthenticationStalled("authenticated", now - 119_999, now), false);
+  assert.equal(isWhatsAppAuthenticationStalled("authenticated", now - 120_000, now), true);
+  assert.equal(isWhatsAppAuthenticationStalled("ready", now - 200_000, now), false);
+  assert.equal(isWhatsAppAuthenticationStalled("awaiting_qr", now - 200_000, now), false);
 });
