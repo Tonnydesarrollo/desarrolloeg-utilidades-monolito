@@ -938,6 +938,72 @@ export function isPendingConstanciasRequest(text) {
     && /\b(pendiente|pendientes|faltante|faltantes)\b/.test(normalized);
 }
 
+export function isPendingSistemaPcRequest(text) {
+  const normalized = normalizeText(text);
+  return /\b(sistema (de )?proteccion civil|sistema pc)\b/.test(normalized)
+    && /\b(pendiente|pendientes|falta|faltan|sin subir|subir)\b/.test(normalized)
+    && /\b(sucursal|sucursales|tienda|tiendas)\b/.test(normalized);
+}
+
+export function selectPendingSistemaPcRows(rows, sucursales, companyId, year) {
+  const byKey = new Map(sucursales.map((row) => [String(row.key), row]));
+  const latest = new Map();
+  for (const row of rows) {
+    const branch = byKey.get(String(getFirstFlexible(row, ["SUCURSAL", "sucursal_id"])));
+    if (!branch || String(getFirstFlexible(branch.raw, ["ID EMPRESA", "EMPRESA"])) !== String(companyId)) continue;
+    const date = String(getFirstFlexible(row, ["FECHA", "CAPACITACION"])) || "";
+    if (!date.includes(String(year))) continue;
+    const key = String(branch.key);
+    const timestamp = parseBusinessDate(date).getTime() || 0;
+    const previous = latest.get(key);
+    if (!previous || timestamp >= previous.timestamp) latest.set(key, { branch, row, timestamp });
+  }
+  return [...latest.values()]
+    .filter(({ row }) => normalizeText(getFirstFlexible(row, ["SISTEMA PC"])) !== "en sistema pc")
+    .sort((a, b) => Number(a.branch.tienda) - Number(b.branch.tienda));
+}
+
+async function handlePendingSistemaPcRequest(client, jid, text, identity) {
+  if (!isPendingSistemaPcRequest(text)) return false;
+  if (!hasSucursalDocumentAccess(identity)) {
+    await client.sendMessage(jid, "No tienes permiso para consultar informacion de sucursales.");
+    return true;
+  }
+  const companyQuery = normalizeText(text);
+  if (!/\b(casa ley|ley)\b/.test(companyQuery)) {
+    await client.sendMessage(jid, "Indica la empresa para consultar las sucursales pendientes de subir al Sistema de Proteccion Civil.");
+    return true;
+  }
+  const [estatales, sucursales, empresas] = await Promise.all([
+    loadCachedAppSheetRows({ table: "ESTATALES" }),
+    loadSucursalesCache(),
+    loadEmpresasCache(),
+  ]);
+  const company = [...empresas.rowsByKey.entries()].find(([, row]) =>
+    normalizeText(getFirstFlexible(row, ["RAZON SOCIAL", "RAZON_SOCIAL", "NOMBRE COMERCIAL", "NOMBRE_COMERCIAL"])).includes("ley")
+  );
+  if (!company) {
+    await client.sendMessage(jid, "No encontre la empresa Casa Ley en la base local.");
+    return true;
+  }
+  const year = new Date().getFullYear();
+  const pending = selectPendingSistemaPcRows(estatales, sucursales.rows, company[0], year);
+  aiConversationContext.delete(jid);
+  if (!pending.length) {
+    await client.sendMessage(jid, `No hay sucursales de Casa Ley pendientes de subir al Sistema de Proteccion Civil en ${year}.`);
+    return true;
+  }
+  const lines = pending.map(({ branch, row }, index) =>
+    `${index + 1}. ${branch.tienda} ${branch.tipo || ""} ${branch.name || branch.nombreComercial}`.replace(/\s+/g, " ").trim()
+    + ` | PIPC: ${getFirstFlexible(row, ["PIPC"]) || "Sin estatus"}`
+  );
+  await client.sendMessage(jid,
+    `Casa Ley: ${pending.length} sucursales pendientes de subir al Sistema de Proteccion Civil (${year}).\n` +
+    `El estatus PIPC indica el avance del documento, no si ya esta en el sistema.\n\n${lines.join("\n")}`
+  );
+  return true;
+}
+
 async function handlePendingConstanciasRequest(client, jid, text, identity) {
   if (!isPendingConstanciasRequest(text)) return false;
   const permission = identity?.accessProfile?.views?.["constancias-faltantes"];
@@ -2728,6 +2794,7 @@ async function handleText(client, jid, text, identity = null) {
   }
 
   if (await handleDriveLookupChoice(client, jid, text)) return;
+  if (await handlePendingSistemaPcRequest(client, jid, text, identity)) return;
   if (await handleBulkPendingAttendanceRequest(client, jid, text, identity)) return;
   if (await handleSucursalInformationRequest(client, jid, text, identity)) return;
   if (await handleNaturalDriveRequest(client, jid, text, identity)) return;

@@ -8,6 +8,8 @@ import {
   isSucursalInformationRequest,
   scoreSucursalCandidate,
   isWhatsAppAuthenticationStalled,
+  isPendingSistemaPcRequest,
+  selectPendingSistemaPcRows,
 } from "../src/modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
 
 test("detecta la consulta natural de constancias pendientes", () => {
@@ -54,4 +56,24 @@ test("detecta autenticacion atascada sin reiniciar sesiones listas", () => {
   assert.equal(isWhatsAppAuthenticationStalled("authenticated", now - 120_000, now), true);
   assert.equal(isWhatsAppAuthenticationStalled("ready", now - 200_000, now), false);
   assert.equal(isWhatsAppAuthenticationStalled("awaiting_qr", now - 200_000, now), false);
+});
+
+test("detecta sucursales pendientes de subir al sistema PC", () => {
+  assert.equal(isPendingSistemaPcRequest("Dame todas las sucursales de casa ley que estan pendientes de subir al sistema de proteccion civil"), true);
+  assert.equal(isPendingSistemaPcRequest("Dame la lista de asistencia de la tienda 1002"), false);
+});
+
+test("filtra la empresa y conserva solo el ultimo estatus del ano", () => {
+  const branches = [
+    { key: "1", tienda: "1002", raw: { EMPRESA: "1" } },
+    { key: "2", tienda: "1003", raw: { EMPRESA: "1" } },
+    { key: "3", tienda: "2001", raw: { EMPRESA: "2" } },
+  ];
+  const rows = [
+    { SUCURSAL: "1", FECHA: "01/02/2026", "SISTEMA PC": "", PIPC: "IMPRESO" },
+    { SUCURSAL: "1", FECHA: "02/02/2026", "SISTEMA PC": "EN SISTEMA PC", PIPC: "ENTREGADO" },
+    { SUCURSAL: "2", FECHA: "02/02/2026", "SISTEMA PC": "", PIPC: "PENDIENTE" },
+    { SUCURSAL: "3", FECHA: "02/02/2026", "SISTEMA PC": "", PIPC: "IMPRESO" },
+  ];
+  assert.deepEqual(selectPendingSistemaPcRows(rows, branches, "1", 2026).map(({ branch }) => branch.tienda), ["1003"]);
 });
