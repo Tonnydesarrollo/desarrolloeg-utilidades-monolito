@@ -23,7 +23,11 @@ const token = String(process.env.WHATSAPP_CAP_SERVICE_TOKEN || fs.readFileSync(t
 
 const app = express();
 app.disable("x-powered-by");
-app.get("/health", (_req, res) => res.json({ service: "desarrolloeg-whatsapp-dev", status: "ok" }));
+app.get("/health", (_req, res) => res.json({
+  service: "desarrolloeg-whatsapp",
+  status: "ok",
+  whatsapp: getWhatsAppCapacitadoresStatus(),
+}));
 app.use((req, res, next) => {
   const provided = Buffer.from(req.get("authorization") || "");
   const expected = Buffer.from(`Bearer ${token}`);
