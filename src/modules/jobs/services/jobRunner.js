@@ -4,6 +4,7 @@ import { syncAppsheetBaseToLocal } from '../native/appsheetBaseSync.js';
 import { syncFacturasNative } from '../native/facturas/syncFacturasNative.js';
 import { syncPedidosNative } from '../native/pedidos/syncPedidosNative.js';
 import { exportCasaleyAllNative, syncCasaleyNative } from '../native/casaley/syncCasaleyNative.js';
+import { syncDictamenesEstructurales } from '../native/dictamenes/syncDictamenes.js';
 
 const nativeHandlers = {
   'appsheet-base-sync': syncAppsheetBaseToLocal,
@@ -14,6 +15,7 @@ const nativeHandlers = {
   'facturas-ley': () => syncCasaleyNative({ uploadTarget: 'facturas' }),
   'facturas-native-sync': () => syncFacturasNative(),
   'pedidos-native-sync': syncPedidosNative,
+  'dictamenes-estructurales-sync': syncDictamenesEstructurales,
 };
 
 export function listJobs() {

@@ -21,6 +21,9 @@ services:
       DESARROLLOEG_LOCAL_DB_PATH: /app/desarrolloeg-sync-data/desarrolloeg.sqlite
       PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
       PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json
+      DICTAMENES_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
+      DICTAMENES_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token-dictamenes.json
+      DICTAMENES_DOWNLOAD_DIR: /app/runtime/jobs/dictamenes-estructurales
       PEDIDOS_OUTPUT_DIR: /app/runtime/jobs/pedidos
       CASALEY_OUTPUT_DIR: /app/runtime/jobs/casaley
       WHATSAPP_CAP_SESSION_DIR: /app/runtime/whatsapp-capacitadores/session

@@ -80,6 +80,9 @@ services:
       PEDIDOS_OUTPUT_DIR: /app/runtime/jobs/pedidos
       PEDIDOS_SYNC_ENABLED: 0
       PEDIDOS_SYNC_RUN_ON_START: 0
+      DICTAMENES_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
+      DICTAMENES_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token-dictamenes.json
+      DICTAMENES_DOWNLOAD_DIR: /app/runtime/jobs/dictamenes-estructurales
       CASALEY_OUTPUT_DIR: /app/runtime/jobs/casaley
       CASALEY_SYNC_ENABLED: 0
       CASALEY_SYNC_RUN_ON_START: 0

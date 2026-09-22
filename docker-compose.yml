@@ -29,6 +29,9 @@ services:
       PEDIDOS_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
       PEDIDOS_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token.json
       PEDIDOS_OUTPUT_DIR: /app/runtime/jobs/pedidos
+      DICTAMENES_GOOGLE_CLIENT_CREDENTIALS: /app/secrets/pedidos/credentials.json
+      DICTAMENES_GOOGLE_TOKEN_PATH: /app/runtime/pedidos/token-dictamenes.json
+      DICTAMENES_DOWNLOAD_DIR: /app/runtime/jobs/dictamenes-estructurales
       CASALEY_OUTPUT_DIR: /app/runtime/jobs/casaley
       WHATSAPP_CAP_SESSION_DIR: /app/runtime/whatsapp-capacitadores/session
       WHATSAPP_CAP_TMP_DIR: /app/runtime/whatsapp-capacitadores/tmp

@@ -135,6 +135,17 @@ function ensureJobsRegistered() {
     ),
     runOnStart: parseBoolean(process.env.PEDIDOS_SYNC_RUN_ON_START, false),
   });
+
+  registerIntervalJob({
+    jobId: "dictamenes-estructurales-sync",
+    label: "Dictamenes estructurales Gmail",
+    enabled: parseBoolean(process.env.DICTAMENES_SYNC_ENABLED, false),
+    intervalSeconds: parsePositiveSeconds(
+      process.env.DICTAMENES_SYNC_INTERVAL_SECONDS,
+      parsePositiveMinutes(process.env.DICTAMENES_SYNC_INTERVAL_MINUTES, 10) * 60
+    ),
+    runOnStart: parseBoolean(process.env.DICTAMENES_SYNC_RUN_ON_START, false),
+  });
 }
 
 function scheduleNext(entry, delayMs) {

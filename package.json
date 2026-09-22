@@ -8,6 +8,7 @@
         "start": "node src/server.js",
         "test": "node --test",
         "build:constancias-css": "tailwindcss -i ./src/modules/constancias-v2/tailwind.input.css -o ./src/modules/constancias-v2/public/tailwind.generated.css --content ./src/modules/constancias-v2/public/**/*.{html,js} --minify",
+        "auth:dictamenes": "node src/modules/jobs/native/dictamenes/authorize.js",
         "pm2:start": "pm2 start ecosystem.config.cjs --env production",
         "pm2:restart": "pm2 restart desarrolloeg-monolito",
         "pm2:stop": "pm2 stop desarrolloeg-monolito",

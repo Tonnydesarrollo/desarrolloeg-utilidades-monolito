@@ -92,6 +92,17 @@ export const jobRegistry = {
       ['APPSHEET_APP_ID', 'APPSHEET_API_KEY'],
     ],
   },
+  'dictamenes-estructurales-sync': {
+    id: 'dictamenes-estructurales-sync',
+    description: 'Descarga dictamenes estructurales de Gmail, los archiva en Drive y registra en Sheets',
+    type: 'native',
+    requiredEnv: ['DICTAMENES_GOOGLE_TOKEN_PATH'],
+    requiredEnvAny: [
+      ['DICTAMENES_GOOGLE_CLIENT_CREDENTIALS'],
+      ['PEDIDOS_GOOGLE_CLIENT_CREDENTIALS'],
+      ['GOOGLE_CLIENT_CREDENTIALS'],
+    ],
+  },
 };
 
 export function getJobDefinition(jobId) {
