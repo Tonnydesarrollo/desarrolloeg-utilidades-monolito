@@ -23,11 +23,15 @@ const token = String(process.env.WHATSAPP_CAP_SERVICE_TOKEN || fs.readFileSync(t
 
 const app = express();
 app.disable("x-powered-by");
-app.get("/health", (_req, res) => res.json({
-  service: "desarrolloeg-whatsapp",
-  status: "ok",
-  whatsapp: getWhatsAppCapacitadoresStatus(),
-}));
+app.get("/health", (_req, res) => {
+  const whatsapp = getWhatsAppCapacitadoresStatus();
+  const healthy = !whatsapp.enabled || whatsapp.status === "ready" || whatsapp.status === "awaiting_qr";
+  res.status(healthy ? 200 : 503).json({
+    service: "desarrolloeg-whatsapp",
+    status: healthy ? "ok" : "starting",
+    whatsapp,
+  });
+});
 app.use((req, res, next) => {
   const provided = Buffer.from(req.get("authorization") || "");
   const expected = Buffer.from(`Bearer ${token}`);
@@ -62,8 +66,23 @@ const server = app.listen(port, "0.0.0.0", () => {
   console.log(`[whatsapp-dev] listening on ${port}`);
   void startWhatsAppCapacitadoresService().catch((error) => {
     console.error("[whatsapp-dev] startup failed:", error.message);
+    process.exitCode = 1;
+    setTimeout(() => process.exit(1), 1000).unref();
   });
 });
+
+const startedAt = Date.now();
+const startupWatchdog = setInterval(() => {
+  const status = getWhatsAppCapacitadoresStatus();
+  if (!status.enabled || status.status === "ready" || status.status === "awaiting_qr") {
+    clearInterval(startupWatchdog);
+    return;
+  }
+  if (Date.now() - startedAt < 4 * 60 * 1000) return;
+  console.error(`[whatsapp-dev] startup watchdog: WhatsApp remained ${status.status}; restarting container`);
+  process.exit(1);
+}, 15000);
+startupWatchdog.unref();
 
 let closing = false;
 async function shutdown() {

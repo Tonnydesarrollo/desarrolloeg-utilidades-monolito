@@ -10,6 +10,14 @@ import {
   setPersistentCacheEntry,
 } from "../../../services/platformCache.js";
 import { readLocalOperationalTable } from "../../../services/localOperationalRepository.js";
+import {
+  externalCentersMap,
+  getExternalConceptRows,
+  getExternalQuote,
+  isExternalQuoteId,
+  listExternalQuotes,
+  saveExternalQuote,
+} from "./cotizacionesExternas.js";
 
 const drive = crearDriveClient(auth);
 const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 60000);
@@ -256,6 +264,7 @@ async function leerTablaAppSheetFresca(nombreTabla) {
 
 export async function obtenerCotizacion(cotizacionId, forceFresh = false) {
   const wantedId = String(cotizacionId || "").trim();
+  if (isExternalQuoteId(wantedId)) return getExternalQuote(wantedId);
   if (!forceFresh) {
     const persistent = readPersistentCotizacion(wantedId);
     if (persistent) {
@@ -286,11 +295,18 @@ export async function listarCotizaciones(forceFresh = false) {
   const rows = forceFresh
     ? await leerTablaAppSheetFresca("COTIZACIONES_VARIOS_CT")
     : await leerTablaAppSheetCacheada("COTIZACIONES_VARIOS_CT");
-  return Array.isArray(rows) ? rows : [];
+  let externas = [];
+  try {
+    externas = listExternalQuotes();
+  } catch (error) {
+    console.error("No se pudieron leer las cotizaciones externas:", error?.message || error);
+  }
+  return [...(Array.isArray(rows) ? rows : []), ...externas];
 }
 
 export async function buscarConceptosPorCotizacion(cotizacionId, forceFresh = false) {
   const wantedId = String(cotizacionId || "").trim();
+  if (isExternalQuoteId(wantedId)) return getExternalConceptRows(wantedId);
   if (!forceFresh) {
     const persistent = readPersistentCotizacion(wantedId);
     if (persistent && Array.isArray(persistent.conceptos)) {
@@ -517,13 +533,16 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
     const cotizacion = await obtenerCotizacion(cotizacionId, forceFresh);
     if (!cotizacion) throw new Error("Cotizacion no encontrada");
 
-    const [conceptos, empresas, sucursales, catalogo, proveedores] = await Promise.all([
+    const [conceptos, empresas, sucursalesBase, catalogo, proveedores] = await Promise.all([
       buscarConceptosPorCotizacion(cotizacionId, forceFresh),
       mapaEmpresas(forceFresh),
       mapaSucursales(forceFresh),
       mapaCatalogo(forceFresh),
       mapaProveedores(forceFresh)
     ]);
+    const sucursales = isExternalQuoteId(cacheKey)
+      ? { ...sucursalesBase, ...externalCentersMap(cacheKey) }
+      : sucursalesBase;
 
     const empresaRef = String(cotizacion["RAZON SOCIAL"] || cotizacion.RAZON_SOCIAL || cotizacion.EMPRESA || "").trim();
     const empresaEncontrada = findEmpresaFromCotizacion(cotizacion, empresas);
@@ -587,6 +606,15 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
       }
 
       const cat = catalogo[c.CONCEPTO] || {};
+      const cantidad = Number(c.CANTIDAD || 0);
+      const precio = Number(c.PRECIO || 0);
+      const subtotal = String(c.SUBTOTAL ?? "").trim() !== "" && Number.isFinite(Number(c.SUBTOTAL))
+        ? Number(c.SUBTOTAL) : cantidad * precio;
+      const ivaTasa = normalizeTaxRate(c.IVA, 0.16);
+      const ivaImporte = String(c["TOTAL IVA"] ?? "").trim() !== "" && Number.isFinite(Number(c["TOTAL IVA"]))
+        ? Number(c["TOTAL IVA"]) : subtotal * ivaTasa;
+      const total = String(c.TOTAL ?? "").trim() !== "" && Number.isFinite(Number(c.TOTAL))
+        ? Number(c.TOTAL) : subtotal + ivaImporte;
       porCentro[ctId].conceptos.push({
         id: c["Row ID"] || c.ID || "",
         concepto_id: c.CONCEPTO,
@@ -594,11 +622,12 @@ export async function obtenerCotizacionCompleta(cotizacionId, { forceFresh = fal
         tipo: cat.tipo || "",
         catalogo_codigo: cat.codigo || cat.id || c.CONCEPTO || "",
         descripcion_catalogo: cat.descripcion || "",
-        cantidad: Number(c.CANTIDAD || 0),
-        precio: Number(c.PRECIO || 0),
-        subtotal: Number(c.SUBTOTAL || 0),
-        iva: Number(c["TOTAL IVA"] || 0),
-        total: Number(c.TOTAL || 0)
+        cantidad,
+        precio,
+        subtotal,
+        iva: ivaTasa,
+        ivaImporte,
+        total
       });
     });
 
@@ -647,6 +676,15 @@ function createRowId() {
 function normalizeNumber(value, fallback = 0) {
   const normalized = Number(String(value ?? "").replace(/[$,\s]/g, ""));
   return Number.isFinite(normalized) ? normalized : fallback;
+}
+
+function normalizeTaxRate(value, fallback = 0.16) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+  const parsed = Number(raw.replace(/[%,$\s]/g, ""));
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  if (raw.includes("%") || parsed > 1) return parsed <= 100 ? parsed / 100 : fallback;
+  return parsed;
 }
 
 function normalizeIds(values) {
@@ -860,7 +898,7 @@ export function conceptRowsFromInput(input, quoteId, context = {}) {
       CONCEPTO: String(line.conceptoId || "").trim(),
       CANTIDAD: Math.max(0, normalizeNumber(line.cantidad, 1)),
       PRECIO: Math.max(0, normalizeNumber(line.precio, 0)),
-      IVA: Math.max(0, normalizeNumber(line.iva, 0.16)),
+      IVA: normalizeTaxRate(line.iva, 0.16),
     })).filter((line) => centers.includes(line.CENTRO_DE_TRABAJO) && line.CONCEPTO);
   }
   const concepts = Array.isArray(input.conceptos) ? input.conceptos : [];
@@ -871,7 +909,7 @@ export function conceptRowsFromInput(input, quoteId, context = {}) {
     CONCEPTO: String(concept.id || concept.conceptoId || "").trim(),
     CANTIDAD: Math.max(0, normalizeNumber(concept.cantidad, 1)),
     PRECIO: Math.max(0, conceptPriceForCenter(concept, centerId, branchesById, catalogById)),
-    IVA: Math.max(0, normalizeNumber(concept.iva, 0.16)),
+    IVA: normalizeTaxRate(concept.iva, 0.16),
   }))).filter((line) => line.CONCEPTO);
 }
 
@@ -882,6 +920,13 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
     timings[stage] = Date.now() - startedAt;
   };
   let id = String(quoteId || input.id || "").trim();
+  const empresaId = String(input.empresaId || "").trim();
+  if (isExternalQuoteId(id) || (!id && !empresaId)) {
+    return saveExternalQuote(input, id);
+  }
+  if (id && !empresaId) {
+    throw new Error("Una cotizacion registrada no puede convertirse en externa. Crea una cotizacion nueva.");
+  }
   const existing = quoteId ? await obtenerCotizacion(id) : null;
   const [branchesById, catalogById] = await Promise.all([mapaSucursales(), mapaCatalogo()]);
   await hydrateRequiredBranchPrices(input, branchesById, catalogById);

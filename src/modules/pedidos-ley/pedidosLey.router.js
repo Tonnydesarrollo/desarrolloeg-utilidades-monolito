@@ -2,6 +2,7 @@ import express from 'express';
 import {
   debugPedidoLey,
   fetchPedidoLeyFiles,
+  fetchPedidosLeyAdminDashboardData,
   fetchPedidosLeySinLiberacion,
   markPedidoLeyEnviado,
   readPedidoLeyAttachment,
@@ -18,6 +19,7 @@ import {
 import { loadAuthenticatedEmployee } from '../home/portalAuth.service.js';
 
 export const pedidosLeyApiRouter = express.Router();
+const pedidosLeySendInFlight = new Set();
 
 async function requireAdmin(req, res) {
   const user = await loadAuthenticatedEmployee(req);
@@ -90,6 +92,26 @@ pedidosLeyApiRouter.get('/debug', async (req, res) => {
     const pedido = String(req.query.pedido || '').trim();
     const forceRefresh = String(req.query.refresh || '') === '1';
     const data = await debugPedidoLey({ pedido, forceRefresh });
+    res.json(data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error desconocido';
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
+pedidosLeyApiRouter.get('/admin-dashboard', async (req, res) => {
+  try {
+    const user = await requireAdmin(req, res);
+    if (!user) return;
+    const data = await fetchPedidosLeyAdminDashboardData({
+      year: req.query.year,
+      facturadorId: String(req.query.facturadorId || '').trim(),
+      forceRefresh: String(req.query.refresh || '') === '1',
+      thresholds: {
+        estatalMin: req.query.estatalMin,
+        municipalMin: req.query.municipalMin,
+      },
+    });
     res.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
@@ -199,16 +221,43 @@ pedidosLeyApiRouter.post('/sender/select', async (req, res) => {
 });
 
 pedidosLeyApiRouter.post('/send', async (req, res) => {
+  let sendKey = '';
   try {
     const user = await requireAdmin(req, res);
     if (!user) return;
     const payload = req.body || {};
+    sendKey = String(payload.pedido || '').trim();
+    if (!sendKey) return res.status(400).json({ ok: false, error: 'Falta el numero de pedido' });
+    if (pedidosLeySendInFlight.has(sendKey)) {
+      return res.status(409).json({ ok: false, error: `El pedido ${sendKey} ya se esta enviando` });
+    }
+    pedidosLeySendInFlight.add(sendKey);
     const selectedFiles = Array.isArray(payload.files) ? payload.files : [];
-    const attachments = (await mapWithConcurrency(selectedFiles, 3, async (file) => {
+    const available = await fetchPedidoLeyFiles({ pedido: sendKey, forceRefresh: false });
+    const availableFiles = Array.isArray(available.matchedFiles) ? available.matchedFiles : [];
+    const fileKey = (file) => String(file?.id || file?.path || file?.relativePath || '').trim();
+    const allowedKeys = new Set(availableFiles.map(fileKey).filter(Boolean));
+    const validatedFiles = selectedFiles.filter((file) => allowedKeys.has(fileKey(file)));
+    if (!validatedFiles.length) {
+      return res.status(400).json({ ok: false, error: 'Selecciona al menos un archivo disponible para este pedido' });
+    }
+    if (validatedFiles.length !== selectedFiles.length) {
+      return res.status(409).json({ ok: false, error: 'La lista de archivos cambio. Vuelve a abrir los archivos y confirma la seleccion' });
+    }
+    console.info('[pedidos-ley] iniciando envio', {
+      pedido: sendKey,
+      archivos: validatedFiles.length,
+    });
+    const attachments = (await mapWithConcurrency(validatedFiles, 3, async (file) => {
       const key = String(file?.id || file?.path || file?.relativePath || '').trim();
       if (!key) return null;
       return readPedidoLeyAttachment(key);
     })).filter(Boolean);
+    console.info('[pedidos-ley] adjuntos preparados', {
+      pedido: String(payload.pedido || '').trim(),
+      archivos: attachments.length,
+      bytes: attachments.reduce((total, attachment) => total + Number(attachment?.content?.length || 0), 0),
+    });
 
     const result = await sendPedidosLeyEmail({
       to: payload.to || '',
@@ -229,6 +278,10 @@ pedidosLeyApiRouter.post('/send', async (req, res) => {
       ].join(''),
       attachments,
       fromEmail: payload.fromEmail || '',
+    });
+    console.info('[pedidos-ley] correo confirmado por Apps Script', {
+      pedido: String(payload.pedido || '').trim(),
+      archivos: attachments.length,
     });
 
     try {
@@ -257,7 +310,14 @@ pedidosLeyApiRouter.post('/send', async (req, res) => {
     res.json({ ok: true, result, syncWarning });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
+    console.error('[pedidos-ley] fallo al enviar pedido', {
+      pedido: String(req.body?.pedido || '').trim(),
+      archivos: Array.isArray(req.body?.files) ? req.body.files.length : 0,
+      error: message,
+    });
     res.status(500).json({ ok: false, error: message });
+  } finally {
+    if (sendKey) pedidosLeySendInFlight.delete(sendKey);
   }
 });
 

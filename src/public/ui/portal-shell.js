@@ -1,8 +1,9 @@
 (function () {
-  const SCRIPT_VERSION = "20260901c";
+  const SCRIPT_VERSION = "20260922a";
   const REFRESH_ENDPOINT = "/api/app-shell/cache/refresh";
   const STATE_ENDPOINT = "/api/app-shell/cache/state";
   const DEFAULT_POLL_INTERVAL_MS = 15000;
+  const MAX_POLL_INTERVAL_MS = 300000;
   const MIN_RELOAD_DELAY_MS = 350;
   let cacheWatcherTimer = null;
   let cacheWatcherBusy = false;
@@ -12,6 +13,7 @@
   let liveBadge = null;
   let appNavigation = null;
   let appEventSource = null;
+  let cacheWatcherFailures = 0;
 
   const NAVIGATION_GROUPS = [
     {
@@ -340,6 +342,7 @@
     const scope = inferScope();
     try {
       const state = await fetchCacheState(scope);
+      cacheWatcherFailures = 0;
       const nextCursor = Number(state?.cursor || 0);
       const nextRevision = Number(state?.revision || 0);
       const hasCursor = Number.isFinite(nextCursor) && nextCursor > 0;
@@ -373,6 +376,7 @@
         setLiveBadgeState("watching", "En vivo");
       }
     } catch {
+      cacheWatcherFailures += 1;
       setLiveBadgeState("watching", "En vivo");
     }
   }
@@ -385,17 +389,25 @@
     window.__DESARROLLOEG_SHELL_REALTIME__ = true;
     ensureLiveBadge();
     startAppEventStream();
-    const schedule = () => {
-      void pollCacheState();
+    const schedule = (delay = 0) => {
+      if (cacheWatcherTimer) window.clearTimeout(cacheWatcherTimer);
+      cacheWatcherTimer = window.setTimeout(async () => {
+        cacheWatcherTimer = null;
+        await pollCacheState();
+        const retryDelay = Math.min(
+          DEFAULT_POLL_INTERVAL_MS * (2 ** Math.min(cacheWatcherFailures, 5)),
+          MAX_POLL_INTERVAL_MS,
+        );
+        schedule(retryDelay);
+      }, delay);
     };
 
-    cacheWatcherTimer = window.setInterval(schedule, DEFAULT_POLL_INTERVAL_MS);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
-        schedule();
+        schedule(0);
       }
     });
-    schedule();
+    schedule(0);
     window.setTimeout(() => {
       void refreshFromWatcher(inferScope());
     }, 500);

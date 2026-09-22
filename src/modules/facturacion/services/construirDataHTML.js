@@ -67,8 +67,13 @@ export function construirDataHTML(json) {
 
     (bloque.conceptos || []).forEach(c => {
       const sub = toNumber(c.subtotal);
-      const iva = toNumber(c.iva);
-      const tot = toNumber(c.total);
+      const ivaTasa = toNumber(c.iva);
+      const iva = c.ivaImporte === null || c.ivaImporte === undefined
+        ? sub * ivaTasa
+        : toNumber(c.ivaImporte);
+      const tot = c.total === null || c.total === undefined
+        ? sub + iva
+        : toNumber(c.total);
       const codigo = String(c.catalogo_codigo || c.concepto_id || "").trim();
       const descripcionCatalogo = String(c.descripcion_catalogo || "").trim();
 
@@ -85,6 +90,7 @@ export function construirDataHTML(json) {
         precioUnit: toNumber(c.precio),
         subLinea: sub,
         ivaLinea: iva,
+        ivaPorcentaje: ivaTasa * 100,
         totalLinea: tot,
         raw: { TIPO: c.tipo || "" }
       });

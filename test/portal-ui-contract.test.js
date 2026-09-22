@@ -9,6 +9,7 @@ const homeSource = fs.readFileSync(new URL("../src/modules/home/home.router.js",
 const appShellRouterSource = fs.readFileSync(new URL("../src/modules/app-shell/appShell.router.js", import.meta.url), "utf8");
 const pedidosPageSource = fs.readFileSync(new URL("../src/modules/pedidos-ley/pedidosLey.admin.page.js", import.meta.url), "utf8");
 const pedidosServiceSource = fs.readFileSync(new URL("../src/modules/pedidos-ley/services/pedidosLey.js", import.meta.url), "utf8");
+const pedidosRouterSource = fs.readFileSync(new URL("../src/modules/pedidos-ley/pedidosLey.router.js", import.meta.url), "utf8");
 const cotizacionSource = fs.readFileSync(new URL("../src/modules/facturacion/views/cotizacion.ejs", import.meta.url), "utf8");
 const cotizacionLeySource = fs.readFileSync(new URL("../src/modules/facturacion/views/cotizacion_ley.ejs", import.meta.url), "utf8");
 const cotizacionDataSource = fs.readFileSync(new URL("../src/modules/facturacion/services/construirDataHTML.js", import.meta.url), "utf8");
@@ -76,6 +77,15 @@ test("las cotizaciones mantienen visible y accesible el panel de opciones", () =
 test("las cotizaciones aceptan logos de cliente guardados por AppSheet", () => {
   assert.match(cotizacionDataSource, /drive\\\.google\\\.com\|appsheet\\\.com/);
   assert.match(cotizacionDataSource, /json\.empresa\.logoUrl \|\| json\.empresa\.logo/);
+});
+
+test("la impresion de cotizaciones evita capas rasterizadas de pagina completa", () => {
+  for (const source of [cotizacionSource, cotizacionLeySource]) {
+    assert.match(source, /html,body,body\.portal-shell\{background:#fff!important;min-height:0!important\}/);
+    assert.match(source, /\*,\*::before,\*::after\{filter:none!important;backdrop-filter:none!important/);
+    assert.match(source, /\.footer-bar\{position:relative!important;bottom:auto!important/);
+    assert.doesNotMatch(source, /\.footer-bar\{position:fixed!important/);
+  }
 });
 
 test("la auditoria invalida las cotizaciones en memoria antes de precargar", () => {
@@ -194,4 +204,20 @@ test("pedidos genera JavaScript ejecutable y controles de estado unicos", () => 
   assert.match(html, /Number\(row\.fechaYear\) === Number\(state\.year\)/);
   assert.match(html, /\.filter\(allowedBranch\)/);
   assert.match(html, /data-missing-kind="estatal"/);
+});
+
+test("pedidos mantiene seleccion, bloquea duplicados y refresca tras confirmar el correo", () => {
+  const facturadorIndex = pedidosPageSource.indexOf('<label for="facturadorInput">Facturador</label>');
+  const advancedIndex = pedidosPageSource.indexOf('<details class="advanced-filters" id="advancedFilters">');
+  assert.ok(facturadorIndex > 0 && facturadorIndex < advancedIndex);
+  assert.match(pedidosPageSource, /const previousSelection = selectedFilesByPedido\.get\(pedido\)/);
+  assert.match(pedidosPageSource, /selection\.has\(key\) \? ' checked' : ''/);
+  assert.match(pedidosPageSource, /if \(!pedido \|\| sendingPedidos\.has\(pedido\)\) return/);
+  assert.match(pedidosPageSource, /sendingPedidos\.add\(pedido\)[\s\S]*button\.disabled = true[\s\S]*await apiJson\("\/api\/pedidos-ley\/send"/);
+  assert.match(pedidosPageSource, /await refreshOrdersAfterSend\(\)/);
+  assert.match(pedidosPageSource, /\/api\/pedidos-ley\/admin-dashboard\?/);
+  assert.match(pedidosRouterSource, /pedidosLeySendInFlight\.has\(sendKey\)/);
+  assert.match(pedidosRouterSource, /const allowedKeys = new Set\(availableFiles\.map\(fileKey\)/);
+  assert.match(pedidosRouterSource, /validatedFiles\.length !== selectedFiles\.length/);
+  assert.match(pedidosServiceSource, /sentPedidos\.has\(String\(row\.pedido/);
 });

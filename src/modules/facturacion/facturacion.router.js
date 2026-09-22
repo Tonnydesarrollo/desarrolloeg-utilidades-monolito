@@ -174,16 +174,19 @@ cotizacionesRouter.get("/api/cotizaciones/:id", async (req, res) => {
   try {
     const data = await obtenerCotizacionCompleta(req.params.id);
     const centros = Object.values(data.conceptos_por_centro || {});
+    const esExterna = !data.empresa?.id;
     res.json({ ok: true, data: {
       id: data.cotizacion.id,
       empresaId: data.empresa?.id || "",
       destinatario: data.empresa?.id ? "" : (data.cotizacion.empresaRef || data.empresa?.razonSocial || ""),
       fecha: inputDate(data.cotizacion.fecha),
       proveedorId: data.cotizacion.proveedorId || "",
-      centrosTrabajo: data.cotizacion.centroDeTrabajoIds || centros.map((centro) => centro.centro_id),
+      centrosTrabajo: esExterna
+        ? centros.map((centro) => centro.centro_nombre)
+        : (data.cotizacion.centroDeTrabajoIds || centros.map((centro) => centro.centro_id)),
       lineas: centros.flatMap((centro) => centro.conceptos.map((concepto) => ({
         id: concepto.id,
-        centroTrabajoId: centro.centro_id,
+        centroTrabajoId: esExterna ? centro.centro_nombre : centro.centro_id,
         centroTrabajoNombre: centro.centro_nombre,
         conceptoId: concepto.concepto_id,
         cantidad: concepto.cantidad,

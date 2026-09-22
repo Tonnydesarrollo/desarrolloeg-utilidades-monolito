@@ -27,8 +27,20 @@ const ESTADO_TABLE = (process.env.PEDIDOS_APPSHEET_TABLE_ESTADO || process.env.P
 const VIEW = (process.env.FINANZAS_APPSHEET_VIEW_SIN_LIBERACION || 'SIN LIBERACION').trim();
 const FILES_DIR = process.env.PEDIDOS_LEY_FILES_DIR || path.resolve(process.cwd(), 'runtime', 'pedidos-ley', 'files');
 const SENT_LOG_FILE = process.env.PEDIDOS_LEY_SENT_LOG_FILE || path.resolve(process.cwd(), 'runtime', 'pedidos-ley', 'sent-log.jsonl');
-const DRIVE_CREDENTIALS_PATH = process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS || process.env.FACTURACION_GOOGLE_CREDENTIALS_PATH || '';
-const DRIVE_TOKEN_PATH = process.env.PEDIDOS_GOOGLE_TOKEN_PATH || process.env.FACTURACION_GOOGLE_TOKEN_PATH || '';
+function firstExistingPath(...values) {
+  const paths = values.map((value) => String(value || '').trim()).filter(Boolean);
+  return paths.find((filePath) => fs.existsSync(filePath)) || paths[0] || '';
+}
+
+const DRIVE_CREDENTIALS_PATH = firstExistingPath(
+  process.env.PEDIDOS_GOOGLE_CLIENT_CREDENTIALS,
+  process.env.FACTURACION_GOOGLE_CREDENTIALS_PATH
+);
+const DRIVE_TOKEN_PATH = firstExistingPath(
+  process.env.PEDIDOS_GOOGLE_TOKEN_PATH,
+  process.env.FACTURACION_GOOGLE_TOKEN_PATH,
+  process.env.WHATSAPP_CAP_GOOGLE_OAUTH_TOKEN_PATH
+);
 const CACHE_TTL_MS = Math.max(10_000, Number(process.env.PEDIDOS_LEY_CACHE_TTL_MS || 15 * 60_000));
 const DEFAULT_STATE_THRESHOLD = 32967.49;
 const DEFAULT_MUNICIPAL_THRESHOLD = 11000;
@@ -1173,6 +1185,50 @@ async function appsheetAction(action, rows = [], selector = '', tableName = TABL
   throw lastError || new Error(`AppSheet ${action} fallo`);
 }
 
+export function collectPedidoDirectFileIds(row = {}) {
+  const values = [
+    getRowValue(row, ['PDF', 'Pdf', 'pdf']),
+    getRowValue(row, ['ARCHIVO', 'Archivo', 'archivo']),
+    getRowValue(row, ['ADJUNTO', 'Adjunto', 'adjunto']),
+    getRowValue(row, ['DOCUMENTO', 'Documento', 'documento']),
+  ];
+  return [...new Set(values.flatMap((value) => {
+    const id = extractDriveId(value);
+    return id ? [id] : [];
+  }))];
+}
+
+async function getPedidoDirectFiles(row = {}, pedido = '') {
+  const ids = collectPedidoDirectFileIds(row);
+  if (!ids.length) return [];
+  const drive = createDriveClient();
+  return Promise.all(ids.map(async (id, index) => {
+    let metadata = {};
+    if (drive) {
+      try {
+        const response = await drive.files.get({ fileId: id,
+          fields: 'id,name,mimeType,modifiedTime,size,webViewLink,webContentLink', supportsAllDrives: true });
+        metadata = response?.data || {};
+      } catch {
+        // El enlace guardado en el pedido sigue siendo util aunque Drive no entregue metadatos.
+      }
+    }
+    const name = String(metadata.name || '').trim() || `Pedido ${pedido || index + 1}.pdf`;
+    return {
+      id,
+      name,
+      relativePath: id,
+      size: Number(metadata.size || 0),
+      mimeType: String(metadata.mimeType || 'application/pdf'),
+      mtimeMs: metadata.modifiedTime ? Date.parse(metadata.modifiedTime) : 0,
+      openUrl: String(metadata.webViewLink || `https://drive.google.com/file/d/${id}/view`),
+      downloadUrl: `/api/pedidos-ley/files?path=${encodeURIComponent(id)}`,
+      pathLabel: name,
+      source: 'pedido',
+    };
+  }));
+}
+
 async function appsheetFindRows(selector = '', tableName = TABLE) {
   const normalizedTable = String(tableName || '').trim().toUpperCase();
   const normalizedSelector = String(selector || '').trim();
@@ -1533,23 +1589,25 @@ function createConcurrencyLimiter(limit = 6) {
   });
 }
 
+export function isPedidoDeliverableFile(entry = {}) {
+  const text = normalizeLooseName(`${entry.name || ''} ${entry.pathLabel || entry.relativePath || ''}`);
+  return text.includes('PIPC')
+    || text.includes('PLAN DE CONTINGENCIA')
+    || text.includes('PLAN DE CONTINGENCIAS')
+    || text.includes('PLANES DE CONTINGENCIA')
+    || text.includes('PLAN DE CONTINUIDAD');
+}
+
 function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
   const storeText = normalizeLooseName(tienda || '');
   const driveText = String(tiendaDrive || '').trim();
-  const keywords = [
-    ['PIPC'],
-    ['PLAN DE CONTINGENCIAS', 'PLANES DE CONTINGENCIA', 'PLAN DE CONTINGENCIA', 'PLAN DE CONTINUIDAD'],
-    ['DICTAMEN'],
-  ];
   const source = Array.isArray(entries) ? entries : [];
   const matches = source.filter((entry) => {
     const text = normalizeLooseName(entry.name || '');
     const pathText = normalizeLooseName(entry.pathLabel || '');
     if (!text && !pathText) return false;
 
-    const keywordHit = keywords.some((group) => group.some((term) => text.includes(normalizeLooseName(term)) || pathText.includes(normalizeLooseName(term))));
-
-    return keywordHit;
+    return isPedidoDeliverableFile(entry);
   });
 
   matches.sort((a, b) => {
@@ -1567,10 +1625,9 @@ function matchStoreFiles(entries = [], tienda = '', tiendaDrive = '') {
         || pathText.includes('PLAN DE CONTINUIDAD')
         ? 3
         : 0;
-      const dictamen = text.includes('DICTAMEN') || pathText.includes('DICTAMEN') ? 2 : 0;
       const storeHint = storeText && (text.includes(storeText) || pathText.includes(storeText)) ? 1 : 0;
       const driveHint = driveText && (text.includes(driveText) || pathText.includes(driveText)) ? 1 : 0;
-      return pipc + contingency + dictamen + storeHint + driveHint;
+      return pipc + contingency + storeHint + driveHint;
     };
     const diff = score(b) - score(a);
     if (diff !== 0) return diff;
@@ -1865,8 +1922,12 @@ export async function fetchPedidosLeyAdminDashboardData({
   }
   const catalogs = await catalogsPromise;
   const businessContext = buildPedidoBusinessContext();
+  const sentPedidos = new Set(readSentLog().map((entry) => String(entry?.pedido || '').trim()).filter(Boolean));
   const allNormalizedRows = (Array.isArray(rows) ? rows : [])
     .map((row) => normalizeRow(row, catalogs, normalizedThresholds))
+    .map((row) => sentPedidos.has(String(row.pedido || '').trim())
+      ? { ...row, enviado: 'SI', enviadoBool: true, sentLocal: true }
+      : row)
     .map((row) => enrichPedidoBusiness(row, businessContext, targetYear))
     .filter((row) => row.pedido);
   const facturadores = buildFacturadorOptions(allNormalizedRows);
@@ -1924,14 +1985,16 @@ export async function debugPedidoLey({ pedido = '', forceRefresh = false } = {})
   const lookupHasKey = normalizedRow.tiendaKey ? Boolean(sucursalesLookup?.rowByKey?.has(String(normalizedRow.tiendaKey))) : false;
   const driveRoot = extractDriveId(normalizedRow.tiendaDrive || lookupByKey?.drive || '');
   let driveEntries = [];
-  let matchedFiles = [];
+  let matchedFiles = (await getPedidoDirectFiles(rawRow, normalizedPedido)).filter(isPedidoDeliverableFile);
 
   if (driveRoot) {
     driveEntries = await getDriveEntriesForRoot(driveRoot, forceRefresh);
-    matchedFiles = matchStoreFiles(driveEntries, normalizedRow.tiendaLabel || normalizedRow.establecimiento || '', normalizedRow.tiendaDrive || lookupByKey?.drive || '');
+    const storeFiles = matchStoreFiles(driveEntries, normalizedRow.tiendaLabel || normalizedRow.establecimiento || '', normalizedRow.tiendaDrive || lookupByKey?.drive || '');
+    const seen = new Set(matchedFiles.map((file) => file.id || file.relativePath));
+    matchedFiles.push(...storeFiles.filter((file) => !seen.has(file.id || file.relativePath)));
   }
   if (!matchedFiles.length) {
-    matchedFiles = matchLocalFilesForPedido(normalizedRow, getCachedFiles(forceRefresh)).map((file) => ({
+    matchedFiles = matchLocalFilesForPedido(normalizedRow, getCachedFiles(forceRefresh)).filter(isPedidoDeliverableFile).map((file) => ({
       name: file.name,
       relativePath: file.relativePath,
       size: file.size,

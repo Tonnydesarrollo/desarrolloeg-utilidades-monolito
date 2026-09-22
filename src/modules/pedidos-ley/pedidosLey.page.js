@@ -352,7 +352,7 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
             state.busy.add(row.pedido);
             render();
             try {
-              await loadFilesForRow(row);
+              await loadFilesForRow(row, true);
               setStatus('Archivos cargados para el pedido ' + row.pedido + '.', 'ok');
             } catch (error) {
               state.expanded.delete(key);
@@ -463,10 +463,10 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
       });
     }
 
-    async function loadFilesForRow(row) {
+    async function loadFilesForRow(row, forceRefresh = false) {
       const key = fileSelectionKey(row);
-      if (state.filesByPedido.has(key)) return getRowFiles(row);
-      const data = await api('/api/pedidos-ley/pedido/' + encodeURIComponent(row.pedido) + '/files');
+      if (!forceRefresh && state.filesByPedido.has(key)) return getRowFiles(row);
+      const data = await api('/api/pedidos-ley/pedido/' + encodeURIComponent(row.pedido) + '/files' + (forceRefresh ? '?refresh=1' : ''));
       const files = Array.isArray(data.matchedFiles) ? data.matchedFiles : [];
       state.filesByPedido.set(key, files);
       return files;
@@ -517,7 +517,7 @@ export function renderPedidosSinLiberacionPage({ user } = {}) {
         render();
         setStatus('Cargando archivos del pedido ' + row.pedido + '...', '');
         try {
-          await loadFilesForRow(row);
+          await loadFilesForRow(row, true);
         } catch (error) {
           state.busy.delete(row.pedido);
           render();

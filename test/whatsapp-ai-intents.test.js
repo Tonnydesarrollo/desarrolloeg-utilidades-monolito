@@ -10,7 +10,41 @@ import {
   isWhatsAppAuthenticationStalled,
   isPendingSistemaPcRequest,
   selectPendingSistemaPcRows,
+  isCreatedSistemaPcRequest,
+  selectCreatedSistemaPcRows,
+  selectSistemaPcRows,
+  resolveAiSearchQuery,
+  isFabricatedInfrastructureResponse,
+  isTrainingStatusRequest,
+  selectTrainingRowsByStatus,
 } from "../src/modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
+
+test("bloquea explicaciones inventadas sobre puertos en consultas de negocio", () => {
+  assert.equal(isFabricatedInfrastructureResponse("Como van los PIPC", "Usa el puerto 3000 del servidor local"), true);
+  assert.equal(isFabricatedInfrastructureResponse("Que puerto usa el servidor", "El puerto es 7020"), false);
+});
+
+test("recupera el tema de la consulta anterior para preguntas de seguimiento", () => {
+  const history = [{ role: "user", content: "Dame informacion de la tienda 1366 de Ley" },
+    { role: "assistant", content: "Esta en Culiacan" }];
+  assert.equal(resolveAiSearchQuery("Y su tipo?", history), "Dame informacion de la tienda 1366 de Ley Y su tipo?");
+  assert.equal(resolveAiSearchQuery("Dame informacion de la tienda 1002", history), "Dame informacion de la tienda 1002");
+});
+
+test("consulta estados de capacitaciones y calcula cada grupo por fecha", () => {
+  assert.equal(isTrainingStatusRequest("Capacitaciones programadas?"), true);
+  assert.equal(isTrainingStatusRequest("Y capacitaciones finalizadas?"), true);
+  assert.equal(isTrainingStatusRequest("Y finalizadas?"), true);
+  const rows = [
+    { ID: "1", "FECHA CAPACITACION": "09/18/2026" },
+    { ID: "2", "FECHA CAPACITACION": "09/19/2026" },
+    { ID: "3", "FECHA CAPACITACION": "2026-09-23" },
+    { ID: "4", "FECHA CAPACITACION": "" },
+  ];
+  const today = new Date(2026, 8, 19);
+  assert.deepEqual(selectTrainingRowsByStatus(rows, "programadas", today).map((row) => row.ID), ["2", "3"]);
+  assert.deepEqual(selectTrainingRowsByStatus(rows, "finalizadas", today).map((row) => row.ID), ["1"]);
+});
 
 test("detecta la consulta natural de constancias pendientes", () => {
   assert.equal(isPendingConstanciasRequest("Dame la lista de constancias pendientes de Gilberto"), true);
@@ -61,6 +95,38 @@ test("detecta autenticacion atascada sin reiniciar sesiones listas", () => {
 test("detecta sucursales pendientes de subir al sistema PC", () => {
   assert.equal(isPendingSistemaPcRequest("Dame todas las sucursales de casa ley que estan pendientes de subir al sistema de proteccion civil"), true);
   assert.equal(isPendingSistemaPcRequest("Dame la lista de asistencia de la tienda 1002"), false);
+});
+
+test("detecta tiendas con estatus Creada en Proteccion Civil", () => {
+  assert.equal(isCreatedSistemaPcRequest("Dame todas las tiendas de ley con estatus creada en proteccion civil"), true);
+  assert.equal(isCreatedSistemaPcRequest("Dame las tiendas pendientes de subir a proteccion civil"), false);
+});
+
+test("filtra estatus Creado de la ultima solicitud de Casa Ley", () => {
+  const branches = [
+    { key: "1", tienda: "1301", idPc: "100", raw: { EMPRESA: "ley" } },
+    { key: "2", tienda: "1356", idPc: "101", raw: { EMPRESA: "ley" } },
+    { key: "3", tienda: "2001", idPc: "102", raw: { EMPRESA: "otra" } },
+  ];
+  const rows = [
+    { SUCURSAL: "1", "AÑO": "2026", estatus: "Creado", registro_fecha: "09/01/2026" },
+    { SUCURSAL: "1", "AÑO": "2026", estatus: "Firmada", registro_fecha: "09/03/2026" },
+    { SUCURSAL: "2", "AÑO": "2026", estatus: "Creado", registro_fecha: "09/03/2026" },
+    { SUCURSAL: "3", "AÑO": "2026", estatus: "Creado", registro_fecha: "09/03/2026" },
+  ];
+  assert.deepEqual(selectCreatedSistemaPcRows(rows, branches, "ley", 2026).map(({ branch }) => branch.tienda), ["1356"]);
+});
+
+test("consulta tambien tiendas visitadas sin incluir otras empresas", () => {
+  const branches = [
+    { key: "1", tienda: "1267", raw: { EMPRESA: "ley" } },
+    { key: "2", tienda: "2001", raw: { EMPRESA: "otra" } },
+  ];
+  const rows = [
+    { SUCURSAL: "1", "AÑO": "2026", estatus: "VISITADA", registro_fecha: "09/03/2026" },
+    { SUCURSAL: "2", "AÑO": "2026", estatus: "VISITADA", registro_fecha: "09/03/2026" },
+  ];
+  assert.deepEqual(selectSistemaPcRows(rows, branches, "ley", 2026, "visitada").map(({ branch }) => branch.tienda), ["1267"]);
 });
 
 test("filtra la empresa y conserva solo el ultimo estatus del ano", () => {

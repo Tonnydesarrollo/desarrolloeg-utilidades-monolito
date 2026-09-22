@@ -36,6 +36,44 @@
     }));
   }
 
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(String(reader.result || "")), { once: true });
+      reader.addEventListener("error", () => reject(reader.error || new Error("No se pudo leer la imagen.")), { once: true });
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function inlineCaptureImages(root) {
+    const images = Array.from(root.querySelectorAll("img"));
+    const originals = images.map((image) => ({ image, src: image.getAttribute("src") || "" }));
+    const dataUrls = new Map();
+
+    for (const image of images) {
+      const source = image.currentSrc || image.src;
+      if (!source || source.startsWith("data:") || source.startsWith("blob:") || dataUrls.has(source)) continue;
+      try {
+        const response = await fetch(source, { credentials: "same-origin", cache: "force-cache" });
+        if (!response.ok) continue;
+        dataUrls.set(source, await blobToDataUrl(await response.blob()));
+      } catch {
+        // Conserva la URL original si un recurso externo no permite ser descargado.
+      }
+    }
+
+    for (const image of images) {
+      const source = image.currentSrc || image.src;
+      const dataUrl = dataUrls.get(source);
+      if (dataUrl) image.src = dataUrl;
+    }
+    await waitForImages(root);
+    return () => originals.forEach(({ image, src }) => {
+      if (src) image.setAttribute("src", src);
+      else image.removeAttribute("src");
+    });
+  }
+
   function waitForPaint() {
     return new Promise((resolve) => {
       window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
@@ -132,12 +170,14 @@
     }
 
     const restoreStyles = rememberCaptureStyles(captureArea);
+    let restoreImages = () => {};
     document.body.classList.add("capturing");
 
     try {
       if (document.fonts) await document.fonts.ready;
       await waitForPaint();
       await waitForImages(captureArea);
+      restoreImages = await inlineCaptureImages(captureArea);
       await waitForPaint();
 
       const pdf = new JsPdf({ unit: "in", format: [11, 8.5], orientation: "landscape" });
@@ -173,6 +213,7 @@
       return pdf.output("blob");
     } finally {
       document.body.classList.remove("capturing");
+      restoreImages();
       restoreStyles();
     }
   }

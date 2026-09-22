@@ -9,6 +9,10 @@ import pkg from "whatsapp-web.js";
 import { google } from "googleapis";
 import { readLocalRows } from "../../services/desarrolloegLocalDb.js";
 import { readLocalOperationalTable } from "../../services/localOperationalRepository.js";
+import { resolvePcEstatalBySucursal } from "../home/pcEstatal.service.js";
+import { searchAuthorizedDocumentation, searchAuthorizedOperationalData } from "./authorizedKnowledge.js";
+import { executeAuthorizedDataQuery } from "./authorizedDataQuery.js";
+import { semanticCatalogForIdentity } from "./semanticEntities.js";
 import { resolvePortalAccessProfile } from "../home/portalAccessPolicy.js";
 
 const { Client, LocalAuth, MessageMedia } = pkg;
@@ -750,25 +754,66 @@ async function handleAiText(client, jid, text, identity) {
   const config = ensureRuntimeConfig();
   if (!config.aiServerUrl || !config.aiClientId || !config.aiClientToken) return false;
 
-  const businessContext = await buildAuthorizedAiContext(identity, text);
   const history = aiConversationContext.get(jid) || [];
+  const searchQuery = resolveAiSearchQuery(text, history);
+  const businessContext = await buildAuthorizedAiContext(identity, searchQuery);
+  const normalizedQuery = normalizeText(text);
+  if (/\b(proteccion civil|sistema pc|pc estatal)\b/.test(normalizedQuery)
+    && /\b(casa ley|ley)\b/.test(normalizedQuery)
+    && hasSucursalDocumentAccess(identity)) {
+    const status = ["visitada", "rechazada", "subsanadas", "firmada", "autorizada", "creada", "en captura", "revision campo"]
+      .find((value) => normalizedQuery.includes(value.slice(0, 5))) || "";
+    businessContext.pcEstatal = await executeAiToolCall({
+      function: { name: "consultar_pc_estatal", arguments: { empresa: "ley", estatus: status } },
+    }, identity);
+    if (!businessContext.pcEstatal.error) {
+      const result = businessContext.pcEstatal;
+      const label = result.estatus === "todos" ? "solicitudes" : `solicitudes con estatus ${result.estatus}`;
+      const lines = result.registros.map((row, index) =>
+        `${index + 1}. ${row.tienda} ${row.sucursal}`.replace(/\s+/g, " ").trim()
+        + ` | ${row.estatus} | ${row.fechaRegistro}`
+      );
+      await client.sendMessage(jid,
+        `${result.empresa}: ${result.total} ${label} en Proteccion Civil Estatal (${result.anio}).`
+        + (lines.length ? `\n\n${lines.join("\n")}` : "")
+      );
+      aiConversationContext.delete(jid);
+      return true;
+    }
+  }
   history.push({ role: "user", content: String(text).slice(0, 4000) });
   const messages = history.slice(-10);
   try {
-    const response = await fetch(`${config.aiServerUrl}/v1/respond`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-ai-client-id": config.aiClientId,
-        authorization: `Bearer ${config.aiClientToken}`,
-      },
-      body: JSON.stringify({ identity, businessContext, messages }),
-      signal: AbortSignal.timeout(config.aiTimeoutMs),
-    });
-    if (!response.ok) throw new Error(`ai_http_${response.status}`);
-    const payload = await response.json();
-    const answer = String(payload?.content || "").trim();
+    let answer = "";
+    for (let step = 0; step < 3; step += 1) {
+      const response = await fetch(`${config.aiServerUrl}/v1/respond`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-ai-client-id": config.aiClientId,
+          authorization: `Bearer ${config.aiClientToken}`,
+        },
+        body: JSON.stringify({ identity, businessContext, messages }),
+        signal: AbortSignal.timeout(config.aiTimeoutMs),
+      });
+      if (!response.ok) throw new Error(`ai_http_${response.status}`);
+      const payload = await response.json();
+      const toolCalls = Array.isArray(payload?.toolCalls) ? payload.toolCalls.slice(0, 2) : [];
+      if (!toolCalls.length) {
+        answer = String(payload?.content || "").trim();
+        break;
+      }
+      messages.push({ role: "assistant", content: "", tool_calls: toolCalls });
+      for (const call of toolCalls) {
+        const result = await executeAiToolCall(call, identity);
+        messages.push({ role: "tool", tool_name: call?.function?.name, content: JSON.stringify(result) });
+      }
+    }
     if (!answer) throw new Error("ai_empty_response");
+    if (isFabricatedInfrastructureResponse(text, answer)) {
+      getLogger().warn({ jid }, "AI returned unsupported infrastructure explanation");
+      answer = "No pude verificar esa informacion con los datos disponibles en este momento. Intenta de nuevo en unos minutos.";
+    }
     history.push({ role: "assistant", content: answer });
     aiConversationContext.set(jid, history.slice(-10));
     await client.sendMessage(jid, answer.slice(0, 12000));
@@ -779,12 +824,78 @@ async function handleAiText(client, jid, text, identity) {
   return true;
 }
 
+export function isFabricatedInfrastructureResponse(query, answer) {
+  const asksInfrastructure = /\b(puerto|servidor|conexion|url|api|docker)\b/.test(normalizeText(query));
+  return !asksInfrastructure && /\b(puerto\s+\d+|servidor local|url (correcta|solicitada)|acceder al servidor)\b/.test(normalizeText(answer));
+}
+
+export function resolveAiSearchQuery(text, history = []) {
+  const current = String(text || "").trim();
+  const normalized = normalizeText(current);
+  const refersBack = /\b(eso|esa|ese|esas|esos|similar|similares|anterior|anteriores|tambien|ahora|mism[ao]s?)\b/.test(normalized);
+  if (!refersBack && normalized.split(/\s+/).length > 3) return current;
+  const previous = [...history].reverse().find((item) => item?.role === "user" && item.content);
+  return previous ? `${String(previous.content).slice(0, 500)} ${current}` : current;
+}
+
+export function isTrainingStatusRequest(text) {
+  const normalized = normalizeText(text);
+  return /\b(programad[ao]s?|finalizad[ao]s?|terminad[ao]s?)\b/.test(normalized)
+    && (/\b(capacitacion|capacitaciones)\b/.test(normalized)
+      || normalized.split(/\s+/).length <= 4);
+}
+
+export function selectTrainingRowsByStatus(rows, status, today = new Date()) {
+  const boundary = new Date(today);
+  boundary.setHours(0, 0, 0, 0);
+  const target = normalizeText(status).startsWith("program") ? "programadas" : "finalizadas";
+  return (rows || []).filter((row) => {
+    const rawDate = String(row["FECHA CAPACITACION"] || "").trim();
+    if (!rawDate) return false;
+    const date = parseBusinessDate(rawDate);
+    if (Number.isNaN(date.getTime())) return false;
+    return target === "programadas" ? date >= boundary : date < boundary;
+  }).sort((left, right) => {
+    const difference = parseBusinessDate(left["FECHA CAPACITACION"]) - parseBusinessDate(right["FECHA CAPACITACION"]);
+    return target === "programadas" ? difference : -difference;
+  });
+}
+
+async function handleVerifiedTrainingStatusRequest(client, jid, text, identity) {
+  if (!isTrainingStatusRequest(text)) return false;
+  const permission = identity?.accessProfile?.views?.capacitaciones;
+  if (!permission?.actions?.includes("view")) {
+    await client.sendMessage(jid, "No tienes permiso para consultar capacitaciones.");
+    return true;
+  }
+  const status = /\b(programad[ao]s?)\b/.test(normalizeText(text)) ? "programadas" : "finalizadas";
+  const employeeId = String(identity.id || "");
+  const rows = readLocalOperationalTable("CAPACITACIONES").filter((row) =>
+    permission.scope === "all" || splitEnumList(row.CAPACITADORES).map(String).includes(employeeId)
+  );
+  const selected = selectTrainingRowsByStatus(rows, status);
+  const resolved = await resolveNames(selected.slice(0, status === "programadas" ? 20 : 10));
+  const lines = resolved.map((row, index) => [
+    `${index + 1}. ${formatAiDate(row["FECHA CAPACITACION"])}`,
+    `Sede: ${aiLabel(row.CEDE, "Sin sede")}`,
+    `Capacitadores: ${aiLabelList(row.CAPACITADORES, "Sin capacitadores")}`,
+  ].join(" | "));
+  const detail = status === "programadas" ? "" : " (mostrando las 10 mas recientes)";
+  await client.sendMessage(jid, `${selected.length} capacitaciones ${status}.`
+    + (lines.length ? `\n\n${lines.join("\n")}${selected.length > lines.length ? detail : ""}` : ""));
+  aiConversationContext.delete(jid);
+  return true;
+}
+
 async function buildAuthorizedAiContext(identity, queryText = "") {
   if (!identity || identity.role === "sin-acceso") {
     return { access: "denied", reason: "No se encontro un empleado con acceso autorizado." };
   }
 
   const views = identity.accessProfile?.views || {};
+  const normalizedQuery = normalizeText(queryText);
+  const asksTraining = /\b(capacitacion|capacitaciones|siguiente|siguientes|proxima|proximas)\b/.test(normalizedQuery);
+  const asksCertificates = /\b(constancia|constancias|diploma|diplomas)\b/.test(normalizedQuery);
   const moduleLabels = {
     calendario: "Calendario",
     capacitaciones: "Capacitaciones",
@@ -815,7 +926,10 @@ async function buildAuthorizedAiContext(identity, queryText = "") {
     own: "solo sus registros",
     none: "sin acceso",
   };
-  const authorizedModules = Object.entries(views).map(([module, permission]) => ({
+  const authorizedModules = Object.entries(views).filter(([, permission]) =>
+    permission?.scope !== "none" && permission?.actions?.length
+  ).map(([module, permission]) => ({
+    clave: module,
     nombre: moduleLabels[module] || module,
     acciones: (permission.actions || []).map((action) => actionLabels[action] || action),
     alcance: scopeLabels[permission.scope] || scopeLabels.none,
@@ -832,7 +946,7 @@ async function buildAuthorizedAiContext(identity, queryText = "") {
   const upcoming = resolvedRows
     .filter((row) => parseBusinessDate(row[config.capacitacionesDateCol]) >= today)
     .sort((a, b) => parseBusinessDate(a[config.capacitacionesDateCol]) - parseBusinessDate(b[config.capacitacionesDateCol]))
-    .slice(0, 12)
+    .slice(0, asksTraining ? 12 : 0)
     .map((row) => ({
       fecha: formatAiDate(row[config.capacitacionesDateCol]),
       sede: aiLabel(row[config.capacitacionesCedeCol], "Sede sin etiqueta"),
@@ -855,7 +969,7 @@ async function buildAuthorizedAiContext(identity, queryText = "") {
     })
     .sort((a, b) => parseBusinessDate(b[config.capacitacionesDateCol]) - parseBusinessDate(a[config.capacitacionesDateCol]));
   const pendingConstancias = constanciasPermission.actions.includes("view")
-    ? pendingRows.slice(0, 50).map((row) => ({
+    ? pendingRows.slice(0, asksCertificates ? 30 : 0).map((row) => ({
         fecha: formatAiDate(row[config.capacitacionesDateCol]),
         sede: aiLabel(row[config.capacitacionesCedeCol], "Sede sin etiqueta"),
         sucursales: aiLabelList(row[config.capacitacionesSucursalesCol], "Sin sucursales etiquetadas"),
@@ -865,8 +979,23 @@ async function buildAuthorizedAiContext(identity, queryText = "") {
 
   const context = {
     generatedAt: new Date().toISOString(),
-    employee: { nombre: identity.name, puesto: identity.position, rol: identity.role },
+    source: "Monolito Desarrollo EG y base local sincronizada",
+    employee: { nombre: identity.name, puesto: identity.position, rol: identity.role, identidadVerificada: true },
+    authorization: {
+      defaultPolicy: "denegar",
+      enforcement: "El monolito vuelve a validar cada herramienta; el modelo no puede ampliar permisos.",
+      modules: authorizedModules,
+      rules: [
+        "Solo consultar entidades cuyos modulos aparecen autorizados.",
+        "Alcance propio significa registros asignados al empleado autenticado.",
+        "Consultar no autoriza crear, editar ni eliminar.",
+        "No revelar datos usados para evaluar una solicitud rechazada por permisos.",
+      ],
+    },
+    documentacion: searchAuthorizedDocumentation(queryText, identity),
+    datosOperativos: searchAuthorizedOperationalData(queryText, identity, readLocalOperationalTable),
     systemModel: {
+      purpose: "Explicar y consultar la operacion de Desarrollo EG usando datos actuales y documentacion autorizada.",
       entities: {
         empresa: "Cliente que agrupa sucursales y razones sociales.",
         sucursal: "Centro de trabajo identificado por tienda; pertenece a una empresa y relaciona ubicacion, riesgo, trabajos, planeacion, capacitaciones y carpeta Drive.",
@@ -891,7 +1020,17 @@ async function buildAuthorizedAiContext(identity, queryText = "") {
       ],
     },
     authorizedModules,
-    capacitaciones: { visibleTotal: visibleRows.length, proximas: upcoming },
+    semanticEntities: semanticCatalogForIdentity(identity),
+    capacitaciones: {
+      visibleTotal: visibleRows.length,
+      programadasTotal: selectTrainingRowsByStatus(visibleRows.map((row) => ({
+        ...row, "FECHA CAPACITACION": row[config.capacitacionesDateCol],
+      })), "programadas", today).length,
+      finalizadasTotal: selectTrainingRowsByStatus(visibleRows.map((row) => ({
+        ...row, "FECHA CAPACITACION": row[config.capacitacionesDateCol],
+      })), "finalizadas", today).length,
+      proximas: upcoming,
+    },
     constanciasPendientes: constanciasPermission.actions.includes("view")
       ? { total: pendingRows.length, registros: pendingConstancias }
       : { acceso: "sin permiso" },
@@ -943,6 +1082,166 @@ export function isPendingSistemaPcRequest(text) {
   return /\b(sistema (de )?proteccion civil|sistema pc)\b/.test(normalized)
     && /\b(pendiente|pendientes|falta|faltan|sin subir|subir)\b/.test(normalized)
     && /\b(sucursal|sucursales|tienda|tiendas)\b/.test(normalized);
+}
+
+export function isCreatedSistemaPcRequest(text) {
+  const normalized = normalizeText(text);
+  return /\b(proteccion civil|sistema pc|pc estatal)\b/.test(normalized)
+    && /\bcread[ao]s?\b/.test(normalized)
+    && /\b(sucursal|sucursales|tienda|tiendas)\b/.test(normalized);
+}
+
+export function selectSistemaPcRows(pcRows, sucursales, companyId, year, requestedStatus = "") {
+  const branches = sucursales.filter((branch) =>
+    String(getFirstFlexible(branch.raw, ["ID EMPRESA", "EMPRESA"])) === String(companyId)
+  );
+  const latest = resolvePcEstatalBySucursal({
+    sucursales: branches.map((branch) => ({ id: branch.key, tienda: branch.tienda, id_pc: branch.idPc })),
+    pcRows,
+    year,
+  });
+  return branches
+    .flatMap((branch) => {
+      const status = latest.get(String(branch.key));
+      if (!status) return [];
+      const actual = normalizeText(status.status).replace(/\bcreado\b/g, "creada");
+      const requested = normalizeText(requestedStatus).replace(/\bcreado\b/g, "creada");
+      return !requested || actual === requested ? [{ branch, status }] : [];
+    })
+    .sort((a, b) => Number(a.branch.tienda) - Number(b.branch.tienda));
+}
+
+export function selectCreatedSistemaPcRows(pcRows, sucursales, companyId, year) {
+  return selectSistemaPcRows(pcRows, sucursales, companyId, year, "creada");
+}
+
+async function executeAiToolCall(call, identity) {
+  const toolName = call?.function?.name;
+  if (!["consultar_pc_estatal", "consultar_datos_operativos"].includes(toolName)) return { error: "Herramienta no autorizada" };
+  let args = call.function.arguments || {};
+  if (typeof args === "string") {
+    try { args = JSON.parse(args); } catch { return { error: "Argumentos invalidos" }; }
+  }
+  if (!args || typeof args !== "object" || Array.isArray(args)) return { error: "Argumentos invalidos" };
+  if (toolName === "consultar_datos_operativos") {
+    const result = executeAuthorizedDataQuery(args, identity, readLocalOperationalTable);
+    getLogger().info({
+      herramienta: toolName,
+      empleadoId: String(identity?.id || ""),
+      entidad: String(args.entidad || ""),
+      autorizado: !result?.error,
+      total: Number.isInteger(result?.total) ? result.total : undefined,
+    }, "AI authorized tool query");
+    return result;
+  }
+  if (!hasSucursalDocumentAccess(identity)) return { error: "Sin permiso para consultar sucursales" };
+  const companyQuery = normalizeText(String(args.empresa || "").slice(0, 100));
+  if (!companyQuery) return { error: "Indica la empresa" };
+  const year = Number(args.anio || new Date().getFullYear());
+  if (!Number.isInteger(year) || year < 2020 || year > new Date().getFullYear() + 1) {
+    return { error: "Ano invalido" };
+  }
+  const [pcRows, sucursales, empresas] = await Promise.all([
+    loadCachedAppSheetRows({ table: "STATUS SISTEMA PC" }),
+    loadSucursalesCache(),
+    loadEmpresasCache(),
+  ]);
+  const company = [...empresas.rowsByKey.entries()].find(([, row]) =>
+    normalizeText(getFirstFlexible(row, ["RAZON SOCIAL", "RAZON_SOCIAL", "NOMBRE COMERCIAL", "NOMBRE_COMERCIAL", "LABEL"]))
+      .includes(companyQuery)
+  );
+  if (!company) return { error: "Empresa no encontrada" };
+  const rows = selectSistemaPcRows(pcRows, sucursales.rows, company[0], year, String(args.estatus || "").slice(0, 60));
+  return {
+    empresa: getFirstFlexible(company[1], ["RAZON SOCIAL", "NOMBRE COMERCIAL", "LABEL"]),
+    anio: year,
+    estatus: String(args.estatus || "todos"),
+    total: rows.length,
+    registros: rows.slice(0, 100).map(({ branch, status }) => ({
+      tienda: branch.tienda,
+      sucursal: [branch.tipo, branch.name || branch.nombreComercial].filter(Boolean).join(" "),
+      estatus: status.status,
+      fechaRegistro: formatAiDate(status.registroFecha),
+    })),
+    truncado: rows.length > 100,
+  };
+}
+
+async function handleVerifiedOperationalRequest(client, jid, text, identity) {
+  const query = normalizeText(text);
+  const wantsCompanies = /\bempresa(?:s)?\b/.test(query)
+    && /\b(?:registrad\w*|tenemos|lista|dame|muestr\w*)\b/.test(query)
+    && !/\b(?:sucursal(?:es)?|tienda(?:s)?)\b/.test(query);
+  const company = /\bmilano\b/.test(query) ? "milano" : /\b(?:casa )?ley\b/.test(query) ? "ley" : "";
+  const entity = wantsCompanies ? "empresas" : /\bmunicipal(?:es)?\b/.test(query) ? "municipales"
+    : /\b(?:pipc|trabajo(?:s)? estatal(?:es)?)\b/.test(query) ? "pipc"
+      : /\b(?:sucursal(?:es)?|tienda(?:s)?)\b/.test(query) && /\b(?:registrad|muestr|dame|lista)\w*\b/.test(query) ? "sucursales" : "";
+  if ((!company && !wantsCompanies) || !entity) return false;
+  const year = Number(query.match(/\b20\d{2}\b/)?.[0] || new Date().getFullYear());
+  const city = /\bculiacan\b/.test(query) ? "culiacan" : "";
+  const result = executeAuthorizedDataQuery({ entidad: entity, empresa: company, anio: year,
+    municipio: city, detalle: true, limite: entity === "empresas" ? 100 : 30 }, identity, readLocalOperationalTable);
+  if (result.error) {
+    await client.sendMessage(jid, result.error);
+    return true;
+  }
+  if (entity === "empresas") {
+    const rows = result.registros.map((row, index) => `${index + 1}. ${row.nombre}`
+      + (row.razonSocial && normalizeText(row.razonSocial) !== normalizeText(row.nombre)
+        ? ` | ${row.razonSocial}` : ""));
+    await client.sendMessage(jid, `${result.total} empresas registradas.\n\n${rows.join("\n")}`
+      + (result.truncado ? `\n\nMostrando ${rows.length} de ${result.total}.` : ""));
+    aiConversationContext.delete(jid);
+    return true;
+  }
+  const subject = entity === "municipales" ? `trabajo municipal en ${year}`
+    : entity === "pipc" ? `trabajo estatal/PIPC en ${year}` : "registradas";
+  const place = city ? ` en ${city}` : "";
+  const rows = result.registros.map((row, index) =>
+    `${index + 1}. ${[row.tienda, row.sucursal, row.municipio].filter(Boolean).join(" | ")}`
+  );
+  await client.sendMessage(jid, `${company.toUpperCase()}: ${result.total} sucursales${place} con ${subject}.`
+    + (rows.length ? `\n\n${rows.join("\n")}` : "")
+    + (result.truncado ? "\n\nMostrando las primeras 30." : ""));
+  aiConversationContext.delete(jid);
+  return true;
+}
+
+async function handleCreatedSistemaPcRequest(client, jid, text, identity) {
+  if (!isCreatedSistemaPcRequest(text)) return false;
+  if (!hasSucursalDocumentAccess(identity)) {
+    await client.sendMessage(jid, "No tienes permiso para consultar informacion de sucursales.");
+    return true;
+  }
+  if (!/\b(casa ley|ley)\b/.test(normalizeText(text))) {
+    await client.sendMessage(jid, "Indica la empresa para consultar el estatus en Proteccion Civil.");
+    return true;
+  }
+  const [pcRows, sucursales, empresas] = await Promise.all([
+    loadCachedAppSheetRows({ table: "STATUS SISTEMA PC" }),
+    loadSucursalesCache(),
+    loadEmpresasCache(),
+  ]);
+  const company = [...empresas.rowsByKey.entries()].find(([, row]) =>
+    normalizeText(getFirstFlexible(row, ["RAZON SOCIAL", "RAZON_SOCIAL", "NOMBRE COMERCIAL", "NOMBRE_COMERCIAL"])).includes("ley")
+  );
+  if (!company) {
+    await client.sendMessage(jid, "No encontre la empresa Casa Ley en la base local.");
+    return true;
+  }
+  const year = new Date().getFullYear();
+  const created = selectCreatedSistemaPcRows(pcRows, sucursales.rows, company[0], year);
+  aiConversationContext.delete(jid);
+  if (!created.length) {
+    await client.sendMessage(jid, `No hay tiendas de Casa Ley con estatus Creada en Proteccion Civil en ${year}.`);
+    return true;
+  }
+  const lines = created.map(({ branch, status }, index) =>
+    `${index + 1}. ${branch.tienda} ${branch.tipo || ""} ${branch.name || branch.nombreComercial}`.replace(/\s+/g, " ").trim()
+    + ` | Registro: ${formatAiDate(status.registroFecha)}`
+  );
+  await client.sendMessage(jid, `Casa Ley: ${created.length} tiendas con estatus Creada en Proteccion Civil (${year}).\n\n${lines.join("\n")}`);
+  return true;
 }
 
 export function selectPendingSistemaPcRows(rows, sucursales, companyId, year) {
@@ -1885,9 +2184,10 @@ async function sendSelectedDriveDocuments(client, jid, files) {
   for (const file of files) {
     try {
       const media = await downloadDriveDocument(file);
-      await client.sendMessage(jid, media, { caption: file.path || file.name });
+      await client.sendMessage(jid, media, { caption: file.path || file.name, sendMediaAsDocument: true });
     } catch (error) {
-      await client.sendMessage(jid, `No pude enviar ${file.name}: ${error?.message || "error de lectura"}`);
+      console.error(`[whatsapp] No pude enviar ${file.name}:`, error);
+      await client.sendMessage(jid, `No pude enviar ${file.name}. Intenta de nuevo en unos minutos.`);
     }
   }
 }
@@ -2794,6 +3094,9 @@ async function handleText(client, jid, text, identity = null) {
   }
 
   if (await handleDriveLookupChoice(client, jid, text)) return;
+  if (await handleVerifiedTrainingStatusRequest(client, jid, text, identity)) return;
+  if (await handleVerifiedOperationalRequest(client, jid, text, identity)) return;
+  if (await handleCreatedSistemaPcRequest(client, jid, text, identity)) return;
   if (await handlePendingSistemaPcRequest(client, jid, text, identity)) return;
   if (await handleBulkPendingAttendanceRequest(client, jid, text, identity)) return;
   if (await handleSucursalInformationRequest(client, jid, text, identity)) return;

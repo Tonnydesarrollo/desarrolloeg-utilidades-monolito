@@ -194,6 +194,22 @@ function readCapacitaciones() {
   `).map(mapCapacitacion);
 }
 
+function readCalendario() {
+  return readLocalRows(`
+    SELECT c.*, COALESCE((
+      SELECT group_concat(x.empleado_id, ', ')
+      FROM (SELECT ce.empleado_id FROM calendario_empleados ce
+        WHERE ce.calendario_id = c.id ORDER BY ce.orden) x
+    ), '') AS empleados_ids
+    FROM calendario c
+  `).map((row) => ({
+    ID: text(row.id || row.row_id),
+    "Row ID": text(row.row_id || row.id),
+    FECHA: text(row.fecha), TITULO: text(row.titulo), NOTAS: text(row.notas),
+    EMPLEADOS: text(row.empleados_ids),
+  }));
+}
+
 function readMirroredRows(tableName, source) {
   return readLocalRows(`
     SELECT row_id, data_json FROM operational_rows
@@ -267,6 +283,21 @@ function mapConceptoCotizacion(row) {
   };
 }
 
+function readPortalNotas() {
+  return readLocalRows(`
+    SELECT n.entity_type, n.entity_id, n.author_id, n.author_name,
+      n.body, n.created_at, n.updated_at
+    FROM portal_notas n
+    WHERE n.deleted_at IS NULL
+    ORDER BY n.created_at DESC
+  `).map((row) => ({
+    ENTIDAD: text(row.entity_type), REGISTRO: text(row.entity_id),
+    AUTOR_ID: text(row.author_id), AUTOR: text(row.author_name),
+    CONTENIDO: text(row.body), FECHA: text(row.created_at),
+    ACTUALIZADA: text(row.updated_at),
+  }));
+}
+
 export function readLocalOperationalTable(tableName, { source = "desarrolloeg" } = {}) {
   const table = text(tableName).toUpperCase();
   if (table === "EMPRESAS") return readLocalRows("SELECT * FROM empresas").map(mapEmpresa);
@@ -275,12 +306,14 @@ export function readLocalOperationalTable(tableName, { source = "desarrolloeg" }
   if (table === "SUCURSALES") return readSucursales();
   if (table === "EMPLEADOS") return readLocalRows("SELECT * FROM empleados").map(mapEmpleado);
   if (table === "CAPACITACIONES") return readCapacitaciones();
+  if (table === "CALENDARIO") return readCalendario();
   if (table === "CATALOGO") return readLocalRows("SELECT * FROM catalogo").map(mapCatalogo);
   if (table === "PROVEEDORES") return readLocalRows("SELECT * FROM proveedores").map(mapProveedor);
   if (table === "COTIZACIONES" || table === "COTIZACIONES_VARIOS_CT") return readCotizaciones();
   if (table === "CONCEPTOS_COTIZACION" || table === "CONCEPTOS_VARIOS_CT") {
     return readLocalRows("SELECT * FROM conceptos_cotizacion").map(mapConceptoCotizacion);
   }
+  if (table === "PORTAL_NOTAS") return readPortalNotas();
   return readMirroredRows(table, source);
 }
 

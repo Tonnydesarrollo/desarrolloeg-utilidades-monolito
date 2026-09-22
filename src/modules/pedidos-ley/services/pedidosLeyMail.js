@@ -43,6 +43,7 @@ function safeJsonParse(text) {
 
 async function fetchAppsScriptJson(url, payload) {
   const requestBody = JSON.stringify(payload);
+  const signal = AbortSignal.timeout(120_000);
   const firstResponse = await fetch(url, {
     method: 'POST',
     headers: {
@@ -50,6 +51,7 @@ async function fetchAppsScriptJson(url, payload) {
     },
     body: requestBody,
     redirect: 'manual',
+    signal,
   });
 
   const location = firstResponse.headers.get('location') || '';
@@ -61,6 +63,7 @@ async function fetchAppsScriptJson(url, payload) {
 
     const redirectedResponse = await fetch(location, {
       method: 'GET',
+      signal,
     });
     const redirectedText = await redirectedResponse.text();
     let redirectedData = null;

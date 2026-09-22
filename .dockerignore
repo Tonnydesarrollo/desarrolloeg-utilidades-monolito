@@ -24,6 +24,8 @@ tmp
 secrets
 publicimg
 docs
+!docs/
+!docs/**
 test
 scripts
 .tmp-server.*

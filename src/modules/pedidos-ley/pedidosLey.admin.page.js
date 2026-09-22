@@ -49,6 +49,7 @@ function buildPageState(data = {}) {
     rows: Array.isArray(data.rows) ? data.rows.map(stripRawRows) : [],
     catalogs: {
       sucursales: Array.isArray(catalogs.sucursalesLookup?.rows) ? catalogs.sucursalesLookup.rows.map(stripRawRows) : [],
+      facturadores: Array.isArray(catalogs.facturadores) ? catalogs.facturadores : [],
     },
     queryString: String(data.queryString || ""),
   };
@@ -675,6 +676,13 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           <label for="searchInput">Buscar</label>
           <input id="searchInput" type="text" placeholder="pedido, sucursal, municipio, estado, UUID...">
         </div>
+        <div class="field">
+          <label for="facturadorInput">Facturador</label>
+          <select id="facturadorInput">
+            <option value="">Todos</option>
+            ${pageData.catalogs.facturadores.map((item) => '<option value="' + escapeHtml(item.id || item.value || "") + '">' + escapeHtml(item.label || item.nombre || item.id || "") + '</option>').join("")}
+          </select>
+        </div>
       </div>
       <details class="advanced-filters" id="advancedFilters">
         <summary>Configuración oculta</summary>
@@ -682,14 +690,6 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           <div class="field">
             <label for="yearInput">Año</label>
             <input id="yearInput" type="number" min="2020" max="2100" step="1">
-          </div>
-          <div class="field">
-            <label for="facturadorInput">Facturador</label>
-            <select id="facturadorInput">
-              <option value="">Todos</option>
-              <option value="xwDqa6Mt6a42iqKHzJG9L6">GONZALEZ GAMEZ Y ASOCIADOS</option>
-              <option value="EiHiUQ9YHf4mA-C7L_ziyc">SERGIO GONZALEZ CASTILLO</option>
-            </select>
           </div>
           <div class="field">
             <label for="estatalMinInput">Umbral estatal</label>
@@ -1310,7 +1310,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
             + '<td><strong>' + esc(municipioLabel) + '</strong></td>'
             + '<td><strong>' + esc(money(row.importeNumber)) + '</strong></td>'
             + '<td>' + chip(trabajosYear, trabajosYear === "Sin trabajo del año" ? "warn" : "ok") + '</td>'
-            + '<td><div class="row-actions">' + (canSend ? sentLabel + '<button class="btn secondary" type="button" data-toggle-files="' + esc(row.pedido || "") + '">Ver archivos</button><button class="btn primary" type="button" data-send="' + esc(row.pedido || "") + '">' + esc(sendLabel) + '</button>' : (sentLabel || chip(ORDER_STATUS_LABELS[bucket] || "Sin clasificar", bucket === "pagados" ? "ok" : bucket === "pendientes-pago" ? "warn" : ""))) + '</div></td>'
+            + '<td><div class="row-actions">' + (canSend ? sentLabel + '<button class="btn secondary" type="button" data-toggle-files="' + esc(row.pedido || "") + '">Ver archivos</button><button class="btn primary" type="button" data-send="' + esc(row.pedido || "") + '"' + (sendingPedidos.has(String(row.pedido || "")) ? ' disabled' : '') + '>' + esc(sendingPedidos.has(String(row.pedido || "")) ? "Enviando..." : sendLabel) + '</button>' : (sentLabel || chip(ORDER_STATUS_LABELS[bucket] || "Sin clasificar", bucket === "pagados" ? "ok" : bucket === "pendientes-pago" ? "warn" : ""))) + '</div></td>'
             + '</tr>'
             + '<tr class="detail-row" data-detail-row="' + esc(row.pedido || "") + '" hidden><td colspan="7"><div class="files-panel"><div class="files-head"><strong>Archivos del pedido ' + esc(row.pedido || "") + '</strong><span class="muted" data-files-state="' + esc(row.pedido || "") + '">Selecciona "Ver archivos" para cargar Drive solo para este pedido.</span></div><div class="files-list" data-files-list="' + esc(row.pedido || "") + '"></div></div></td></tr>';
         }).join("") : '<tr><td colspan="7" class="empty">No hay pedidos con estos filtros.</td></tr>')
@@ -1455,6 +1455,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
 
     const filesByPedido = new Map();
     const selectedFilesByPedido = new Map();
+    const sendingPedidos = new Set();
 
     function setSendStatus(message, kind = "") {
       const node = document.getElementById("sendStatus");
@@ -1487,14 +1488,16 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         if (stateNode) stateNode.textContent = "Sin archivos encontrados.";
         return;
       }
-      selectedFilesByPedido.set(pedido, new Set(files.map(fileKey).filter(Boolean)));
+      const previousSelection = selectedFilesByPedido.get(pedido);
+      const selection = previousSelection || new Set(files.map(fileKey).filter(Boolean));
+      selectedFilesByPedido.set(pedido, selection);
       list.innerHTML = files.map((file) => {
         const key = fileKey(file);
         const label = file.name || file.relativePath || key;
         const meta = [file.mimeType, file.size ? (Math.round(Number(file.size) / 1024) + " KB") : ""].filter(Boolean).join(" · ");
         const link = file.openUrl || file.downloadUrl || "";
         return '<label class="file-item">'
-          + '<input type="checkbox" data-file="' + esc(pedido) + '" value="' + esc(key) + '" checked>'
+          + '<input type="checkbox" data-file="' + esc(pedido) + '" value="' + esc(key) + '"' + (selection.has(key) ? ' checked' : '') + '>'
           + '<span><strong>' + esc(label) + '</strong><small>' + esc(meta || "Archivo disponible") + '</small></span>'
           + (link ? '<a href="' + esc(link) + '" target="_blank" rel="noopener">Abrir</a>' : '<span></span>')
           + '</label>';
@@ -1528,19 +1531,33 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
         .filter((item) => !item.order);
     }
 
-    async function loadFilesForPedido(pedido, { open = true } = {}) {
+    async function loadFilesForPedido(pedido, { open = true, forceRefresh = false } = {}) {
       const safePedido = String(pedido || "").trim();
       if (!safePedido) throw new Error("Falta pedido.");
       const detail = document.querySelector('[data-detail-row="' + cssEscape(safePedido) + '"]');
       const stateNode = document.querySelector('[data-files-state="' + cssEscape(safePedido) + '"]');
       if (open && detail) detail.hidden = false;
-      if (filesByPedido.has(safePedido)) return filesByPedido.get(safePedido);
+      if (!forceRefresh && filesByPedido.has(safePedido)) return filesByPedido.get(safePedido);
       if (stateNode) stateNode.textContent = "Cargando archivos de Drive...";
-      const data = await apiJson("/api/pedidos-ley/pedido/" + encodeURIComponent(safePedido) + "/files");
+      const data = await apiJson("/api/pedidos-ley/pedido/" + encodeURIComponent(safePedido) + "/files" + (forceRefresh ? "?refresh=1" : ""));
       const files = Array.isArray(data.matchedFiles) ? data.matchedFiles : [];
       filesByPedido.set(safePedido, files);
       renderFiles(safePedido, files);
       return files;
+    }
+
+    async function refreshOrdersAfterSend() {
+      const params = new URLSearchParams({
+        year: String(state.year),
+        estatalMin: String(state.estatalMin),
+        municipalMin: String(state.municipalMin),
+        refresh: "1",
+      });
+      if (state.facturadorId) params.set("facturadorId", state.facturadorId);
+      const data = await apiJson("/api/pedidos-ley/admin-dashboard?" + params.toString());
+      state.rows = Array.isArray(data.rows) ? data.rows : [];
+      modelSignature = "";
+      ensureModel();
     }
 
     async function loadSendConfig() {
@@ -1596,7 +1613,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
           button.textContent = shouldOpen ? "Ocultar archivos" : "Ver archivos";
           if (shouldOpen) {
             try {
-              await loadFilesForPedido(pedido);
+              await loadFilesForPedido(pedido, { forceRefresh: true });
             } catch (error) {
               setSendStatus(error instanceof Error ? error.message : "No se pudieron cargar archivos.", "err");
             }
@@ -1606,6 +1623,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
       document.querySelectorAll("[data-send]").forEach((button) => {
         button.addEventListener("click", async () => {
           const pedido = String(button.getAttribute("data-send") || "").trim();
+          if (!pedido || sendingPedidos.has(pedido)) return;
           const row = state.rows.find((item) => String(item.pedido || "").trim() === pedido);
           const to = String(toInput?.value || "").trim();
           const fromEmail = String(senderSelect?.value || "").trim();
@@ -1614,9 +1632,11 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
             return;
           }
           try {
+            sendingPedidos.add(pedido);
             button.disabled = true;
+            button.textContent = "Enviando...";
             setSendStatus("Cargando archivos del pedido " + pedido + "...", "");
-            const files = await loadFilesForPedido(pedido);
+            const files = await loadFilesForPedido(pedido, { forceRefresh: true });
             const selected = selectedFilesByPedido.get(pedido) || new Set(files.map(fileKey).filter(Boolean));
             const selectedFiles = files.filter((file) => selected.has(fileKey(file)));
             if (!selectedFiles.length) {
@@ -1624,7 +1644,7 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
               return;
             }
             setSendStatus("Enviando pedido " + pedido + "...", "");
-            await apiJson("/api/pedidos-ley/send", {
+            const result = await apiJson("/api/pedidos-ley/send", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -1637,13 +1657,20 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
                 htmlBody: "<p>Le informamos que el trabajo correspondiente al pedido <strong>" + esc(pedido) + "</strong> ya esta listo.</p><p>Adjuntamos el documento final para su revision.</p>",
               }),
             });
-            markRowSentInView(row);
+            await refreshOrdersAfterSend();
+            filesByPedido.delete(pedido);
+            selectedFilesByPedido.delete(pedido);
             render();
-            setSendStatus("Pedido " + pedido + " enviado correctamente.", "ok");
+            setSendStatus("Pedido " + pedido + " enviado correctamente." + (result.syncWarning ? " El correo se confirmó, pero el estado remoto sigue sincronizándose." : ""), "ok");
           } catch (error) {
             setSendStatus(error instanceof Error ? error.message : "No se pudo enviar el pedido.", "err");
           } finally {
-            button.disabled = false;
+            sendingPedidos.delete(pedido);
+            const currentButton = document.querySelector('[data-send="' + cssEscape(pedido) + '"]');
+            if (currentButton) {
+              currentButton.disabled = false;
+              currentButton.textContent = orderStatusBucket(row) === "sin-liberacion-enviados" ? "Reenviar" : "Enviar";
+            }
           }
         });
       });
