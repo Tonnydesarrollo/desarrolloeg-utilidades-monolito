@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  extractBotPrompt,
   isBulkPendingAttendanceRequest,
   isNaturalDriveRequest,
   isPendingConstanciasRequest,
@@ -18,6 +19,14 @@ import {
   isTrainingStatusRequest,
   selectTrainingRowsByStatus,
 } from "../src/modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
+
+test("el asistente libre solo se activa con bot al principio", () => {
+  assert.equal(extractBotPrompt("bot dame los estatus de proteccion civil"), "dame los estatus de proteccion civil");
+  assert.equal(extractBotPrompt(" BOT: dame las capacitaciones"), "dame las capacitaciones");
+  assert.equal(extractBotPrompt("bot"), "");
+  assert.equal(extractBotPrompt("dile al bot que consulte"), null);
+  assert.equal(extractBotPrompt("capacitaciones"), null);
+});
 
 test("bloquea explicaciones inventadas sobre puertos en consultas de negocio", () => {
   assert.equal(isFabricatedInfrastructureResponse("Como van los PIPC", "Usa el puerto 3000 del servidor local"), true);

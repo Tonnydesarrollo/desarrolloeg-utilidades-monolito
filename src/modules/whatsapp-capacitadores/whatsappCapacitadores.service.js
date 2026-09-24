@@ -3070,9 +3070,17 @@ async function cancelFlow(jid, client) {
   return false;
 }
 
+export function extractBotPrompt(text) {
+  const raw = String(text || "");
+  const match = raw.match(/^\s*bot(?:\s*[:,-]\s*|\s+|$)(.*)$/i);
+  if (!match) return null;
+  return String(match[1] || "").trim();
+}
+
 async function handleText(client, jid, text, identity = null) {
   const config = ensureRuntimeConfig();
   const normalized = normalizeText(text);
+  const botPrompt = extractBotPrompt(text);
 
   if (!normalized || normalized === "hola" || normalized === "hi" || normalized === "buenas") {
     await client.sendMessage(jid, `Hola. Soy ${config.botName}. Escribe "ayuda" para ver opciones.`);
@@ -3088,20 +3096,27 @@ async function handleText(client, jid, text, identity = null) {
         `- ${config.keywordSubirImagenes}\n` +
         `- ${config.keywordArchivo}\n` +
         `- ${config.keywordArchivos}\n` +
-        `- ${config.keywordReintentar}`
+        `- ${config.keywordReintentar}\n` +
+        `- bot <pregunta para el asistente>`
     );
     return;
   }
 
   if (await handleDriveLookupChoice(client, jid, text)) return;
-  if (await handleVerifiedTrainingStatusRequest(client, jid, text, identity)) return;
-  if (await handleVerifiedOperationalRequest(client, jid, text, identity)) return;
-  if (await handleCreatedSistemaPcRequest(client, jid, text, identity)) return;
-  if (await handlePendingSistemaPcRequest(client, jid, text, identity)) return;
-  if (await handleBulkPendingAttendanceRequest(client, jid, text, identity)) return;
-  if (await handleSucursalInformationRequest(client, jid, text, identity)) return;
-  if (await handleNaturalDriveRequest(client, jid, text, identity)) return;
-  if (await handlePendingConstanciasRequest(client, jid, text, identity)) return;
+  if (botPrompt !== null) {
+    if (!botPrompt) {
+      await client.sendMessage(jid, "Escribe tu consulta despues de bot. Ejemplo: bot dame los estatus de proteccion civil.");
+      return;
+    }
+    if (await handleVerifiedTrainingStatusRequest(client, jid, botPrompt, identity)) return;
+    if (await handleVerifiedOperationalRequest(client, jid, botPrompt, identity)) return;
+    if (await handleCreatedSistemaPcRequest(client, jid, botPrompt, identity)) return;
+    if (await handlePendingSistemaPcRequest(client, jid, botPrompt, identity)) return;
+    if (await handleBulkPendingAttendanceRequest(client, jid, botPrompt, identity)) return;
+    if (await handleSucursalInformationRequest(client, jid, botPrompt, identity)) return;
+    if (await handleNaturalDriveRequest(client, jid, botPrompt, identity)) return;
+    if (await handlePendingConstanciasRequest(client, jid, botPrompt, identity)) return;
+  }
 
   if (normalized === config.keywordCapacitaciones) {
     setMenuContext(jid);
@@ -3302,7 +3317,9 @@ async function handleText(client, jid, text, identity = null) {
     return;
   }
 
-  await handleAiText(client, jid, text, identity);
+  if (botPrompt !== null) {
+    await handleAiText(client, jid, botPrompt, identity);
+  }
 }
 
 async function refreshAuthorizedNumbers() {
