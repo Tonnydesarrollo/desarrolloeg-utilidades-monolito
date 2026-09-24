@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   extractBotPrompt,
+  fetchAiResponse,
   isBulkPendingAttendanceRequest,
   isNaturalDriveRequest,
   isPendingConstanciasRequest,
@@ -19,6 +20,25 @@ import {
   isTrainingStatusRequest,
   selectTrainingRowsByStatus,
 } from "../src/modules/whatsapp-capacitadores/whatsappCapacitadores.service.js";
+
+test("reintenta cuando el servidor IA esta ocupado", async () => {
+  const statuses = [429, 429, 200];
+  const delays = [];
+  const response = await fetchAiResponse("http://ia.local/v1/respond", {}, {
+    fetchImpl: async () => {
+      const status = statuses.shift();
+      return {
+        status,
+        headers: { get: () => null },
+        json: async () => ({ retryAfterSeconds: 2 }),
+      };
+    },
+    sleep: async (delayMs) => delays.push(delayMs),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(delays, [2000, 2000]);
+});
 
 test("el asistente libre solo se activa con bot al principio", () => {
   assert.equal(extractBotPrompt("bot dame los estatus de proteccion civil"), "dame los estatus de proteccion civil");

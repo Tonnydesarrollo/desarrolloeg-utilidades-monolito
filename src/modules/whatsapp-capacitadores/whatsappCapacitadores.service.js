@@ -786,7 +786,7 @@ async function handleAiText(client, jid, text, identity) {
   try {
     let answer = "";
     for (let step = 0; step < 3; step += 1) {
-      const response = await fetch(`${config.aiServerUrl}/v1/respond`, {
+      const response = await fetchAiResponse(`${config.aiServerUrl}/v1/respond`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -822,6 +822,28 @@ async function handleAiText(client, jid, text, identity) {
     await client.sendMessage(jid, "El asistente inteligente no esta disponible en este momento. Intenta de nuevo en unos minutos.");
   }
   return true;
+}
+
+export async function fetchAiResponse(url, options, {
+  fetchImpl = fetch,
+  sleep = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+  maxBusyRetries = 36,
+} = {}) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetchImpl(url, options);
+    if (response.status !== 429 || attempt >= maxBusyRetries) return response;
+
+    let retryAfterSeconds = Number(response.headers?.get?.("retry-after"));
+    if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+      try {
+        const payload = await response.json();
+        retryAfterSeconds = Number(payload?.retryAfterSeconds);
+      } catch {}
+    }
+    const delayMs = Math.min(10_000, Math.max(1_000, (retryAfterSeconds || 5) * 1000));
+    getLogger().warn({ attempt: attempt + 1, delayMs }, "local AI busy; retrying");
+    await sleep(delayMs);
+  }
 }
 
 export function isFabricatedInfrastructureResponse(query, answer) {
