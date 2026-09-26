@@ -25,6 +25,30 @@ test("fusiona la replica historica con filas nuevas sin perder pagos anteriores"
   ]);
 });
 
+test("limita Casa Ley a pagos, relacionados y facturas del ultimo mes", async () => {
+  process.env.CASALEY_USER ||= "test-user";
+  process.env.CASALEY_PASSWORD ||= "test-password";
+  const { filterCasaLeyRowsToRecentWindow } = await import("../src/modules/jobs/native/casaley/syncCasaleyNative.js");
+  const result = filterCasaLeyRowsToRecentWindow({
+    pagos: [
+      { "Referencia de pago": "REC-1", "Fecha pago": "20/09/2026" },
+      { "Referencia de pago": "OLD-1", "Fecha pago": "01/07/2026" },
+    ],
+    relacionados: [
+      { Referencia: "A", "Referencia de pago": "REC-1" },
+      { Referencia: "B", "Referencia de pago": "OLD-1" },
+    ],
+    facturas: [
+      { "Folio Uuid": "F-1", "Fecha factura": "15/09/2026" },
+      { "Folio Uuid": "F-2", "Fecha factura": "15/07/2026" },
+    ],
+  }, { now: new Date(2026, 8, 26), windowDays: 31 });
+
+  assert.deepEqual(result.pagos.map((row) => row["Referencia de pago"]), ["REC-1"]);
+  assert.deepEqual(result.relacionados.map((row) => row.Referencia), ["A"]);
+  assert.deepEqual(result.facturas.map((row) => row["Folio Uuid"]), ["F-1"]);
+});
+
 test("replica las tablas Casa Ley hacia la base persistente compartida", async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "desarrolloeg-casaley-mirror-"));
   const sourcePath = path.join(directory, "source.sqlite");

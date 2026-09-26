@@ -1152,6 +1152,41 @@ async function consultarFacturasEnRango(client, config, user, range = {}) {
   return rows;
 }
 
+function firstCasaLeyRowDate(row, columns) {
+  for (const column of columns) {
+    const parsed = parseCasaLeyDateValue(row?.[column]);
+    if (!parsed) continue;
+    return new Date(parsed.year, parsed.month - 1, parsed.day, parsed.hour || 0, parsed.minute || 0, parsed.second || 0);
+  }
+  return null;
+}
+
+export function filterCasaLeyRowsToRecentWindow({ pagos = [], relacionados = [], facturas = [] } = {}, {
+  now = new Date(),
+  windowDays = 31,
+} = {}) {
+  const cutoff = new Date(now);
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - Math.max(1, Number(windowDays) || 31));
+
+  const recentPagos = pagos.filter((row) => {
+    const date = firstCasaLeyRowDate(row, ["Fecha cobro", "fecha_cobro", "Fecha pago", "fecha_pago", "Fecha de carga", "fecha_de_carga"]);
+    return date && date >= cutoff;
+  });
+  const recentPaymentReferences = new Set(recentPagos
+    .map((row) => cleanText(row?.["Referencia de pago"] ?? row?.referencia_pago ?? ""))
+    .filter(Boolean));
+  const recentRelacionados = relacionados.filter((row) => recentPaymentReferences.has(
+    cleanText(row?.["Referencia de pago"] ?? row?.referencia_pago ?? "")
+  ));
+  const recentFacturas = facturas.filter((row) => {
+    const date = firstCasaLeyRowDate(row, ["Fecha factura", "fecha_factura", "Fecha registro", "fecha_registro"]);
+    return date && date >= cutoff;
+  });
+
+  return { pagos: recentPagos, relacionados: recentRelacionados, facturas: recentFacturas, cutoff };
+}
+
 async function consultarFacturas(client, config, user, range = {}) {
   const chunks = splitDateRangeByMonth(range);
   const rowsByUuid = new Map();
@@ -1247,13 +1282,16 @@ async function writeCasaLeyPendingRow(config, scopeConfig, localRow) {
   return { ok: false, mode: `${fallback.toLowerCase()}_failed`, key: keyValue, error: secondaryError };
 }
 
-async function uploadCasaLeyPendingScope(config, scope) {
+async function uploadCasaLeyPendingScope(config, scope, allowedKeys = null) {
   const scopeConfig = getCasaLeyScopeUploadConfig(config, scope);
   if (!scopeConfig?.tableName || !scopeConfig?.keyColumn) {
     return { total: 0, ok: 0, edited: 0, added: 0, failed: 0, skippedUnchanged: 0, markedSynced: 0 };
   }
 
-  const pendingRows = getCasaLeyPendingSyncRows(scope);
+  const allowed = allowedKeys instanceof Set ? allowedKeys : null;
+  const pendingRows = getCasaLeyPendingSyncRows(scope).filter((row) => !allowed || allowed.has(
+    cleanText(row?.[scopeConfig.keyField] ?? "")
+  ));
   if (!pendingRows.length) {
     return { total: 0, ok: 0, edited: 0, added: 0, failed: 0, skippedUnchanged: 0, markedSynced: 0 };
   }
@@ -1732,10 +1770,10 @@ async function runCasaleyJob(options = {}) {
 
   const prepareUploadRows = (rows) => rows.map((row) => normalizeCasaLeyUploadRow(sanitizeRowValuesOnly(row)));
 
-  const pagosPrepared = executionPlan.pagos
+  const pagosPreparedAll = executionPlan.pagos
     ? (config.pagosKey ? ensureKey(prepareUploadRows(allPagos), config.pagosKey) : prepareUploadRows(allPagos))
     : [];
-  const facturasPrepared = executionPlan.facturas && config.facturasKey
+  const facturasPreparedAll = executionPlan.facturas && config.facturasKey
     ? ensureKey(prepareUploadRows(allFacturas), config.facturasKey)
     : executionPlan.facturas
       ? prepareUploadRows(allFacturas)
@@ -1747,11 +1785,19 @@ async function runCasaleyJob(options = {}) {
   const pagosReplica = loadReplica(pagosReplicaPath);
   const relacionadosReplica = loadReplica(relacionadosReplicaPath);
   const facturasReplica = loadReplica(facturasReplicaPath);
-  const relacionadosPrepared = executionPlan.relacionados && config.relacionadosKey
+  const relacionadosPreparedAll = executionPlan.relacionados && config.relacionadosKey
     ? ensureKey(prepareUploadRows(allRelacionados), config.relacionadosKey)
     : executionPlan.relacionados
       ? prepareUploadRows(allRelacionados)
       : [];
+  const recentWindow = filterCasaLeyRowsToRecentWindow({
+    pagos: pagosPreparedAll,
+    relacionados: relacionadosPreparedAll,
+    facturas: facturasPreparedAll,
+  }, { windowDays: Math.max(1, readNumber(["CASALEY_SYNC_WINDOW_DAYS"], 31)) });
+  const pagosPrepared = recentWindow.pagos;
+  const relacionadosPrepared = recentWindow.relacionados;
+  const facturasPrepared = recentWindow.facturas;
   const pagosSelected = executionPlan.pagos ? applyRowLimit(pagosPrepared, config.maxPagosRows) : [];
   const relacionadosSelected = executionPlan.relacionados ? applyRowLimit(relacionadosPrepared, config.maxRelacionadosRows) : [];
   const facturasSelected = executionPlan.facturas ? applyRowLimit(facturasPrepared, config.maxFacturasRows) : [];
@@ -1823,7 +1869,9 @@ async function runCasaleyJob(options = {}) {
   summary.localReplica = mirrorCasaLeyTablesToSyncDb();
 
   if (config.shouldUpload.pagos) {
-    summary.uploads.pagos = await uploadCasaLeyPendingScope(config, "pagos");
+    summary.uploads.pagos = await uploadCasaLeyPendingScope(config, "pagos", new Set(
+      pagosSelected.map((row) => cleanText(row?.[config.pagosKey] ?? "")).filter(Boolean)
+    ));
     summary.uploads.pagos.skippedUnchanged = pagosDiff.unchangedRows.length;
     if (summary.uploads.pagos.failed === 0) {
       saveReplicaRows(pagosReplicaPath, pagosSelected, config.pagosKey, { mergeWithExisting: true });
@@ -1832,7 +1880,9 @@ async function runCasaleyJob(options = {}) {
   }
 
   if (config.shouldUpload.relacionados) {
-    summary.uploads.relacionados = await uploadCasaLeyPendingScope(config, "relacionados");
+    summary.uploads.relacionados = await uploadCasaLeyPendingScope(config, "relacionados", new Set(
+      relacionadosSelected.map((row) => cleanText(row?.[config.relacionadosKey] ?? "")).filter(Boolean)
+    ));
     summary.uploads.relacionados.skippedUnchanged = relacionadosDiff.unchangedRows.length;
     if (summary.uploads.relacionados.failed === 0) {
       saveReplicaRows(relacionadosReplicaPath, relacionadosSelected, config.relacionadosKey, { mergeWithExisting: true });
@@ -1841,7 +1891,9 @@ async function runCasaleyJob(options = {}) {
   }
 
   if (config.shouldUpload.facturas) {
-    summary.uploads.facturas = await uploadCasaLeyPendingScope(config, "facturas");
+    summary.uploads.facturas = await uploadCasaLeyPendingScope(config, "facturas", new Set(
+      facturasSelected.map((row) => cleanText(row?.[config.facturasKey] ?? "")).filter(Boolean)
+    ));
     summary.uploads.facturas.skippedUnchanged = facturasDiff.unchangedRows.length;
     if (summary.uploads.facturas.failed === 0) {
       saveReplicaRows(facturasReplicaPath, facturasSelected, config.facturasKey, { mergeWithExisting: true });
