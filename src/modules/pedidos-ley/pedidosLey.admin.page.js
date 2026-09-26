@@ -806,10 +806,16 @@ export function renderPedidosLeyAdminPage({ user = null, data = {} } = {}) {
     function trabajosDelYear(row, year) {
       const targetYear = Number(year);
       const trabajos = [];
-      if (Number.isFinite(targetYear) && extractYear(row.ultimoPipcEstatal || row.tienda?.ultimoPipcEstatal) === targetYear) {
+      const estatalActual = row.business?.estatalActual === true
+        || (Number(row.trabajoEstatal?.anio) === targetYear && ["EN DRIVE", "IMPRESO", "ENTREGADO"].some((estado) => normalizeText(row.trabajoEstatal?.estado).includes(estado)))
+        || extractYear(row.ultimoPipcEstatal || row.tienda?.ultimoPipcEstatal) === targetYear;
+      const municipalActual = row.business?.municipalActual === true
+        || (Number(row.trabajoMunicipal?.anio) === targetYear && ["EN DRIVE", "IMPRESO", "ENTREGADO"].some((estado) => normalizeText(row.trabajoMunicipal?.estado).includes(estado)))
+        || extractYear(row.ultimoPipcMunicipal || row.tienda?.ultimoPipcMunicipal) === targetYear;
+      if (Number.isFinite(targetYear) && estatalActual) {
         trabajos.push("Estatal");
       }
-      if (Number.isFinite(targetYear) && extractYear(row.ultimoPipcMunicipal || row.tienda?.ultimoPipcMunicipal) === targetYear) {
+      if (Number.isFinite(targetYear) && municipalActual) {
         trabajos.push("Municipal");
       }
       return trabajos.length ? trabajos.join(" + ") : "Sin trabajo del año";
