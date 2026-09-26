@@ -63,6 +63,23 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+export function getPedidoMissingFields(row = {}) {
+  return {
+    PROVEEDOR: isEmpty(row.proveedor ?? row.PROVEEDOR) || isBadProveedor(row.proveedor ?? row.PROVEEDOR),
+    ESTABLECIMIENTO: isEmpty(row.establecimiento ?? row.ESTABLECIMIENTO),
+    FECHA: isEmpty(row.fecha ?? row.FECHA),
+    IMPORTE: isEmpty(row.importe ?? row.IMPORTE),
+    DESCRIPCION: isEmpty(row.descripcion ?? row.DESCRIPCION),
+  };
+}
+
+export function getLiberacionMissingFields(row = {}) {
+  return {
+    "NUM. DE PEDIDO": isEmpty(row["NUM. DE PEDIDO"] ?? row.num_pedido),
+    FECHA: isEmpty(row.fecha ?? row.FECHA),
+  };
+}
+
 async function fetchWithRetry(url, options = {}, meta = {}) {
   let lastErr;
   for (let attempt = 0; attempt <= CONFIG.retryMax; attempt++) {
@@ -187,24 +204,21 @@ async function processPedidos(drive) {
       skipped++;
       continue;
     }
-    const needs = {
-      PROVEEDOR: isEmpty(row.proveedor ?? row.PROVEEDOR) || isBadProveedor(row.proveedor ?? row.PROVEEDOR),
-      ESTABLECIMIENTO: isEmpty(row.establecimiento ?? row.ESTABLECIMIENTO),
-      FECHA: isEmpty(row.fecha ?? row.FECHA),
-      IMPORTE: isEmpty(row.importe ?? row.IMPORTE),
-      DESCRIPCION: isEmpty(row.descripcion ?? row.DESCRIPCION),
-    };
-    const pdfNotExtracted = Number(row.pdf_extraido || 0) !== 1;
-    const syncNotDone = String(row.sync_appsheet_estado || "PENDIENTE").toUpperCase() !== "SINCRONIZADO";
-    const shouldInspectPdf = CONFIG.forceRefresh || pdfNotExtracted || syncNotDone || Object.values(needs).some(Boolean);
+    const needs = getPedidoMissingFields(row);
+    const shouldInspectPdf = CONFIG.forceRefresh || Object.values(needs).some(Boolean);
 
     if (!shouldInspectPdf) {
+      const syncedAt = nowIso();
       skippedRows.push({ row: i + 1, pedido, reason: "sin_campos_faltantes" });
       await upsertPedidoLeyLocalRow({
         ...row,
         pedido,
-        sync_appsheet_estado: syncNotDone ? String(row.sync_appsheet_estado || "PENDIENTE") : "SINCRONIZADO",
-        sync_origen_ultimo: row.sync_origen_ultimo || "APPSHEET",
+        pdf_extraido: 1,
+        pdf_extraido_fecha: syncedAt,
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "SINCRONIZADO",
+        sync_appsheet_fecha: syncedAt,
+        sync_origen_ultimo: "APPSHEET",
       });
       continue;
     }
@@ -340,18 +354,21 @@ async function processLiberaciones(drive) {
       skipped++;
       continue;
     }
-    const needs = { "NUM. DE PEDIDO": isEmpty(row["NUM. DE PEDIDO"] ?? row.num_pedido), FECHA: isEmpty(row.fecha ?? row.FECHA) };
-    const pdfNotExtracted = Number(row.pdf_extraido || 0) !== 1;
-    const syncNotDone = String(row.sync_appsheet_estado || "PENDIENTE").toUpperCase() !== "SINCRONIZADO";
-    const shouldInspectPdf = CONFIG.forceRefresh || pdfNotExtracted || syncNotDone || Object.values(needs).some(Boolean);
+    const needs = getLiberacionMissingFields(row);
+    const shouldInspectPdf = CONFIG.forceRefresh || Object.values(needs).some(Boolean);
 
     if (!shouldInspectPdf) {
+      const syncedAt = nowIso();
       skippedRows.push({ row: i + 1, liberacion, reason: "sin_campos_faltantes" });
       await upsertLiberacionLocalRow({
         ...row,
         liberacion,
-        sync_appsheet_estado: syncNotDone ? String(row.sync_appsheet_estado || "PENDIENTE") : "SINCRONIZADO",
-        sync_origen_ultimo: row.sync_origen_ultimo || "APPSHEET",
+        pdf_extraido: 1,
+        pdf_extraido_fecha: syncedAt,
+        pdf_extraido_error: null,
+        sync_appsheet_estado: "SINCRONIZADO",
+        sync_appsheet_fecha: syncedAt,
+        sync_origen_ultimo: "APPSHEET",
       });
       continue;
     }
@@ -433,7 +450,8 @@ async function processLiberaciones(drive) {
 export async function syncPedidosNative() {
   requireConfig();
   let drive = null;
-  if (!CONFIG.usePublicPdf || (CONFIG.usePublicPdf && fs.existsSync(CONFIG.credentialsPath))) {
+  const hasDriveToken = fs.existsSync(CONFIG.credentialsPath) && fs.existsSync(CONFIG.tokenPath);
+  if (!CONFIG.usePublicPdf || hasDriveToken) {
     try {
       const auth = await getAuthClient({ credentialsPath: CONFIG.credentialsPath, tokenPath: CONFIG.tokenPath });
       drive = createDriveClient(auth);
