@@ -2609,8 +2609,11 @@ async function getMediaDebugInfo(msg) {
 
   try {
     return await page.evaluate(async (messageId) => {
-      const target =
-        window.Store.Msg.get(messageId) || (await window.Store.Msg.getMessagesById([messageId]))?.messages?.[0];
+      const messages = typeof window.require === "function"
+        ? window.require("WAWebCollections")?.Msg
+        : window.Store?.Msg;
+      if (!messages) return { found: false, error: "message_collection_unavailable" };
+      const target = messages.get(messageId) || (await messages.getMessagesById([messageId]))?.messages?.[0];
       if (!target) return { found: false };
 
       return {
@@ -2639,8 +2642,13 @@ async function downloadMediaFallback(msg) {
   if (!page || !msgId) return null;
 
   const result = await page.evaluate(async (messageId) => {
-    const target =
-      window.Store.Msg.get(messageId) || (await window.Store.Msg.getMessagesById([messageId]))?.messages?.[0];
+    const messages = typeof window.require === "function"
+      ? window.require("WAWebCollections")?.Msg
+      : window.Store?.Msg;
+    if (!messages) {
+      return { ok: false, error: "message_collection_unavailable" };
+    }
+    const target = messages.get(messageId) || (await messages.getMessagesById([messageId]))?.messages?.[0];
     if (!target || !target.mediaData) {
       return { ok: false, error: "message_or_media_not_found" };
     }
@@ -2673,7 +2681,13 @@ async function downloadMediaFallback(msg) {
             return this;
           },
         };
-        const decryptedMedia = await window.Store.DownloadManager.downloadAndMaybeDecrypt({
+        const downloadManager = typeof window.require === "function"
+          ? window.require("WAWebDownloadManager")?.downloadManager
+          : window.Store?.DownloadManager;
+        if (!downloadManager?.downloadAndMaybeDecrypt) {
+          throw new Error("download_manager_unavailable");
+        }
+        const decryptedMedia = await downloadManager.downloadAndMaybeDecrypt({
           directPath: target.directPath,
           encFilehash: target.encFilehash,
           filehash: target.filehash,
@@ -2715,12 +2729,12 @@ async function downloadMediaFallback(msg) {
   return null;
 }
 
-async function downloadMessageMedia(msg, logger) {
+async function downloadMessageMediaNow(msg, logger) {
   let media = null;
   let lastError = null;
   const messageId = ensureMessageSerializedId(msg);
 
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       media = await msg.downloadMedia();
       if (media?.data) return { media, lastError: null };
@@ -2740,24 +2754,34 @@ async function downloadMessageMedia(msg, logger) {
       );
     }
 
+    try {
+      media = await downloadMediaFallback(msg);
+      if (media?.data) {
+        logger.info({ attempt, messageId }, "media downloaded through fallback");
+        return { media, lastError: null };
+      }
+    } catch (error) {
+      lastError = error;
+      logger.warn({ attempt, messageId, error: serializeError(error) }, "media fallback download failed");
+    }
+
     await wait(900 * attempt);
   }
 
   const diagnostic = await getMediaDebugInfo(msg);
   logger.warn({ diagnostic, lastError: serializeError(lastError) }, "media download diagnostic");
-
-  try {
-    media = await downloadMediaFallback(msg);
-    if (media?.data) {
-      logger.info({ diagnostic }, "media downloaded through fallback");
-      return { media, lastError: null };
-    }
-  } catch (error) {
-    lastError = error;
-    logger.warn({ diagnostic, error: serializeError(error) }, "media fallback download failed");
-  }
-
   return { media: null, lastError };
+}
+
+let mediaDownloadQueue = Promise.resolve();
+
+function downloadMessageMedia(msg, logger) {
+  const queued = mediaDownloadQueue.then(
+    () => downloadMessageMediaNow(msg, logger),
+    () => downloadMessageMediaNow(msg, logger)
+  );
+  mediaDownloadQueue = queued.catch(() => undefined);
+  return queued;
 }
 
 async function saveIncomingMedia(msg, context, options = {}) {
