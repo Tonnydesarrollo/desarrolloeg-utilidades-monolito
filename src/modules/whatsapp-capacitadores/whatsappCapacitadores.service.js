@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import readline from "readline";
+import { createDecipheriv, createHash, createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
 import mime from "mime-types";
 import qrcode from "qrcode-terminal";
 import QRCode from "qrcode";
@@ -2729,6 +2730,84 @@ async function downloadMediaFallback(msg) {
   return null;
 }
 
+const MEDIA_KEY_INFO = Object.freeze({
+  image: "WhatsApp Image Keys",
+  sticker: "WhatsApp Image Keys",
+  video: "WhatsApp Video Keys",
+  audio: "WhatsApp Audio Keys",
+  ptt: "WhatsApp Audio Keys",
+  document: "WhatsApp Document Keys",
+});
+
+async function getEncryptedMediaMetadata(msg) {
+  const page = runtime.client?.pupPage;
+  const msgId = ensureMessageSerializedId(msg);
+  if (!page || !msgId) return null;
+
+  return page.evaluate(async (messageId) => {
+    const messages = typeof window.require === "function"
+      ? window.require("WAWebCollections")?.Msg
+      : window.Store?.Msg;
+    const target = messages?.get(messageId) || (await messages?.getMessagesById?.([messageId]))?.messages?.[0];
+    if (!target?.directPath || !target?.mediaKey) return null;
+    const encode = async (value) => {
+      if (!value) return "";
+      if (typeof value === "string") return value;
+      return window.WWebJS.arrayBufferToBase64Async(value.buffer || value);
+    };
+    return {
+      directPath: target.directPath,
+      mediaKey: await encode(target.mediaKey),
+      filehash: await encode(target.filehash),
+      encFilehash: await encode(target.encFilehash),
+      type: target.type || "",
+      mimetype: target.mimetype || target.mediaData?.mimetype || "",
+      filename: target.filename || "",
+      filesize: target.size || target.mediaData?.size || 0,
+    };
+  }, msgId);
+}
+
+async function downloadMediaDirect(msg) {
+  const metadata = await getEncryptedMediaMetadata(msg);
+  if (!metadata?.directPath || !metadata?.mediaKey) return null;
+  const keyInfo = MEDIA_KEY_INFO[metadata.type];
+  if (!keyInfo) throw new Error(`unsupported_media_type_${metadata.type || "unknown"}`);
+
+  const url = metadata.directPath.startsWith("http")
+    ? metadata.directPath
+    : `https://mmg.whatsapp.net${metadata.directPath}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`media_http_${response.status}`);
+  const encrypted = Buffer.from(await response.arrayBuffer());
+  if (encrypted.length <= 10) throw new Error("encrypted_media_empty");
+
+  const expanded = Buffer.from(hkdfSync("sha256", Buffer.from(metadata.mediaKey, "base64"), Buffer.alloc(0), keyInfo, 112));
+  const iv = expanded.subarray(0, 16);
+  const cipherKey = expanded.subarray(16, 48);
+  const macKey = expanded.subarray(48, 80);
+  const ciphertext = encrypted.subarray(0, -10);
+  const receivedMac = encrypted.subarray(-10);
+  const expectedMac = createHmac("sha256", macKey).update(Buffer.concat([iv, ciphertext])).digest().subarray(0, 10);
+  if (!timingSafeEqual(receivedMac, expectedMac)) throw new Error("encrypted_media_mac_mismatch");
+
+  const decipher = createDecipheriv("aes-256-cbc", cipherKey, iv);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  if (metadata.filehash) {
+    const expectedHash = Buffer.from(metadata.filehash, "base64");
+    const actualHash = createHash("sha256").update(decrypted).digest();
+    if (expectedHash.length === actualHash.length && !timingSafeEqual(expectedHash, actualHash)) {
+      throw new Error("decrypted_media_hash_mismatch");
+    }
+  }
+  return {
+    data: decrypted.toString("base64"),
+    mimetype: metadata.mimetype || "application/octet-stream",
+    filename: metadata.filename || "",
+    filesize: metadata.filesize || decrypted.length,
+  };
+}
+
 async function downloadMessageMediaNow(msg, logger) {
   let media = null;
   let lastError = null;
@@ -2752,6 +2831,17 @@ async function downloadMessageMediaNow(msg, logger) {
         },
         "media download attempt failed"
       );
+    }
+
+    try {
+      media = await downloadMediaDirect(msg);
+      if (media?.data) {
+        logger.info({ attempt, messageId }, "media downloaded and decrypted directly");
+        return { media, lastError: null };
+      }
+    } catch (error) {
+      lastError = error;
+      logger.warn({ attempt, messageId, error: serializeError(error) }, "direct media download failed");
     }
 
     try {
