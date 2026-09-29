@@ -1016,9 +1016,32 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
     id = String(createdQuote["Row ID"] || createdQuote.ID || "").trim();
     if (!id) throw new Error("AppSheet creo la cotizacion pero no devolvio su Row ID.");
     desiredConceptRows = conceptRowsFromInput(input, id, { branchesById, catalogById });
+    const centerIds = normalizeIds(input.centrosTrabajo);
+    const firstConceptId = conceptIdsFromInput(input)[0];
+    const insertedConceptRows = [];
     try {
-      await writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Add", desiredConceptRows);
+      for (const [centerIndex, centerId] of centerIds.entries()) {
+        if (centerIndex > 0) {
+          persistedQuoteRow = quoteRowFromInput({
+            ...input,
+            centrosTrabajo: [centerId],
+            conceptos: [{ id: firstConceptId }],
+            lineas: undefined,
+          }, id, branchesById);
+          persistedQuoteRow.CONCEPTOS = "";
+          await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [persistedQuoteRow]);
+        }
+
+        const centerConceptRows = desiredConceptRows.filter((row) => row.CENTRO_DE_TRABAJO === centerId);
+        await writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Add", centerConceptRows);
+        insertedConceptRows.push(...centerConceptRows);
+      }
     } catch (error) {
+      await writeAppSheetRowsPartitioned(
+        "CONCEPTOS_VARIOS_CT",
+        "Delete",
+        insertedConceptRows.map((row) => ({ "Row ID": row["Row ID"] })),
+      ).catch(() => {});
       await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Delete", [{ "Row ID": id }]).catch(() => {});
       throw error;
     }

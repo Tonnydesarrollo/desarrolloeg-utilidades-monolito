@@ -149,6 +149,9 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(service, /const firstCenterId = normalizeIds\(input\.centrosTrabajo\)\[0\]/);
   assert.match(service, /centrosTrabajo: \[firstCenterId\]/);
   assert.match(service, /persistedQuoteRow\.CONCEPTOS = ""/);
+  assert.match(service, /for \(const \[centerIndex, centerId\] of centerIds\.entries\(\)\)/);
+  assert.match(service, /CENTRO_DE_TRABAJO === centerId/);
+  assert.match(service, /insertedConceptRows\.map\(\(row\) => \(\{ "Row ID": row\["Row ID"\] \}\)\)/);
   assert.match(service, /selectedBranches\.map\(\(branch\) => branch\.estadoId\)/);
   assert.match(service, /selectedBranches\.map\(\(branch\) => branch\.municipioId\)/);
   assert.doesNotMatch(service, /anchorCenterId|referenceBase/);
