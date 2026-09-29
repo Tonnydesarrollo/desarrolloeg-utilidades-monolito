@@ -436,6 +436,7 @@ export async function mapaSucursales(forceFresh = false) {
       empresaId: r.EMPRESA || r["ID EMPRESA"] || "",
       municipioId: r.MUNICIPIO || "",
       estadoId: r.ESTADO || "",
+      trabajos: r.TRABAJOS || r.Trabajos || r.trabajos || "",
       precioEstatal: r["PRECIO ESTATAL"] ?? r.PRECIO_ESTATAL ?? "",
       precioMunicipal: r["PRECIO MUNICIPAL"] ?? r.PRECIO_MUNICIPAL ?? "",
       municipio: mun,

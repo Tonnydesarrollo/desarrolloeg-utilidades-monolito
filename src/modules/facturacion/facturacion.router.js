@@ -164,8 +164,11 @@ cotizacionesRouter.get("/api/workspace", async (_req, res) => {
       municipios: Object.entries(municipiosMap || {}).map(([id, value]) => ({ id, ...value })),
       sucursales: Object.values(sucursalesMap || {}).map((sucursal) => {
         const coverage = pedidosCoverage.get(String(sucursal.id)) || {};
+        const trabajos = String(sucursal.trabajos || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
         return {
           ...sucursal,
+          requierePedidoEstatal: trabajos.includes("ESTATAL"),
+          requierePedidoMunicipal: trabajos.includes("MUNICIPAL"),
           tienePedidoEstatal: coverage.estatal === true,
           tienePedidoMunicipal: coverage.municipal === true,
         };
