@@ -149,6 +149,9 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(router, /\/api\/cotizaciones-jobs\/:jobId/);
   assert.match(template, /waitForSave\(jobId\)/);
   assert.match(template, /const text=await r\.text\(\)/);
+  assert.match(template, /'X-Quote-Async':'1'/);
+  assert.match(template, /if\(!saved\?\.id\)/);
+  assert.match(router, /Cache-Control", "no-store, max-age=0/);
   assert.match(service, /conceptosGestionadosPor: "plataforma"/);
   assert.match(service, /const firstCenterId = normalizeIds\(input\.centrosTrabajo\)\[0\]/);
   assert.match(service, /centrosTrabajo: \[firstCenterId\]/);

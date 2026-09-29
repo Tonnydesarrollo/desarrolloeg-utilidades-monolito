@@ -132,6 +132,7 @@ cotizacionesRouter.get("/pruebas", async (_req, res) => {
 });
 
 cotizacionesRouter.get("/cotizacion/html", (_req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
   res.render("cotizacion_editable");
 });
 
@@ -241,7 +242,8 @@ cotizacionesRouter.get("/api/cotizaciones/:id", async (req, res) => {
 
 cotizacionesRouter.post("/api/cotizaciones", async (req, res) => {
   try {
-    if (Array.isArray(req.body?.centrosTrabajo) && req.body.centrosTrabajo.length > QUOTE_ASYNC_CENTER_THRESHOLD) {
+    const supportsAsync = String(req.get("x-quote-async") || "") === "1";
+    if (supportsAsync && Array.isArray(req.body?.centrosTrabajo) && req.body.centrosTrabajo.length > QUOTE_ASYNC_CENTER_THRESHOLD) {
       const jobId = startQuoteSaveJob(req.body);
       return res.status(202).json({ ok: true, processing: true, jobId });
     }
