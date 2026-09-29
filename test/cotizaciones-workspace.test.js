@@ -146,7 +146,8 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(router, /post\("\/api\/cotizaciones"/);
   assert.match(router, /put\("\/api\/cotizaciones\/:id"/);
   assert.match(service, /conceptosGestionadosPor: "plataforma"/);
-  assert.match(service, /persistedQuoteRow\.CONCEPTOS = ""/);
+  assert.match(service, /persistedQuoteRow = \{ \.\.\.quoteRow, CONCEPTOS: "" \}/);
+  assert.doesNotMatch(service, /centrosTrabajo: \[firstCenterId\]/);
   assert.match(service, /cachedBranchPrices/);
   assert.match(service, /notifyLocalReplicas/);
   assert.match(service, /writeAppSheetRowsPartitioned/);

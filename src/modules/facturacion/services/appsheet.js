@@ -993,18 +993,10 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
   let quoteResult;
   let persistedQuoteRow = quoteRow;
   if (!existing) {
-    const firstCenterId = normalizeIds(input.centrosTrabajo)[0];
-    const firstConceptId = conceptIdsFromInput(input)[0];
-    persistedQuoteRow = quoteRowFromInput({
-      ...input,
-      centrosTrabajo: [firstCenterId],
-      conceptos: [{ id: firstConceptId }],
-      lineas: undefined,
-    }, "", branchesById);
-    // En altas de la plataforma CONCEPTOS queda vacio intencionalmente. Asi el
-    // bot reservado para AppSheet no procesa la fila y el backend crea todos
-    // los hijos en una sola operacion, sin esperas ni duplicados.
-    persistedQuoteRow.CONCEPTOS = "";
+    // La cabecera debe contener todos los estados, municipios y centros antes
+    // de insertar hijos para que los Valid_If encadenados acepten cada centro.
+    // CONCEPTOS queda vacio para que el bot de AppSheet no duplique los hijos.
+    persistedQuoteRow = { ...quoteRow, CONCEPTOS: "" };
     quoteResult = await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Add", [persistedQuoteRow]);
   } else {
     quoteResult = await writeAppSheetRows("COTIZACIONES_VARIOS_CT", quoteAction, [quoteRow]);
