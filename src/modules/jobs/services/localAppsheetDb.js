@@ -793,6 +793,7 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("capacitacion_sucursales", [
+    ["id", "TEXT"],
     ["capacitacion_id", "TEXT"],
     ["sucursal_id", "TEXT"],
     ["orden", "INTEGER NOT NULL DEFAULT 0"],
@@ -802,6 +803,7 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("capacitacion_capacitadores", [
+    ["id", "TEXT"],
     ["capacitacion_id", "TEXT"],
     ["empleado_id", "TEXT"],
     ["orden", "INTEGER NOT NULL DEFAULT 0"],
