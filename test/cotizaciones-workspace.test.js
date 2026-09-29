@@ -129,6 +129,7 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(template, /id="withoutStateOrder"[\s\S]*Sin pedido estatal/);
   assert.match(template, /withoutMunicipalOrder\.checked\|\|\(x\.requierePedidoMunicipal===true&&x\.tienePedidoMunicipal!==true\)/);
   assert.match(template, /withoutStateOrder\.checked\|\|\(x\.requierePedidoEstatal===true&&x\.tienePedidoEstatal!==true\)/);
+  assert.match(template, /x\.activa!==false/);
   assert.doesNotMatch(template, /estados:\[\.\.\.state\.selectedStates\]/);
   assert.doesNotMatch(template, /municipios:\[\.\.\.state\.selectedMunicipalities\]/);
   assert.match(template, /selectedConcepts:new Map/);

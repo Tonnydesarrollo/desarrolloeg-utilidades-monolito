@@ -436,6 +436,7 @@ export async function mapaSucursales(forceFresh = false) {
       empresaId: r.EMPRESA || r["ID EMPRESA"] || "",
       municipioId: r.MUNICIPIO || "",
       estadoId: r.ESTADO || "",
+      status: r.STATUS || r.Status || r.status || r.planeacion_status || "",
       trabajos: r.TRABAJOS || r.Trabajos || r.trabajos || "",
       precioEstatal: r["PRECIO ESTATAL"] ?? r.PRECIO_ESTATAL ?? "",
       precioMunicipal: r["PRECIO MUNICIPAL"] ?? r.PRECIO_MUNICIPAL ?? "",
@@ -930,6 +931,13 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
   }
   const existing = quoteId ? await obtenerCotizacion(id) : null;
   const [branchesById, catalogById] = await Promise.all([mapaSucursales(), mapaCatalogo()]);
+  const inactiveCenters = normalizeIds(input.centrosTrabajo).filter((centerId) => {
+    const status = normalizeLookupText(branchesById[centerId]?.status || "");
+    return ["INACTIVA", "INACTIVO", "BAJA", "CANCELADA", "CANCELADO"].some((value) => status.includes(value));
+  });
+  if (inactiveCenters.length) {
+    throw new Error(`No se puede cotizar una sucursal inactiva: ${inactiveCenters.join(", ")}. Actualiza la pagina y selecciona un centro activo.`);
+  }
   await hydrateRequiredBranchPrices(input, branchesById, catalogById);
   mark("preparacion");
   const quoteRow = quoteRowFromInput(input, id, branchesById);

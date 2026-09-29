@@ -165,8 +165,11 @@ cotizacionesRouter.get("/api/workspace", async (_req, res) => {
       sucursales: Object.values(sucursalesMap || {}).map((sucursal) => {
         const coverage = pedidosCoverage.get(String(sucursal.id)) || {};
         const trabajos = String(sucursal.trabajos || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+        const status = String(sucursal.status || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+        const inactiva = ["INACTIVA", "INACTIVO", "BAJA", "CANCELADA", "CANCELADO"].some((value) => status.includes(value));
         return {
           ...sucursal,
+          activa: !inactiva,
           requierePedidoEstatal: trabajos.includes("ESTATAL"),
           requierePedidoMunicipal: trabajos.includes("MUNICIPAL"),
           tienePedidoEstatal: coverage.estatal === true,
