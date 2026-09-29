@@ -993,10 +993,15 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
   let quoteResult;
   let persistedQuoteRow = quoteRow;
   if (!existing) {
-    // La cabecera debe contener todos los estados, municipios y centros antes
-    // de insertar hijos para que los Valid_If encadenados acepten cada centro.
-    // CONCEPTOS queda vacio para que el bot de AppSheet no duplique los hijos.
-    persistedQuoteRow = { ...quoteRow, CONCEPTOS: "" };
+    // AppSheet evalua los Valid_If encadenados con el estado previo de la fila.
+    // El alta inicial deja vacios municipios, centros y conceptos; se completan
+    // en ese orden despues de obtener el Row ID.
+    persistedQuoteRow = {
+      ...quoteRow,
+      MUNICIPIOS: "",
+      CENTROS_DE_TRABAJO: "",
+      CONCEPTOS: "",
+    };
     quoteResult = await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Add", [persistedQuoteRow]);
   } else {
     quoteResult = await writeAppSheetRows("COTIZACIONES_VARIOS_CT", quoteAction, [quoteRow]);
@@ -1009,6 +1014,8 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
     if (!id) throw new Error("AppSheet creo la cotizacion pero no devolvio su Row ID.");
     desiredConceptRows = conceptRowsFromInput(input, id, { branchesById, catalogById });
     try {
+      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ "Row ID": id, MUNICIPIOS: quoteRow.MUNICIPIOS }]);
+      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ "Row ID": id, CENTROS_DE_TRABAJO: quoteRow.CENTROS_DE_TRABAJO }]);
       await writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Add", desiredConceptRows);
     } catch (error) {
       await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Delete", [{ "Row ID": id }]).catch(() => {});
@@ -1017,8 +1024,9 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
     mark("conceptosAppSheet");
 
     await notifyLocalReplica("COTIZACIONES_VARIOS_CT", quoteAction, {
-      ...persistedQuoteRow,
       ...createdQuote,
+      ...quoteRow,
+      CONCEPTOS: "",
       "Row ID": id,
     });
     await notifyLocalReplicas(desiredConceptRows.map((row) => ({
