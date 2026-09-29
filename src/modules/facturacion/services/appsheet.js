@@ -37,6 +37,7 @@ let cotizacionesWarmupStarted = false;
 let cachedBranchPrices = null;
 let cachedBranchPricesPromise = null;
 let cachedBranchPricesExpiresAt = 0;
+let cachedLiveSucursalStatuses = { expiresAt: 0, values: new Map() };
 
 const TABLE_CACHE_NAMESPACES = {
   COTIZACIONES_VARIOS_CT: "facturacion.tables.cotizaciones_varios_ct",
@@ -75,6 +76,7 @@ export function invalidateFacturacionCaches(tableNames = []) {
     cachedBranchPrices = null;
     cachedBranchPricesPromise = null;
     cachedBranchPricesExpiresAt = 0;
+    cachedLiveSucursalStatuses = { expiresAt: 0, values: new Map() };
   }
 
   cotizacionesWarmupStarted = false;
@@ -262,6 +264,32 @@ async function leerTablaAppSheetFresca(nombreTabla) {
   }
 }
 
+async function liveSucursalStatuses(forceFresh = false) {
+  const now = Date.now();
+  if (!forceFresh && cachedLiveSucursalStatuses.expiresAt > now) return cachedLiveSucursalStatuses.values;
+  const appId = process.env.FINANZAS_APPSHEET_APP_ID || process.env.APPSHEET_APP_ID;
+  const apiKey = process.env.FINANZAS_APPSHEET_API_KEY || process.env.APPSHEET_API_KEY;
+  if (!appId || !apiKey) return cachedLiveSucursalStatuses.values;
+  try {
+    const response = await withAppsheetConcurrency(() => fetchWithRetry(
+      `https://api.appsheet.com/api/v2/apps/${appId}/tables/SUCURSALES/Action`,
+      {
+        method: "POST",
+        headers: { ApplicationAccessKey: apiKey, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ Action: "Find", Properties: { Locale: "es-MX", Timezone: "America/Chihuahua" }, Rows: [] }),
+      },
+    ));
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const rows = Array.isArray(payload) ? payload : (payload.Rows || payload.rows || []);
+    const values = new Map(rows.map((row) => [String(row.ID || row.id || "").trim(), String(row.STATUS || row.Status || row.status || "").trim()]).filter(([id]) => id));
+    cachedLiveSucursalStatuses = { expiresAt: now + APPSHEET_CACHE_TTL_MS, values };
+  } catch (error) {
+    console.warn("No se pudo actualizar el estatus vivo de sucursales:", error?.message || error);
+  }
+  return cachedLiveSucursalStatuses.values;
+}
+
 export async function obtenerCotizacion(cotizacionId, forceFresh = false) {
   const wantedId = String(cotizacionId || "").trim();
   if (isExternalQuoteId(wantedId)) return getExternalQuote(wantedId);
@@ -421,7 +449,7 @@ export async function mapaSucursales(forceFresh = false) {
   const rows = forceFresh
     ? await leerTablaAppSheetFresca("SUCURSALES")
     : await leerTablaAppSheetCacheadaSuave("SUCURSALES");
-  const [municipios, estados] = await Promise.all([mapaMunicipios(forceFresh), mapaEstados(forceFresh)]);
+  const [municipios, estados, liveStatuses] = await Promise.all([mapaMunicipios(forceFresh), mapaEstados(forceFresh), liveSucursalStatuses(forceFresh)]);
   const map = {};
 
   rows.forEach(r => {
@@ -436,7 +464,7 @@ export async function mapaSucursales(forceFresh = false) {
       empresaId: r.EMPRESA || r["ID EMPRESA"] || "",
       municipioId: r.MUNICIPIO || "",
       estadoId: r.ESTADO || "",
-      status: r.STATUS || r.Status || r.status || r.planeacion_status || "",
+      status: liveStatuses.get(String(r.ID || "").trim()) || r.STATUS || r.Status || r.status || r.planeacion_status || "",
       trabajos: r.TRABAJOS || r.Trabajos || r.trabajos || "",
       precioEstatal: r["PRECIO ESTATAL"] ?? r.PRECIO_ESTATAL ?? "",
       precioMunicipal: r["PRECIO MUNICIPAL"] ?? r.PRECIO_MUNICIPAL ?? "",

@@ -904,6 +904,7 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("cotizacion_centros_trabajo", [
+    ["id", "TEXT"],
     ["cotizacion_id", "TEXT"],
     ["sucursal_id", "TEXT"],
     ["orden", "INTEGER NOT NULL DEFAULT 0"],
