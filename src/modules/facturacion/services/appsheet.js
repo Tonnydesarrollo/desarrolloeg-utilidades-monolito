@@ -37,7 +37,7 @@ let cotizacionesWarmupStarted = false;
 let cachedBranchPrices = null;
 let cachedBranchPricesPromise = null;
 let cachedBranchPricesExpiresAt = 0;
-let cachedLiveSucursalStatuses = { expiresAt: 0, values: new Map() };
+let cachedLiveSucursales = { expiresAt: 0, values: new Map() };
 
 const TABLE_CACHE_NAMESPACES = {
   COTIZACIONES_VARIOS_CT: "facturacion.tables.cotizaciones_varios_ct",
@@ -76,7 +76,7 @@ export function invalidateFacturacionCaches(tableNames = []) {
     cachedBranchPrices = null;
     cachedBranchPricesPromise = null;
     cachedBranchPricesExpiresAt = 0;
-    cachedLiveSucursalStatuses = { expiresAt: 0, values: new Map() };
+    cachedLiveSucursales = { expiresAt: 0, values: new Map() };
   }
 
   cotizacionesWarmupStarted = false;
@@ -264,12 +264,12 @@ async function leerTablaAppSheetFresca(nombreTabla) {
   }
 }
 
-async function liveSucursalStatuses(forceFresh = false) {
+async function liveSucursalesById(forceFresh = false) {
   const now = Date.now();
-  if (!forceFresh && cachedLiveSucursalStatuses.expiresAt > now) return cachedLiveSucursalStatuses.values;
+  if (!forceFresh && cachedLiveSucursales.expiresAt > now) return cachedLiveSucursales.values;
   const appId = process.env.FINANZAS_APPSHEET_APP_ID || process.env.APPSHEET_APP_ID;
   const apiKey = process.env.FINANZAS_APPSHEET_API_KEY || process.env.APPSHEET_API_KEY;
-  if (!appId || !apiKey) return cachedLiveSucursalStatuses.values;
+  if (!appId || !apiKey) return cachedLiveSucursales.values;
   try {
     const response = await withAppsheetConcurrency(() => fetchWithRetry(
       `https://api.appsheet.com/api/v2/apps/${appId}/tables/SUCURSALES/Action`,
@@ -282,12 +282,12 @@ async function liveSucursalStatuses(forceFresh = false) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     const rows = Array.isArray(payload) ? payload : (payload.Rows || payload.rows || []);
-    const values = new Map(rows.map((row) => [String(row.ID || row.id || "").trim(), String(row.STATUS || row.Status || row.status || "").trim()]).filter(([id]) => id));
-    cachedLiveSucursalStatuses = { expiresAt: now + APPSHEET_CACHE_TTL_MS, values };
+    const values = new Map(rows.map((row) => [String(row.ID || row.id || "").trim(), row]).filter(([id]) => id));
+    cachedLiveSucursales = { expiresAt: now + Math.min(APPSHEET_CACHE_TTL_MS, 30_000), values };
   } catch (error) {
     console.warn("No se pudo actualizar el estatus vivo de sucursales:", error?.message || error);
   }
-  return cachedLiveSucursalStatuses.values;
+  return cachedLiveSucursales.values;
 }
 
 export async function obtenerCotizacion(cotizacionId, forceFresh = false) {
@@ -446,13 +446,17 @@ export async function mapaEstados(forceFresh = false) {
 }
 
 export async function mapaSucursales(forceFresh = false) {
-  const rows = forceFresh
+  const localRows = forceFresh
     ? await leerTablaAppSheetFresca("SUCURSALES")
     : await leerTablaAppSheetCacheadaSuave("SUCURSALES");
-  const [municipios, estados, liveStatuses] = await Promise.all([mapaMunicipios(forceFresh), mapaEstados(forceFresh), liveSucursalStatuses(forceFresh)]);
+  const [municipios, estados, liveRowsById] = await Promise.all([mapaMunicipios(forceFresh), mapaEstados(forceFresh), liveSucursalesById(forceFresh)]);
+  const combinedRows = new Map(localRows.map((row) => [String(row.ID || row.id || "").trim(), row]).filter(([id]) => id));
+  for (const [id, liveRow] of liveRowsById) {
+    combinedRows.set(id, { ...(combinedRows.get(id) || {}), ...liveRow });
+  }
   const map = {};
 
-  rows.forEach(r => {
+  [...combinedRows.values()].forEach(r => {
     const mun = municipios[r.MUNICIPIO] || {};
     const est = estados[r.ESTADO] || {};
     map[r.ID] = {
@@ -464,7 +468,7 @@ export async function mapaSucursales(forceFresh = false) {
       empresaId: r.EMPRESA || r["ID EMPRESA"] || "",
       municipioId: r.MUNICIPIO || "",
       estadoId: r.ESTADO || "",
-      status: liveStatuses.get(String(r.ID || "").trim()) || r.STATUS || r.Status || r.status || r.planeacion_status || "",
+      status: r.STATUS || r.Status || r.status || r.planeacion_status || "",
       trabajos: r.TRABAJOS || r.Trabajos || r.trabajos || "",
       precioEstatal: r["PRECIO ESTATAL"] ?? r.PRECIO_ESTATAL ?? "",
       precioMunicipal: r["PRECIO MUNICIPAL"] ?? r.PRECIO_MUNICIPAL ?? "",
