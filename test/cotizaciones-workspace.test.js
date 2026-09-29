@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { conceptRowsFromInput, quoteRowFromInput } from "../src/modules/facturacion/services/appsheet.js";
 
-test("crea la cabecera completa que activa el bot de conceptos en AppSheet", () => {
+test("construye la cabecera completa con las relaciones geograficas de las sucursales", () => {
   const row = quoteRowFromInput({
     empresaId: "1",
     centrosTrabajo: ["2", "1", "5"],
@@ -146,9 +146,10 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(router, /post\("\/api\/cotizaciones"/);
   assert.match(router, /put\("\/api\/cotizaciones\/:id"/);
   assert.match(service, /conceptosGestionadosPor: "plataforma"/);
-  assert.match(service, /anchorCenterId[\s\S]*ESTADOS: enumListValue\(\[anchorBranch\.estadoId\]\)[\s\S]*MUNICIPIOS: enumListValue\(\[anchorBranch\.municipioId\]\)[\s\S]*CENTROS_DE_TRABAJO: enumListValue\(\[anchorCenterId\]\)/);
-  assert.match(service, /referenceBase[\s\S]*ESTADOS: quoteRow\.ESTADOS, MUNICIPIOS: quoteRow\.MUNICIPIOS/);
-  assert.match(service, /ESTADOS: quoteRow\.ESTADOS, MUNICIPIOS: quoteRow\.MUNICIPIOS, CENTROS_DE_TRABAJO: quoteRow\.CENTROS_DE_TRABAJO/);
+  assert.match(service, /persistedQuoteRow = existing \? quoteRow : \{ \.\.\.quoteRow, CONCEPTOS: "" \}/);
+  assert.match(service, /selectedBranches\.map\(\(branch\) => branch\.estadoId\)/);
+  assert.match(service, /selectedBranches\.map\(\(branch\) => branch\.municipioId\)/);
+  assert.doesNotMatch(service, /anchorCenterId|referenceBase/);
   assert.doesNotMatch(service, /centrosTrabajo: \[firstCenterId\]/);
   assert.match(service, /cachedBranchPrices/);
   assert.match(service, /notifyLocalReplicas/);
