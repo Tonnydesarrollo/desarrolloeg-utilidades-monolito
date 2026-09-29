@@ -990,7 +990,20 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
   const deleted = currentConceptRows.filter((row) => !desiredIds.has(String(row["Row ID"] || row.ID)));
   const quoteAction = existing ? "Edit" : "Add";
 
-  const persistedQuoteRow = existing ? quoteRow : { ...quoteRow, CONCEPTOS: "" };
+  let persistedQuoteRow = quoteRow;
+  if (!existing) {
+    const firstCenterId = normalizeIds(input.centrosTrabajo)[0];
+    const firstConceptId = conceptIdsFromInput(input)[0];
+    persistedQuoteRow = quoteRowFromInput({
+      ...input,
+      centrosTrabajo: [firstCenterId],
+      conceptos: [{ id: firstConceptId }],
+      lineas: undefined,
+    }, "", branchesById);
+    // AppSheet rechaza EnumLists multiples en los Valid_If encadenados de la
+    // cabecera. Todos los centros se conservan en CONCEPTOS_VARIOS_CT.
+    persistedQuoteRow.CONCEPTOS = "";
+  }
   const quoteResult = await writeAppSheetRows(
     "COTIZACIONES_VARIOS_CT",
     quoteAction,
