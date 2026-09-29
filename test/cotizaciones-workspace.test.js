@@ -139,12 +139,16 @@ test("el espacio de cotizaciones carga por fetch y el menu no ofrece Facturacion
   assert.match(template, /quote-card-action--view/);
   assert.match(template, />Ver cotización<\/a>/);
   assert.match(template, /data-edit-quote/);
-  assert.match(template, /showSavedQuote\(p\.data\)/);
+  assert.match(template, /showSavedQuote\(saved\)/);
   assert.doesNotMatch(template, /<button class="quote-card"/);
   assert.match(template, /quote-form-actions/);
   assert.match(template, /\/cotizaciones\/api\/workspace/);
   assert.match(router, /post\("\/api\/cotizaciones"/);
   assert.match(router, /put\("\/api\/cotizaciones\/:id"/);
+  assert.match(router, /QUOTE_ASYNC_CENTER_THRESHOLD/);
+  assert.match(router, /\/api\/cotizaciones-jobs\/:jobId/);
+  assert.match(template, /waitForSave\(jobId\)/);
+  assert.match(template, /const text=await r\.text\(\)/);
   assert.match(service, /conceptosGestionadosPor: "plataforma"/);
   assert.match(service, /const firstCenterId = normalizeIds\(input\.centrosTrabajo\)\[0\]/);
   assert.match(service, /centrosTrabajo: \[firstCenterId\]/);

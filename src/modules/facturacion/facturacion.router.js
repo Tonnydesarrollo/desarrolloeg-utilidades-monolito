@@ -1,5 +1,6 @@
 import express from "express";
 import fetch from "node-fetch";
+import crypto from "node:crypto";
 import { getCompanyAddress } from "../../config/company.js";
 import driveRoutes from "./routes/drive.js";
 import { construirDataHTML } from "./services/construirDataHTML.js";
@@ -20,6 +21,27 @@ import {
 export const cotizacionesRouter = express.Router();
 export const facturacionRouter = cotizacionesRouter;
 prewarmCotizacionesCaches();
+
+const quoteSaveJobs = new Map();
+const QUOTE_ASYNC_CENTER_THRESHOLD = 10;
+
+function startQuoteSaveJob(input) {
+  const jobId = crypto.randomUUID();
+  const job = { status: "processing", createdAt: Date.now(), result: null, error: "" };
+  quoteSaveJobs.set(jobId, job);
+  void guardarCotizacion(input)
+    .then((result) => {
+      job.status = "completed";
+      job.result = result;
+    })
+    .catch((error) => {
+      job.status = "failed";
+      job.error = error instanceof Error ? error.message : "No se pudo crear la cotizacion.";
+      console.error(error);
+    });
+  setTimeout(() => quoteSaveJobs.delete(jobId), 30 * 60 * 1000).unref?.();
+  return jobId;
+}
 
 cotizacionesRouter.use(express.json());
 cotizacionesRouter.get(['/', ''], (_req, res) => {
@@ -219,12 +241,27 @@ cotizacionesRouter.get("/api/cotizaciones/:id", async (req, res) => {
 
 cotizacionesRouter.post("/api/cotizaciones", async (req, res) => {
   try {
+    if (Array.isArray(req.body?.centrosTrabajo) && req.body.centrosTrabajo.length > QUOTE_ASYNC_CENTER_THRESHOLD) {
+      const jobId = startQuoteSaveJob(req.body);
+      return res.status(202).json({ ok: true, processing: true, jobId });
+    }
     const result = await guardarCotizacion(req.body || {});
     res.status(201).json({ ok: true, data: result });
   } catch (err) {
     console.error(err);
     res.status(422).json({ ok: false, error: err instanceof Error ? err.message : "No se pudo crear la cotizacion." });
   }
+});
+
+cotizacionesRouter.get("/api/cotizaciones-jobs/:jobId", (req, res) => {
+  const job = quoteSaveJobs.get(String(req.params.jobId || ""));
+  if (!job) return res.status(404).json({ ok: false, error: "El proceso de cotizacion ya no esta disponible." });
+  return res.json({
+    ok: job.status !== "failed",
+    status: job.status,
+    data: job.result,
+    error: job.error || undefined,
+  });
 });
 
 cotizacionesRouter.put("/api/cotizaciones/:id", async (req, res) => {
