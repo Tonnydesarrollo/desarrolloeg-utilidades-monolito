@@ -993,13 +993,22 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
   let quoteResult;
   let persistedQuoteRow = quoteRow;
   if (!existing) {
-    // AppSheet evalua los Valid_If encadenados con el estado previo de la fila.
-    // El alta inicial deja vacios municipios, centros y conceptos; se completan
-    // en ese orden despues de obtener el Row ID.
+    // AppSheet exige municipio y centro en el alta, pero valida cada EnumList
+    // contra el estado previo. Se crea con un centro completo como ancla y
+    // luego se amplian estados, municipios y centros en ese orden.
+    const anchorCenterId = normalizeIds(input.centrosTrabajo).find((centerId) => {
+      const branch = branchesById[centerId] || {};
+      return String(branch.estadoId || "").trim() && String(branch.municipioId || "").trim();
+    });
+    if (!anchorCenterId) {
+      throw new Error("Las sucursales seleccionadas no tienen Estado y Municipio. Completa esos datos antes de cotizar.");
+    }
+    const anchorBranch = branchesById[anchorCenterId];
     persistedQuoteRow = {
       ...quoteRow,
-      MUNICIPIOS: "",
-      CENTROS_DE_TRABAJO: "",
+      ESTADOS: enumListValue([anchorBranch.estadoId]),
+      MUNICIPIOS: enumListValue([anchorBranch.municipioId]),
+      CENTROS_DE_TRABAJO: enumListValue([anchorCenterId]),
       CONCEPTOS: "",
     };
     quoteResult = await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Add", [persistedQuoteRow]);
@@ -1014,6 +1023,7 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
     if (!id) throw new Error("AppSheet creo la cotizacion pero no devolvio su Row ID.");
     desiredConceptRows = conceptRowsFromInput(input, id, { branchesById, catalogById });
     try {
+      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ "Row ID": id, ESTADOS: quoteRow.ESTADOS }]);
       await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ "Row ID": id, MUNICIPIOS: quoteRow.MUNICIPIOS }]);
       await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ "Row ID": id, CENTROS_DE_TRABAJO: quoteRow.CENTROS_DE_TRABAJO }]);
       await writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Add", desiredConceptRows);
