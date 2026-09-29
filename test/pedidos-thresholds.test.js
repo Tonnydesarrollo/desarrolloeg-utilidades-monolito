@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildPedidosLeyBranchOrderCoverage,
   extractAssignmentRelationKeys,
   getPedidosLeyAdminDefaultThresholds,
 } from "../src/modules/pedidos-ley/services/pedidosLey.js";
@@ -41,4 +42,17 @@ test("asignaciones pagadas se separan como identificadores exactos", () => {
   assert.equal(keys.has("LIB100"), true);
   assert.equal(keys.has("LIB1000"), true);
   assert.equal(keys.has("LIB10"), false);
+});
+
+test("cobertura de pedidos por sucursal reutiliza tipo y anio de Pedidos", () => {
+  const coverage = buildPedidosLeyBranchOrderCoverage([
+    { tienda: "1312", fecha: "02/09/2026", descripcion: "PIPC ESTATAL", importe: "11000" },
+    { tienda: "1312", fecha: "03/09/2026", descripcion: "PROGRAMA MUNICIPAL", importe: "32967.49" },
+    { tienda: "1240", fecha: "04/09/2026", descripcion: "SERVICIO", importe: "11000" },
+    { tienda: "1004", fecha: "05/09/2025", descripcion: "PIPC ESTATAL", importe: "32967.49" },
+  ], 2026);
+
+  assert.deepEqual(coverage.get("1312"), { estatal: true, municipal: true });
+  assert.deepEqual(coverage.get("1240"), { estatal: false, municipal: true });
+  assert.equal(coverage.has("1004"), false);
 });

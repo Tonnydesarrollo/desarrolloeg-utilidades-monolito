@@ -3,6 +3,7 @@ import fetch from "node-fetch";
 import { getCompanyAddress } from "../../config/company.js";
 import driveRoutes from "./routes/drive.js";
 import { construirDataHTML } from "./services/construirDataHTML.js";
+import { getPedidosLeyBranchOrderCoverage } from "../pedidos-ley/services/pedidosLey.js";
 import {
   guardarCotizacion,
   listarCotizaciones,
@@ -130,6 +131,8 @@ function inputDate(value) {
 
 cotizacionesRouter.get("/api/workspace", async (_req, res) => {
   try {
+    const pedidosYear = new Date().getFullYear();
+    const pedidosCoverage = getPedidosLeyBranchOrderCoverage(pedidosYear);
     const [empresasMap, sucursalesMap, proveedoresMap, catalogoMap, estadosMap, municipiosMap, cotizacionesRows] = await Promise.all([
       mapaEmpresas(), mapaSucursales(), mapaProveedores(), mapaCatalogo(), mapaEstados(), mapaMunicipios(), listarCotizaciones(),
     ]);
@@ -159,7 +162,15 @@ cotizacionesRouter.get("/api/workspace", async (_req, res) => {
       empresas,
       estados: Object.entries(estadosMap || {}).map(([id, value]) => ({ id, ...value })),
       municipios: Object.entries(municipiosMap || {}).map(([id, value]) => ({ id, ...value })),
-      sucursales: Object.values(sucursalesMap || {}),
+      sucursales: Object.values(sucursalesMap || {}).map((sucursal) => {
+        const coverage = pedidosCoverage.get(String(sucursal.id)) || {};
+        return {
+          ...sucursal,
+          tienePedidoEstatal: coverage.estatal === true,
+          tienePedidoMunicipal: coverage.municipal === true,
+        };
+      }),
+      pedidosYear,
       conceptos: Object.values(catalogoMap || {}).sort((a, b) => a.nombre.localeCompare(b.nombre, "es-MX")),
       firmas,
       cotizaciones,

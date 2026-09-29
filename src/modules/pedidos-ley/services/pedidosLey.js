@@ -230,6 +230,30 @@ function classifyPedidoTipo(descripcion, importeNumber, thresholds = {}) {
   return classifyPedidoImporte(importeNumber, thresholds);
 }
 
+export function buildPedidosLeyBranchOrderCoverage(rows = [], year = new Date().getFullYear()) {
+  const parsedYear = Number.parseInt(String(year || ""), 10);
+  const targetYear = Number.isFinite(parsedYear) ? parsedYear : new Date().getFullYear();
+  const thresholds = getPedidoThresholdDefaults(targetYear);
+  const coverage = new Map();
+
+  for (const row of rows) {
+    if (extractYear(row.fecha) !== targetYear) continue;
+    const branchId = normalizeScalarText(row.tienda);
+    if (!branchId) continue;
+    const type = classifyPedidoTipo(row.descripcion, parseMoneyValue(row.importe), thresholds);
+    if (type !== "estatal" && type !== "municipal") continue;
+    const current = coverage.get(branchId) || { estatal: false, municipal: false };
+    current[type] = true;
+    coverage.set(branchId, current);
+  }
+
+  return coverage;
+}
+
+export function getPedidosLeyBranchOrderCoverage(year = new Date().getFullYear()) {
+  return buildPedidosLeyBranchOrderCoverage(getPedidosLeyLocalRows(), year);
+}
+
 function normalizeTruthValue(value) {
   const text = normalizeText(value);
   if (!text) return false;
