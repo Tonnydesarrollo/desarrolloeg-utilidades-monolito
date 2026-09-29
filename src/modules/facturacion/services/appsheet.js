@@ -1023,9 +1023,10 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
     if (!id) throw new Error("AppSheet creo la cotizacion pero no devolvio su Row ID.");
     desiredConceptRows = conceptRowsFromInput(input, id, { branchesById, catalogById });
     try {
-      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ "Row ID": id, ESTADOS: quoteRow.ESTADOS }]);
-      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ "Row ID": id, MUNICIPIOS: quoteRow.MUNICIPIOS }]);
-      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ "Row ID": id, CENTROS_DE_TRABAJO: quoteRow.CENTROS_DE_TRABAJO }]);
+      const referenceBase = { "Row ID": id, "RAZON SOCIAL": quoteRow["RAZON SOCIAL"] };
+      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ ...referenceBase, ESTADOS: quoteRow.ESTADOS }]);
+      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ ...referenceBase, ESTADOS: quoteRow.ESTADOS, MUNICIPIOS: quoteRow.MUNICIPIOS }]);
+      await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [{ ...referenceBase, ESTADOS: quoteRow.ESTADOS, MUNICIPIOS: quoteRow.MUNICIPIOS, CENTROS_DE_TRABAJO: quoteRow.CENTROS_DE_TRABAJO }]);
       await writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Add", desiredConceptRows);
     } catch (error) {
       await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Delete", [{ "Row ID": id }]).catch(() => {});
