@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 20s
     ports:
-      - "127.0.0.1:8788:8787"
+      - "8788:8787"
     env_file:
       - .env.dev.docker
     environment:
