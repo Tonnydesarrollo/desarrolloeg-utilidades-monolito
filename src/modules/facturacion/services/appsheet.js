@@ -18,6 +18,7 @@ import {
   listExternalQuotes,
   saveExternalQuote,
 } from "./cotizacionesExternas.js";
+import { sanitizeAppsheetRow, sanitizeAppsheetRows } from "../../../services/appsheetSanitizer.js";
 
 const drive = crearDriveClient(auth);
 const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 60000);
@@ -388,7 +389,7 @@ async function actualizarFilaAppSheet(nombreTabla, row) {
       Locale: "es-MX",
       Timezone: "Central Standard Time"
     },
-    Rows: [row]
+    Rows: [sanitizeAppsheetRow(nombreTabla, "Edit", row)]
   };
 
   const res = await withAppsheetConcurrency(() => fetchWithRetry(url, {
@@ -737,7 +738,7 @@ async function writeAppSheetRows(tableName, action, rows) {
     body: JSON.stringify({
       Action: action,
       Properties: { Locale: "en-US", Timezone: "America/Chihuahua" },
-      Rows: rows,
+      Rows: action === "Find" ? rows : sanitizeAppsheetRows(tableName, action, rows),
     }),
   }));
   const body = await response.text();

@@ -445,26 +445,26 @@ function initSchema() {
     `);
     db.exec(`
       CREATE TABLE IF NOT EXISTS capacitacion_sucursales (
-        id TEXT PRIMARY KEY,
         capacitacion_id TEXT,
         sucursal_id TEXT,
         orden INTEGER NOT NULL DEFAULT 0,
         sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
         sync_appsheet_fecha TEXT,
         sync_appsheet_operacion TEXT,
-        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET',
+        PRIMARY KEY (capacitacion_id, sucursal_id)
       );
     `);
     db.exec(`
       CREATE TABLE IF NOT EXISTS capacitacion_capacitadores (
-        id TEXT PRIMARY KEY,
         capacitacion_id TEXT,
         empleado_id TEXT,
         orden INTEGER NOT NULL DEFAULT 0,
         sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
         sync_appsheet_fecha TEXT,
         sync_appsheet_operacion TEXT,
-        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET',
+        PRIMARY KEY (capacitacion_id, empleado_id)
       );
     `);
     db.exec(`
@@ -543,14 +543,14 @@ function initSchema() {
     `);
     db.exec(`
       CREATE TABLE IF NOT EXISTS cotizacion_centros_trabajo (
-        id TEXT PRIMARY KEY,
         cotizacion_id TEXT,
         sucursal_id TEXT,
         orden INTEGER NOT NULL DEFAULT 0,
         sync_appsheet_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
         sync_appsheet_fecha TEXT,
         sync_appsheet_operacion TEXT,
-        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET'
+        sync_origen_ultimo TEXT NOT NULL DEFAULT 'APPSHEET',
+        PRIMARY KEY (cotizacion_id, sucursal_id)
       );
     `);
     db.exec(`
@@ -793,7 +793,6 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("capacitacion_sucursales", [
-    ["id", "TEXT"],
     ["capacitacion_id", "TEXT"],
     ["sucursal_id", "TEXT"],
     ["orden", "INTEGER NOT NULL DEFAULT 0"],
@@ -803,7 +802,6 @@ function initSchema() {
     ["sync_origen_ultimo", "TEXT NOT NULL DEFAULT 'APPSHEET'"],
   ]);
   ensureColumns("capacitacion_capacitadores", [
-    ["id", "TEXT"],
     ["capacitacion_id", "TEXT"],
     ["empleado_id", "TEXT"],
     ["orden", "INTEGER NOT NULL DEFAULT 0"],
@@ -1533,7 +1531,6 @@ function mapCalendarioEmpleadoBridgeRow(row) {
 
 function mapCapacitacionSucursalBridgeRow(row) {
   return {
-    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
     capacitacion_id: pickFirst(row, ["capacitacion_id", "CAPACITACION"]),
     sucursal_id: pickFirst(row, ["sucursal_id", "SUCURSAL"]),
     orden: normalizeValue(row?.orden ?? row?.ORDEN),
@@ -1546,7 +1543,6 @@ function mapCapacitacionSucursalBridgeRow(row) {
 
 function mapCapacitacionCapacitadorBridgeRow(row) {
   return {
-    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
     capacitacion_id: pickFirst(row, ["capacitacion_id", "CAPACITACION"]),
     empleado_id: pickFirst(row, ["empleado_id", "EMPLEADO"]),
     orden: normalizeValue(row?.orden ?? row?.ORDEN),
@@ -1559,7 +1555,6 @@ function mapCapacitacionCapacitadorBridgeRow(row) {
 
 function mapCotizacionCentroTrabajoBridgeRow(row) {
   return {
-    id: pickFirst(row, ["id", "ID", "Row ID", "ROW ID", "row_id"]),
     cotizacion_id: pickFirst(row, ["cotizacion_id", "COTIZACION"]),
     sucursal_id: pickFirst(row, ["sucursal_id", "SUCURSAL"]),
     orden: normalizeValue(row?.orden ?? row?.ORDEN),
@@ -1570,6 +1565,16 @@ function mapCotizacionCentroTrabajoBridgeRow(row) {
   };
 }
 
+function getTableColumnSet(db, tableName) {
+  try {
+    return new Set(
+      db.prepare(`PRAGMA table_info(${quoteIdentifier(tableName)})`).all().map((col) => String(col.name))
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 function upsertMany(tableName, rows, keyField, mapper) {
   if (!Array.isArray(rows) || rows.length === 0) return;
   const db = getDb();
@@ -1577,16 +1582,25 @@ function upsertMany(tableName, rows, keyField, mapper) {
   initSchema();
   if (!isRetryWindowOpen()) return;
 
-  const mappedRows = rows.map((row) => mapper(row)).filter((row) => row?.[keyField] !== null && row?.[keyField] !== undefined && String(row?.[keyField]).trim() !== "");
+  const keyFields = Array.isArray(keyField) ? keyField : [keyField];
+  const mappedRows = rows
+    .map((row) => mapper(row))
+    .filter((row) => keyFields.every((k) => row?.[k] !== null && row?.[k] !== undefined && String(row?.[k]).trim() !== ""));
   if (!mappedRows.length) return;
 
+  const tableColumns = getTableColumnSet(db, tableName);
   const columns = Array.from(new Set(mappedRows.flatMap((row) => Object.keys(row))))
-    .filter((column) => mappedRows.some((row) => row[column] !== undefined && row[column] !== null));
+    .filter((column) => (tableColumns.size === 0 || tableColumns.has(column)) && mappedRows.some((row) => row[column] !== undefined && row[column] !== null));
   if (!columns.length) return;
+
   const insertColumns = columns.map(quoteIdentifier).join(", ");
   const placeholders = columns.map(() => "?").join(", ");
-  const updates = columns.filter((column) => column !== keyField).map((column) => `${quoteIdentifier(column)}=excluded.${quoteIdentifier(column)}`).join(", ");
-  const sql = `INSERT INTO ${quoteIdentifier(tableName)} (${insertColumns}) VALUES (${placeholders}) ON CONFLICT(${quoteIdentifier(keyField)}) DO UPDATE SET ${updates}`;
+  const conflictTargets = keyFields.map(quoteIdentifier).join(", ");
+  const updateColumns = columns.filter((column) => !keyFields.includes(column));
+  const updates = updateColumns.length > 0
+    ? `UPDATE SET ` + updateColumns.map((column) => `${quoteIdentifier(column)}=excluded.${quoteIdentifier(column)}`).join(", ")
+    : `NOTHING`;
+  const sql = `INSERT INTO ${quoteIdentifier(tableName)} (${insertColumns}) VALUES (${placeholders}) ON CONFLICT(${conflictTargets}) DO ${updates}`;
   const stmt = db.prepare(sql);
 
   db.exec("BEGIN IMMEDIATE;");
@@ -1608,11 +1622,14 @@ function replaceMany(tableName, rows, keyField, mapper) {
   initSchema();
   if (!isRetryWindowOpen()) return;
 
+  const keyFields = Array.isArray(keyField) ? keyField : (keyField ? [keyField] : []);
   const mappedRows = Array.isArray(rows)
     ? rows
         .map((row) => mapper(row))
-        .filter((row) => row?.[keyField] !== null && row?.[keyField] !== undefined && String(row?.[keyField]).trim() !== "")
+        .filter((row) => keyFields.length === 0 || keyFields.every((k) => row?.[k] !== null && row?.[k] !== undefined && String(row?.[k]).trim() !== ""))
     : [];
+
+  const tableColumns = getTableColumnSet(db, tableName);
 
   db.exec("BEGIN IMMEDIATE;");
   try {
@@ -1620,7 +1637,7 @@ function replaceMany(tableName, rows, keyField, mapper) {
 
     if (mappedRows.length > 0) {
       const columns = Array.from(new Set(mappedRows.flatMap((row) => Object.keys(row))))
-        .filter((column) => mappedRows.some((row) => row[column] !== undefined && row[column] !== null));
+        .filter((column) => (tableColumns.size === 0 || tableColumns.has(column)) && mappedRows.some((row) => row[column] !== undefined && row[column] !== null));
       if (columns.length > 0) {
         const insertColumns = columns.map(quoteIdentifier).join(", ");
         const placeholders = columns.map(() => "?").join(", ");
@@ -2391,7 +2408,7 @@ export function upsertCotizacionesLocalRows(rows = []) {
 }
 
 export function upsertCotizacionCentrosTrabajoLocalRows(rows = []) {
-  upsertMany("cotizacion_centros_trabajo", rows, "id", mapCotizacionCentroTrabajoBridgeRow);
+  upsertMany("cotizacion_centros_trabajo", rows, ["cotizacion_id", "sucursal_id"], mapCotizacionCentroTrabajoBridgeRow);
 }
 
 export function upsertConceptosCotizacionLocalRows(rows = []) {
@@ -2399,31 +2416,31 @@ export function upsertConceptosCotizacionLocalRows(rows = []) {
 }
 
 export function upsertCapacitacionSucursalesLocalRows(rows = []) {
-  upsertMany("capacitacion_sucursales", rows, "id", mapCapacitacionSucursalBridgeRow);
+  upsertMany("capacitacion_sucursales", rows, ["capacitacion_id", "sucursal_id"], mapCapacitacionSucursalBridgeRow);
 }
 
 export function upsertCapacitacionCapacitadoresLocalRows(rows = []) {
-  upsertMany("capacitacion_capacitadores", rows, "id", mapCapacitacionCapacitadorBridgeRow);
+  upsertMany("capacitacion_capacitadores", rows, ["capacitacion_id", "empleado_id"], mapCapacitacionCapacitadorBridgeRow);
 }
 
 export function upsertCapacitacionSucursalesBridgeRows(rows = []) {
-  upsertMany("capacitacion_sucursales", rows, "id", mapCapacitacionSucursalBridgeRow);
+  upsertMany("capacitacion_sucursales", rows, ["capacitacion_id", "sucursal_id"], mapCapacitacionSucursalBridgeRow);
 }
 
 export function replaceCalendarioEmpleadosLocalRows(rows = []) {
-  replaceMany("calendario_empleados", rows, "id", mapCalendarioEmpleadoBridgeRow);
+  replaceMany("calendario_empleados", rows, ["calendario_id", "empleado_id"], mapCalendarioEmpleadoBridgeRow);
 }
 
 export function replaceCapacitacionSucursalesLocalRows(rows = []) {
-  replaceMany("capacitacion_sucursales", rows, "id", mapCapacitacionSucursalBridgeRow);
+  replaceMany("capacitacion_sucursales", rows, ["capacitacion_id", "sucursal_id"], mapCapacitacionSucursalBridgeRow);
 }
 
 export function replaceCapacitacionCapacitadoresLocalRows(rows = []) {
-  replaceMany("capacitacion_capacitadores", rows, "id", mapCapacitacionCapacitadorBridgeRow);
+  replaceMany("capacitacion_capacitadores", rows, ["capacitacion_id", "empleado_id"], mapCapacitacionCapacitadorBridgeRow);
 }
 
 export function replaceCotizacionCentrosTrabajoLocalRows(rows = []) {
-  replaceMany("cotizacion_centros_trabajo", rows, "id", mapCotizacionCentroTrabajoBridgeRow);
+  replaceMany("cotizacion_centros_trabajo", rows, ["cotizacion_id", "sucursal_id"], mapCotizacionCentroTrabajoBridgeRow);
 }
 
 export function replaceEstatalesLocalRows(rows = []) {

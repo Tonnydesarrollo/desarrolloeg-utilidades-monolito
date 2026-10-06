@@ -2,7 +2,7 @@
  * PEDIDOS / LIBERACIONES desde Gmail -> Drive -> AppSheet
  * - Evita duplicados por contenido del PDF
  * - Busca primero por PEDIDO / LIBERACION antes de hacer upsert
- * - Incluye Row ID estable para que AppSheet no cree filas nuevas por error
+ * - Usa PEDIDO / LIBERACION como llave de AppSheet
  * - Etiqueta hilos procesados
  */
 
@@ -211,30 +211,20 @@ function findExistingRowByBusinessKey_(table, businessKeyField, businessKeyValue
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
 
-function buildUpsertRow_(businessKeyField, businessKeyValue, pdfUrl, existingRow, fallbackPrefix) {
-  const existingRowId = normalizeText_(
-    existingRow?.["Row ID"] ||
-      existingRow?.["ROW ID"] ||
-      existingRow?.["RowId"] ||
-      existingRow?.["row_id"] ||
-      existingRow?.["ID"] ||
-      existingRow?.["Id"] ||
-      existingRow?.id
-  );
-
-  const stableRowId = existingRowId || `${fallbackPrefix}_${businessKeyValue}`;
-
+function buildUpsertRow_(businessKeyField, businessKeyValue, pdfUrl) {
   return {
-    "Row ID": stableRowId,
     [businessKeyField]: businessKeyValue,
     PDF: pdfUrl,
   };
 }
 
-function upsertAppSheetRow_(table, row, lookupField, lookupValue) {
-  const edit = appsheetAction_(table, "Edit", [row]);
-  if (edit.ok) {
-    return { action: "Edit", result: edit };
+function upsertAppSheetRow_(table, row, existingRow, lookupField, lookupValue) {
+  if (existingRow) {
+    const edit = appsheetAction_(table, "Edit", [row]);
+    if (edit.ok) {
+      return { action: "Edit", result: edit };
+    }
+    throw new Error(`No se pudo actualizar ${table} (${lookupField}=${lookupValue}). Edit(${edit.code}): ${edit.body}`);
   }
 
   const add = appsheetAction_(table, "Add", [row]);
@@ -242,11 +232,7 @@ function upsertAppSheetRow_(table, row, lookupField, lookupValue) {
     return { action: "Add", result: add };
   }
 
-  const errorBits = [
-    `Edit(${edit.code}): ${edit.body}`,
-    `Add(${add.code}): ${add.body}`,
-  ];
-  throw new Error(`No se pudo guardar en ${table} (${lookupField}=${lookupValue}). ${errorBits.join(" | ")}`);
+  throw new Error(`No se pudo crear en ${table} (${lookupField}=${lookupValue}). Add(${add.code}): ${add.body}`);
 }
 
 function recordProcessed_({ digest, kind, businessKey, threadId, messageId, filename, pdfUrl, rowId }) {
@@ -294,8 +280,8 @@ function processAttachment_(threadId, messageId, attachment, pdfIndex, resumeSta
     }
 
     const existing = findExistingRowByBusinessKey_(CONFIG.TABLE_PEDIDOS, CONFIG.KEY_PEDIDOS, pedido);
-    const row = buildUpsertRow_(CONFIG.KEY_PEDIDOS, pedido, pdfUrl, existing, "PEDIDO");
-    const result = upsertAppSheetRow_(CONFIG.TABLE_PEDIDOS, row, CONFIG.KEY_PEDIDOS, pedido);
+    const row = buildUpsertRow_(CONFIG.KEY_PEDIDOS, pedido, pdfUrl);
+    const result = upsertAppSheetRow_(CONFIG.TABLE_PEDIDOS, row, existing, CONFIG.KEY_PEDIDOS, pedido);
     recordProcessed_({
       digest: digest,
       kind: "PEDIDOS",
@@ -304,7 +290,7 @@ function processAttachment_(threadId, messageId, attachment, pdfIndex, resumeSta
       messageId: messageId,
       filename: filename,
       pdfUrl: pdfUrl,
-      rowId: row["Row ID"],
+      rowId: pedido,
     });
     return { done: true, kind: "PEDIDOS", businessKey: pedido, action: result.action };
   }
@@ -316,8 +302,8 @@ function processAttachment_(threadId, messageId, attachment, pdfIndex, resumeSta
     }
 
     const existing = findExistingRowByBusinessKey_(CONFIG.TABLE_LIBERACIONES, CONFIG.KEY_LIBERACIONES, liberacion);
-    const row = buildUpsertRow_(CONFIG.KEY_LIBERACIONES, liberacion, pdfUrl, existing, "LIB");
-    const result = upsertAppSheetRow_(CONFIG.TABLE_LIBERACIONES, row, CONFIG.KEY_LIBERACIONES, liberacion);
+    const row = buildUpsertRow_(CONFIG.KEY_LIBERACIONES, liberacion, pdfUrl);
+    const result = upsertAppSheetRow_(CONFIG.TABLE_LIBERACIONES, row, existing, CONFIG.KEY_LIBERACIONES, liberacion);
     recordProcessed_({
       digest: digest,
       kind: "LIBERACIONES",
@@ -326,7 +312,7 @@ function processAttachment_(threadId, messageId, attachment, pdfIndex, resumeSta
       messageId: messageId,
       filename: filename,
       pdfUrl: pdfUrl,
-      rowId: row["Row ID"],
+      rowId: liberacion,
     });
     return { done: true, kind: "LIBERACIONES", businessKey: liberacion, action: result.action };
   }
@@ -350,6 +336,7 @@ function runPedidosLiberaciones() {
     let resume = !checkpoint;
     let completedAll = true;
 
+    messagesLoop:
     for (let mi = 0; mi < messages.length; mi += 1) {
       const msg = messages[mi];
       const msgId = msg.getId();
@@ -377,9 +364,10 @@ function runPedidosLiberaciones() {
           }
         } catch (error) {
           Logger.log("Error procesando %s: %s", file.getName(), error && error.message ? error.message : error);
-          setCheckpoint_(threadId, msgId, pi + 1);
+          // Conserva el PDF fallido para reintentarlo en la siguiente ejecución.
+          setCheckpoint_(threadId, msgId, pi);
           completedAll = false;
-          continue;
+          break messagesLoop;
         }
 
         setCheckpoint_(threadId, msgId, pi + 1);

@@ -17,6 +17,7 @@ import {
   getSucursalesLocalRows,
   markPedidoLeySentLocal,
 } from "../../jobs/services/localAppsheetDb.js";
+import { sanitizeAppsheetRows } from "../../../services/appsheetSanitizer.js";
 
 const APP_ID = (process.env.FINANZAS_APPSHEET_APP_ID || process.env.PEDIDOS_APPSHEET_APP_ID || process.env.APPSHEET_APP_ID || '').trim();
 const API_KEY = (process.env.FINANZAS_APPSHEET_API_KEY || process.env.PEDIDOS_APPSHEET_API_KEY || process.env.APPSHEET_API_KEY || '').trim();
@@ -1171,7 +1172,7 @@ async function appsheetAction(action, rows = [], selector = '', tableName = TABL
       Locale: 'es-MX',
       Timezone: 'America/Mexico_City',
     },
-    Rows: rows,
+    Rows: action === 'Find' ? rows : sanitizeAppsheetRows(tableName, action, rows),
   };
   if (selector) {
     body.Properties.Selector = selector;

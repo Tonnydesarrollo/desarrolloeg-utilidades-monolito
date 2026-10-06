@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import { google } from "googleapis";
 import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
 import { getActivePortalBasePath, getPortalCookieSuffix, portalPath } from "./portalPath.js";
@@ -29,6 +29,7 @@ import {
 } from "../../services/platformCache.js";
 import { resolvePortalAccessProfile } from "./portalAccessPolicy.js";
 import { readPcEstatalStatusBySucursal } from "./pcEstatal.service.js";
+import { sanitizeAppsheetRows } from "../../services/appsheetSanitizer.js";
 
 const APPSHEET_TIMEOUT_MS = Number(process.env.APPSHEET_TIMEOUT_MS || 20000);
 const APPSHEET_MAX_RETRIES = Number(process.env.APPSHEET_MAX_RETRIES || 3);
@@ -1044,7 +1045,7 @@ async function appsheetAction({ table, action, rows = [], selector, runAsUserEma
     body.Properties.RunAsUserEmail = normalizeEmail(runAsUserEmail);
   }
   if (rows.length > 0) {
-    body.Rows = rows;
+    body.Rows = action === "Find" ? rows : sanitizeAppsheetRows(table, action, rows);
   }
 
   const response = await fetchWithRetry(getAppSheetUrl(config, table), {

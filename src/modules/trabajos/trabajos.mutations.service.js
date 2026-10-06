@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { openDesarrolloegSyncDb } from "../../services/desarrolloegLocalDb.js";
 import { getTrabajoTableName } from "./trabajos.service.js";
+import { sanitizeAppsheetRows } from "../../services/appsheetSanitizer.js";
 
 function env(names) { return names.map((name) => String(process.env[name] || "").trim()).find(Boolean) || ""; }
 
@@ -11,7 +12,7 @@ async function appsheetAction(table, action, rows) {
   const response = await fetch(`https://www.appsheet.com/api/v2/apps/${appId}/tables/${encodeURIComponent(table)}/Action`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ApplicationAccessKey: accessKey },
-    body: JSON.stringify({ Action: action, Properties: { Locale: "es-MX", Timezone: "America/Chihuahua" }, Rows: rows }),
+    body: JSON.stringify({ Action: action, Properties: { Locale: "es-MX", Timezone: "America/Chihuahua" }, Rows: action === "Find" ? rows : sanitizeAppsheetRows(table, action, rows) }),
   });
   const body = await response.text();
   if (!response.ok) throw new Error(`AppSheet respondio ${response.status}: ${body}`);

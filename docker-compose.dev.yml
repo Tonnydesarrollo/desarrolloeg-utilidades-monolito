@@ -47,7 +47,7 @@ services:
       desarrolloeg-sync-dev:
         condition: service_healthy
       whatsapp-dev:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "127.0.0.1:7001:7001"
     env_file:

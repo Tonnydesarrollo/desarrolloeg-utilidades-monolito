@@ -8,6 +8,7 @@ node_modules/
 .docker-runtime-config/
 .docker-temp/
 *.log
+artifacts/
 runtime/
 runtime-qa/
 runtime-dev/

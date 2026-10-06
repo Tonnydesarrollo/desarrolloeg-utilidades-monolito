@@ -13,6 +13,7 @@ import {
 } from "../../services/localAppsheetDb.js";
 import { diffRowsAgainstReplica, loadReplica, saveReplicaRows } from "../../services/localReplica.js";
 import { loadJobState, saveJobState } from "../../services/jobState.js";
+import { sanitizeAppsheetRows } from "../../../../services/appsheetSanitizer.js";
 
 const VALID_UPLOAD_TARGETS = new Set(["none", "all", "pagos", "relacionados", "facturas", "secuencial"]);
 
@@ -1221,7 +1222,7 @@ async function appsheetAction(config, tableName, action, rows) {
         Locale: "es-MX",
         Timezone: "America/Mazatlan",
       },
-      Rows: rows,
+      Rows: action === "Find" ? rows : sanitizeAppsheetRows(tableName, action, rows),
     },
     {
       headers: {

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { sanitizeAppsheetRows } from '../../../../../services/appsheetSanitizer.js';
 
 const CHUNK_SIZE = Math.max(1, Number(process.env.FACTURAS_APPSHEET_CHUNK_SIZE || '5'));
 const MAX_RETRIES = 10;
@@ -216,7 +217,7 @@ async function appsheetAction(action, rows) {
   return axios.post(getUrl(), {
     Action: action,
     Properties: { Locale: 'es-MX' },
-    Rows: rows,
+    Rows: action === 'Find' ? rows : sanitizeAppsheetRows('CFDIS', action, rows),
   }, {
     headers: {
       'Content-Type': 'application/json',

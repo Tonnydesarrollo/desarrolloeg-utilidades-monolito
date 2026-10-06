@@ -1,4 +1,5 @@
 import { readLocalOperationalTable } from "../../../services/localOperationalRepository.js";
+import { sanitizeAppsheetRows } from "../../../services/appsheetSanitizer.js";
 
 function getFirst(row, keys) {
   for (const key of keys) {
@@ -249,7 +250,7 @@ async function appsheetAction(table, action, rows = [], properties = {}) {
       Timezone: 'America/Mexico_City',
       ...properties,
     },
-    Rows: rows,
+    Rows: action === 'Find' ? rows : sanitizeAppsheetRows(table, action, rows),
   });
 
   const maxAttempts = 4;
