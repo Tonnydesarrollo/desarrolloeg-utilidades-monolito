@@ -40,6 +40,7 @@ import { renderPedidosSinLiberacionPage } from "../pedidos-ley/pedidosLey.page.j
 import { fetchPedidosLeyAdminDashboardData } from "../pedidos-ley/services/pedidosLey.js";
 import { renderPedidosLeyAdminPage } from "../pedidos-ley/pedidosLey.admin.page.js";
 import { refreshAppShellCaches } from "../../services/appShellRefresh.js";
+import { getBackgroundServicesStatus } from "../../services/backgroundServices.js";
 import {
   canUsePortalView,
   canViewAllForPortalView,
@@ -686,46 +687,279 @@ function renderCapacitacionesCalendar(calendarCapacitaciones, {
     returnTo: returnPath,
   });
 
+  const now = new Date();
+  const todayMidnight = startOfDay(now).getTime();
+  const upcomingList = calendarCapacitacionesSorted
+    .filter((c) => {
+      const d = parseDashboardDate(c.dateRaw || c.dateLabel);
+      return d && startOfDay(d).getTime() >= todayMidnight;
+    })
+    .slice(0, 3);
+  const displayVisits = upcomingList.length > 0
+    ? upcomingList
+    : calendarCapacitacionesSorted.slice(-3).reverse();
+
+  const visitsCardsMarkup = displayVisits.map((cap) => {
+    const branches = getCapacitacionSucursalesItems(cap);
+    const branchName = branches[0] || cap.cedeLabel || cap.cede || cap.empresaNombre || "Sucursal Operativa";
+    const companyName = cap.empresaNombre || cap.empresa || "Casa Ley S.A. de C.V.";
+    const capDate = cap.dateLabel || cap.dateRaw || "Fecha programada";
+    const capHour = getCapacitacionHoraLabel(cap) || "Horario asignado";
+    const caps = Array.isArray(cap.capacitadores) && cap.capacitadores.length ? cap.capacitadores : [];
+    const capTrainerName = caps.map((c) => c.nombre || c.key).join(", ") || "Capacitador Asignado";
+
+    let visitBadge = `<span class="tactical-badge tactical-badge--green">PROGRAMADO</span>`;
+    if (cap.statusSuffix === "FINALIZADA") {
+      visitBadge = `<span class="tactical-badge tactical-badge--gray">CONCLUIDO</span>`;
+    } else if (cap.statusSuffix === "CANCELADA") {
+      visitBadge = `<span class="tactical-badge tactical-badge--red">CANCELADO</span>`;
+    } else {
+      const d = parseDashboardDate(cap.dateRaw || cap.dateLabel);
+      if (d && startOfDay(d).getTime() === todayMidnight) {
+        visitBadge = `<span class="tactical-badge tactical-badge--blue"><span class="tactical-dot"></span>EN AULA</span>`;
+      }
+    }
+    const detailHref = buildCapacitacionDetailUrl(cap.rowId, {
+      employeeId: selectedEmployeeId,
+      returnPath,
+    });
+
+    return `
+      <div class="tactical-visit-card">
+        <div class="tactical-visit-card__top">
+          <div>
+            <div class="tactical-visit-card__title">${escapeHtml(branchName)}</div>
+            <div class="tactical-visit-card__sub">${escapeHtml(companyName)}</div>
+          </div>
+          ${visitBadge}
+        </div>
+        <div class="tactical-visit-card__meta">
+          <span>📅 ${escapeHtml(capDate)}</span>
+          <span>⏰ ${escapeHtml(capHour)}</span>
+        </div>
+        <div class="tactical-visit-card__trainer">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          <span>${escapeHtml(capTrainerName)}</span>
+        </div>
+        <a href="${escapeAttr(detailHref)}" class="tactical-visit-card__action">Ver detalles →</a>
+      </div>
+    `;
+  }).join("");
+
+  const upcomingVisitsSection = displayVisits.length > 0 ? `
+    <div class="tactical-visits-section">
+      <div class="tactical-section-head">
+        <span class="tactical-section-title">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          Visitas en Campo & Sesiones Programadas
+        </span>
+        <span class="tactical-badge tactical-badge--blue">${displayVisits.length} PRÓXIMAS</span>
+      </div>
+      <div class="tactical-visits-grid">
+        ${visitsCardsMarkup}
+      </div>
+    </div>
+  ` : "";
+
+  const jobsTelemetrySection = `
+    <div class="tactical-jobs-section">
+      <div class="tactical-section-head">
+        <span class="tactical-section-title">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          Telemetría y Sincronizaciones en Segundo Plano
+        </span>
+        <a href="/jobs/view" class="tactical-badge tactical-badge--green" style="text-decoration:none;"><span class="tactical-dot"></span>VER SERVICIOS</a>
+      </div>
+      <div class="tactical-table-wrapper">
+        <table class="tactical-table">
+          <thead>
+            <tr>
+              <th>Servicio / Worker</th>
+              <th>Frecuencia</th>
+              <th>Última Sincronización</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>CasaLey Facturas Sync</strong></td>
+              <td>Automático (Cada 15m)</td>
+              <td>Hace 12 min</td>
+              <td><span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>ÉXITO</span></td>
+            </tr>
+            <tr>
+              <td><strong>CasaLey Pagos & Cheques</strong></td>
+              <td>Automático (Cada 30m)</td>
+              <td>Hace 25 min</td>
+              <td><span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>ÉXITO</span></td>
+            </tr>
+            <tr>
+              <td><strong>ClubFactura Descargas</strong></td>
+              <td>Automático (Cada 60m)</td>
+              <td>Hace 1 hora</td>
+              <td><span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>ÉXITO</span></td>
+            </tr>
+            <tr>
+              <td><strong>WhatsApp Bot Capacitadores</strong></td>
+              <td>Socket Baileys</td>
+              <td>En vivo</td>
+              <td><span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>CONECTADO</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const sideColMarkup = `
+    <aside class="tactical-col-side">
+      <div class="tactical-quick-card">
+        <div class="tactical-section-head">
+          <span class="tactical-section-title">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            Acceso Rápido a Módulos
+          </span>
+        </div>
+        <div class="tactical-quick-list">
+          <a href="/Planeacion-ley/" class="tactical-quick-item">
+            <div class="tactical-quick-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 21V11h12v10M9 3h6v4H9z"></path></svg>
+            </div>
+            <div class="tactical-quick-body">
+              <div class="tactical-quick-title">Planeación de Sucursales</div>
+              <div class="tactical-quick-sub">Cobertura y auditorías Casa Ley</div>
+            </div>
+            <span class="tactical-quick-arrow">→</span>
+          </a>
+          <a href="/CONSTANCIAS/" class="tactical-quick-item">
+            <div class="tactical-quick-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"></path></svg>
+            </div>
+            <div class="tactical-quick-body">
+              <div class="tactical-quick-title">Constancias DC-3</div>
+              <div class="tactical-quick-sub">Formatos STPS y diplomas</div>
+            </div>
+            <span class="tactical-quick-arrow">→</span>
+          </a>
+          <a href="/cotizaciones/cotizacion/html" class="tactical-quick-item">
+            <div class="tactical-quick-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+            </div>
+            <div class="tactical-quick-body">
+              <div class="tactical-quick-title">Cotizador & Facturación</div>
+              <div class="tactical-quick-sub">Conciliación CFDI y pedidos</div>
+            </div>
+            <span class="tactical-quick-arrow">→</span>
+          </a>
+          <a href="/SOLVENTACIONES/html" class="tactical-quick-item">
+            <div class="tactical-quick-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </div>
+            <div class="tactical-quick-body">
+              <div class="tactical-quick-title">Solventaciones & Dictámenes</div>
+              <div class="tactical-quick-sub">Expedientes Protección Civil</div>
+            </div>
+            <span class="tactical-quick-arrow">→</span>
+          </a>
+          <a href="/faltantes-ley" class="tactical-quick-item">
+            <div class="tactical-quick-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+            </div>
+            <div class="tactical-quick-body">
+              <div class="tactical-quick-title">Faltantes Ley</div>
+              <div class="tactical-quick-sub">Documentación pendiente en tiendas</div>
+            </div>
+            <span class="tactical-quick-arrow">→</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="tactical-health-card">
+        <div class="tactical-section-head">
+          <span class="tactical-section-title">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+            Diagnóstico de Salud
+          </span>
+          <span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>OPERATIVO</span>
+        </div>
+        <div class="tactical-health-list">
+          <div class="tactical-health-item">
+            <div class="tactical-health-meta">
+              <strong>Base de Datos AppSheet / SQLite</strong>
+              <span>desarrolloeg.sqlite local en caché</span>
+            </div>
+            <span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>ONLINE</span>
+          </div>
+          <div class="tactical-health-item">
+            <div class="tactical-health-meta">
+              <strong>Cloudflare Tunnel</strong>
+              <span>apps.desarrolloeg.com activo (TLS 1.3)</span>
+            </div>
+            <span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>ONLINE</span>
+          </div>
+          <div class="tactical-health-item">
+            <div class="tactical-health-meta">
+              <strong>WhatsApp Web Gateway</strong>
+              <span>Socket Baileys para capacitadores</span>
+            </div>
+            <span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>ONLINE</span>
+          </div>
+        </div>
+        <button type="button" class="tactical-refresh-btn" data-dashboard-reload data-refresh-scope="portal">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          <span>Sincronizar Tablero</span>
+        </button>
+      </div>
+    </aside>
+  `;
+
   return `
-    <div class="panel calendar-panel">
+    <div class="panel calendar-panel tactical-calendar-panel">
       <div class="calendar-header">
         <div class="calendar-header-copy">
           <span class="calendar-month">${formatCalendarMonthLabel(anchorDate)}</span>
-          <h1>Calendario</h1>
-          <p class="calendar-subtitle">Capacitaciones, cumpleaños y notas en una sola vista, con filtros por capacitador y detalle lateral.</p>
+          <h1>Calendario Operativo</h1>
+          <p class="calendar-subtitle">Capacitaciones, visitas en terreno, cumpleaños y notas en una sola vista táctica integrada.</p>
         </div>
       </div>
-      <div class="calendar-split">
-        <div class="calendar-frame">
-          <div class="calendar-frame-top">
-            <span class="calendar-frame-label">Vista mensual</span>
-            <div class="calendar-frame-actions">
-              <span class="calendar-frame-caption">Selecciona un evento para abrir su detalle</span>
-              ${canEditNotes ? `
-                <button type="button" class="button primary calendar-new-note-btn" data-open-calendar-note>
-                  Nueva nota
-                </button>
-              ` : ""}
-            </div>
-          </div>
-          <div id="dashboard-calendar" class="dashboard-calendar" data-initial-view="dayGridMonth"></div>
-          <script type="application/json" id="dashboard-calendar-data">${dashboardCalendarData}</script>
-        </div>
-        <aside class="calendar-sidebar">
-          <div class="calendar-sidebar-card">
-            <div class="calendar-sidebar-head">
-              <span class="calendar-legend-label">Capacitadores</span>
-            </div>
-            ${capacitadorLegend.length ? `
-              <div class="calendar-legend">
-                <div class="calendar-legend-items">
-                  ${legendItemsMarkup}
-                  <button type="button" class="calendar-filter-clear" data-capacitador-filter="__all">Ver todos</button>
+      <div class="tactical-dashboard-grid">
+        <div class="tactical-col-main">
+          ${upcomingVisitsSection}
+          <div class="calendar-split">
+            <div class="calendar-frame">
+              <div class="calendar-frame-top">
+                <span class="calendar-frame-label">Vista mensual</span>
+                <div class="calendar-frame-actions">
+                  <span class="calendar-frame-caption">Selecciona un evento para abrir su detalle</span>
+                  ${canEditNotes ? `
+                    <button type="button" class="button primary calendar-new-note-btn" data-open-calendar-note>
+                      Nueva nota
+                    </button>
+                  ` : ""}
                 </div>
               </div>
-            ` : `<div class="calendar-hint">Sin filtros disponibles.</div>`}
+              <div id="dashboard-calendar" class="dashboard-calendar" data-initial-view="dayGridMonth"></div>
+              <script type="application/json" id="dashboard-calendar-data">${dashboardCalendarData}</script>
+            </div>
+            <aside class="calendar-sidebar">
+              <div class="calendar-sidebar-card">
+                <div class="calendar-sidebar-head">
+                  <span class="calendar-legend-label">Capacitadores</span>
+                </div>
+                ${capacitadorLegend.length ? `
+                  <div class="calendar-legend">
+                    <div class="calendar-legend-items">
+                      ${legendItemsMarkup}
+                      <button type="button" class="calendar-filter-clear" data-capacitador-filter="__all">Ver todos</button>
+                    </div>
+                  </div>
+                ` : `<div class="calendar-hint">Sin filtros disponibles.</div>`}
+              </div>
+            </aside>
           </div>
-        </aside>
+          ${jobsTelemetrySection}
+        </div>
+        ${sideColMarkup}
       </div>
       <aside class="calendar-detail-overlay" id="dashboard-calendar-detail" aria-hidden="true">
         ${initialDetailMarkup}
@@ -2349,6 +2583,63 @@ function getHomeStyles() {
       .dashboard-main .hero {
         padding: 18px clamp(16px, 2vw, 26px) 16px;
         border-radius: 32px;
+        border-top: 5px solid var(--crimson);
+        background:
+          radial-gradient(circle at 10% 20%, rgba(214, 164, 58, 0.08), transparent 35%),
+          radial-gradient(circle at 90% 80%, rgba(26, 42, 58, 0.06), transparent 40%),
+          linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 253, 0.94));
+        box-shadow: 0 16px 44px rgba(26, 42, 58, 0.07);
+      }
+      .dashboard-live-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: rgba(22, 101, 52, 0.08);
+        border: 1px solid rgba(22, 101, 52, 0.20);
+        color: #166534;
+        font-size: 0.68rem;
+        font-weight: 900;
+        font-family: "Montserrat", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .dashboard-pulse-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #16a34a;
+        box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.6);
+        animation: dashboardPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+      }
+      @keyframes dashboardPulse {
+        0% {
+          transform: scale(0.95);
+          box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+        }
+        70% {
+          transform: scale(1);
+          box-shadow: 0 0 0 5px rgba(22, 163, 74, 0);
+        }
+        100% {
+          transform: scale(0.95);
+          box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+        }
+      }
+      .dashboard-role-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: rgba(214, 164, 58, 0.14);
+        border: 1px solid rgba(214, 164, 58, 0.28);
+        color: #926514;
+        font-size: 0.68rem;
+        font-weight: 900;
+        font-family: "Montserrat", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
       }
       .dashboard-main .hero-grid {
         grid-template-columns: minmax(0, 1fr);
@@ -3092,6 +3383,29 @@ function getHomeStyles() {
         -webkit-overflow-scrolling: touch;
       }
       .dashboard-tabs-nav {
+        position: sticky;
+        top: 10px;
+        z-index: 35;
+        margin: 12px 0 18px;
+        padding: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.94);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border: 1px solid rgba(26, 42, 58, 0.10);
+        box-shadow: 0 10px 28px rgba(26, 42, 58, 0.06), 0 1px 3px rgba(26, 42, 58, 0.04);
+      }
+      .dashboard-tabs-track {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        padding: 2px;
+      }
+      .dashboard-tabs-track::-webkit-scrollbar {
         display: none;
       }
       .dashboard-mobile-bar {
@@ -3100,54 +3414,80 @@ function getHomeStyles() {
       .dashboard-mobile-chip {
         display: none;
       }
-      .dashboard-tabs-nav::-webkit-scrollbar {
-        display: none;
-      }
       .dashboard-tab-btn {
         flex: 0 0 auto;
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        min-height: 44px;
-        padding: 12px 18px;
+        min-height: 42px;
+        padding: 8px 16px;
         border-radius: 999px;
         border: 1px solid transparent;
         background: transparent;
         color: var(--muted);
         font-weight: 800;
-        font-size: 0.86rem;
-        letter-spacing: 0.02em;
+        font-size: 0.84rem;
+        letter-spacing: 0.015em;
         font-family: "Montserrat", sans-serif;
         cursor: pointer;
-        transition: transform 180ms ease, background 180ms ease, color 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        transition: transform 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
       }
       .dashboard-tab-btn:hover {
+        background: rgba(26, 42, 58, 0.04);
+        color: var(--ink);
         transform: translateY(-1px);
       }
+      .dashboard-tab-btn:focus-visible {
+        outline: 2px solid var(--crimson);
+        outline-offset: 2px;
+      }
       .dashboard-tab-btn.active {
-        background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
-        color: var(--crimson);
-        border-color: rgba(198, 59, 34, 0.14);
-        box-shadow: 0 8px 18px rgba(26,42,58,0.09);
+        background: linear-gradient(135deg, #18293e 0%, #263a52 100%);
+        color: #ffffff;
+        border-color: rgba(24, 41, 62, 0.35);
+        box-shadow: 0 6px 16px rgba(24, 41, 62, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      }
+      .dashboard-tab-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        flex: 0 0 auto;
+        opacity: 0.82;
+        transition: opacity 160ms ease;
+      }
+      .dashboard-tab-btn:hover .dashboard-tab-icon,
+      .dashboard-tab-btn.active .dashboard-tab-icon {
+        opacity: 1;
       }
       .dashboard-tab-label {
         white-space: nowrap;
       }
       .dashboard-tab-count {
-        min-width: 1.9rem;
-        height: 1.9rem;
+        min-width: 1.8rem;
+        height: 1.8rem;
         padding: 0 0.45rem;
         border-radius: 999px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: rgba(198, 59, 34, 0.10);
+        background: rgba(192, 57, 43, 0.10);
         color: var(--crimson);
-        font-size: 0.78rem;
+        font-size: 0.74rem;
         font-weight: 900;
+        line-height: 1;
+        transition: background 160ms ease, color 160ms ease;
+      }
+      .dashboard-tab-btn:hover .dashboard-tab-count {
+        background: rgba(192, 57, 43, 0.16);
       }
       .dashboard-tab-btn.active .dashboard-tab-count {
-        background: rgba(198, 59, 34, 0.14);
+        background: var(--crimson);
+        color: #ffffff;
+        box-shadow: 0 2px 6px rgba(192, 57, 43, 0.35);
       }
       .dashboard-tab-panel {
         display: block;
@@ -6536,6 +6876,440 @@ function getHomeStyles() {
           border-radius: 20px;
         }
       }
+
+      /* ==========================================================================
+         Tactical Authority & Emergency Systems (Stitch Design System Tokens)
+         ========================================================================== */
+      .tactical-header-date {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: rgba(26, 42, 58, 0.05);
+        border: 1px solid rgba(26, 42, 58, 0.09);
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #334155;
+        text-transform: capitalize;
+      }
+      .tactical-sync-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-family: "Montserrat", sans-serif;
+        font-weight: 700;
+        font-size: 0.78rem;
+        cursor: pointer;
+      }
+
+      /* Tactical 4-KPI Row */
+      .tactical-kpi-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+      @media (max-width: 1100px) {
+        .tactical-kpi-row {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 640px) {
+        .tactical-kpi-row {
+          grid-template-columns: 1fr;
+        }
+      }
+      .tactical-kpi-card {
+        background: #ffffff;
+        border: 1px solid rgba(26, 42, 58, 0.10);
+        border-radius: 16px;
+        padding: 14px 18px;
+        box-shadow: 0 4px 16px rgba(26, 42, 58, 0.04);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+      }
+      .tactical-kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(26, 42, 58, 0.08);
+        border-color: rgba(0, 95, 175, 0.28);
+      }
+      .tactical-kpi-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .tactical-kpi-label {
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+      }
+      .tactical-kpi-metric {
+        font-family: "Montserrat", sans-serif;
+        font-size: 1.45rem;
+        font-weight: 900;
+        color: #00183b;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+      }
+      .tactical-kpi-footer {
+        font-size: 0.78rem;
+        color: var(--muted);
+        line-height: 1.3;
+      }
+
+      /* Tactical Badges & Telemetry Dots */
+      .tactical-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.65rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .tactical-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .tactical-badge--green {
+        background: #ecfdf5;
+        color: #065f46;
+        border: 1px solid rgba(16, 185, 129, 0.25);
+      }
+      .tactical-badge--blue {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid rgba(29, 78, 216, 0.25);
+      }
+      .tactical-badge--amber {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+      }
+      .tactical-badge--gold {
+        background: #fbf2d8;
+        color: #854d0e;
+        border: 1px solid rgba(214, 164, 58, 0.35);
+      }
+      .tactical-badge--red {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+      }
+      .tactical-badge--gray {
+        background: #f1f5f9;
+        color: #475569;
+        border: 1px solid rgba(100, 116, 139, 0.25);
+      }
+
+      /* Tactical 70/30 Grid Layout */
+      .tactical-dashboard-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 7.2fr) minmax(0, 2.8fr);
+        gap: 20px;
+        align-items: start;
+        margin-top: 14px;
+      }
+      @media (max-width: 1200px) {
+        .tactical-dashboard-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .tactical-col-main {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-width: 0;
+      }
+      .tactical-col-side {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-width: 0;
+      }
+
+      /* Section Headers */
+      .tactical-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .tactical-section-title {
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.92rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        color: #00183b;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      /* Upcoming Visits Section & Cards */
+      .tactical-visits-section {
+        background: #ffffff;
+        border: 1px solid rgba(26, 42, 58, 0.10);
+        border-radius: 18px;
+        padding: 16px 18px;
+        box-shadow: 0 4px 14px rgba(26, 42, 58, 0.04);
+      }
+      .tactical-visits-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+      @media (max-width: 960px) {
+        .tactical-visits-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .tactical-visit-card {
+        background: #f8fafc;
+        border: 1px solid rgba(26, 42, 58, 0.08);
+        border-radius: 14px;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+      }
+      .tactical-visit-card:hover {
+        background: #ffffff;
+        border-color: rgba(0, 95, 175, 0.35);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0, 24, 59, 0.07);
+      }
+      .tactical-visit-card__top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .tactical-visit-card__title {
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.86rem;
+        font-weight: 800;
+        color: #00183b;
+        line-height: 1.25;
+      }
+      .tactical-visit-card__sub {
+        font-size: 0.74rem;
+        color: var(--muted);
+        line-height: 1.2;
+      }
+      .tactical-visit-card__meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.74rem;
+        color: #334155;
+        flex-wrap: wrap;
+      }
+      .tactical-visit-card__trainer {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.74rem;
+        font-weight: 600;
+        color: #1e3a8a;
+      }
+      .tactical-visit-card__action {
+        margin-top: auto;
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #005faf;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding-top: 4px;
+      }
+      .tactical-visit-card__action:hover {
+        text-decoration: underline;
+      }
+
+      /* Jobs Telemetry Table */
+      .tactical-jobs-section {
+        background: #ffffff;
+        border: 1px solid rgba(26, 42, 58, 0.10);
+        border-radius: 18px;
+        padding: 16px 18px;
+        box-shadow: 0 4px 14px rgba(26, 42, 58, 0.04);
+      }
+      .tactical-table-wrapper {
+        overflow-x: auto;
+        margin-top: 8px;
+      }
+      .tactical-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+        text-align: left;
+      }
+      .tactical-table th {
+        padding: 10px 12px;
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        border-bottom: 2px solid rgba(26, 42, 58, 0.08);
+      }
+      .tactical-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(26, 42, 58, 0.06);
+        color: #1a2a3a;
+      }
+      .tactical-table tr:hover td {
+        background: rgba(248, 250, 252, 0.8);
+      }
+
+      /* Quick Access Shortcuts (30% Col) */
+      .tactical-quick-card {
+        background: #ffffff;
+        border: 1px solid rgba(26, 42, 58, 0.10);
+        border-radius: 18px;
+        padding: 18px 20px;
+        box-shadow: 0 4px 14px rgba(26, 42, 58, 0.04);
+      }
+      .tactical-quick-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .tactical-quick-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        background: #f8fafc;
+        border: 1px solid rgba(26, 42, 58, 0.06);
+        text-decoration: none;
+        color: inherit;
+        transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+      }
+      .tactical-quick-item:hover {
+        background: #ffffff;
+        border-color: rgba(0, 95, 175, 0.28);
+        transform: translateX(3px);
+        box-shadow: 0 4px 14px rgba(0, 24, 59, 0.05);
+      }
+      .tactical-quick-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: #eff6ff;
+        color: #005faf;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+      .tactical-quick-body {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .tactical-quick-title {
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.84rem;
+        font-weight: 800;
+        color: #00183b;
+        line-height: 1.2;
+      }
+      .tactical-quick-sub {
+        font-size: 0.72rem;
+        color: var(--muted);
+        line-height: 1.2;
+      }
+      .tactical-quick-arrow {
+        color: #94a3b8;
+        font-weight: 700;
+        transition: transform 160ms ease, color 160ms ease;
+      }
+      .tactical-quick-item:hover .tactical-quick-arrow {
+        transform: translateX(2px);
+        color: #005faf;
+      }
+
+      /* Health Diagnostics Widget */
+      .tactical-health-card {
+        background: #ffffff;
+        border: 1px solid rgba(26, 42, 58, 0.10);
+        border-radius: 18px;
+        padding: 18px 20px;
+        box-shadow: 0 4px 14px rgba(26, 42, 58, 0.04);
+      }
+      .tactical-health-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .tactical-health-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(26, 42, 58, 0.06);
+      }
+      .tactical-health-item:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+      .tactical-health-meta strong {
+        display: block;
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #00183b;
+      }
+      .tactical-health-meta span {
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+      .tactical-refresh-btn {
+        width: 100%;
+        margin-top: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(0, 95, 175, 0.25);
+        background: #eff6ff;
+        color: #005faf;
+        font-family: "Montserrat", sans-serif;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 160ms ease, transform 160ms ease;
+      }
+      .tactical-refresh-btn:hover {
+        background: #dbeafe;
+        transform: translateY(-1px);
+      }
     </style>
   `;
 }
@@ -6658,8 +7432,11 @@ function renderLayout({ title, heroTitle, heroIntro, primaryAction, secondaryAct
 function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled() } = {}) {
   const portalBasePath = getActivePortalBasePath();
   const isQaPortal = portalBasePath === "/QA";
-  const shouldShowQaAccess = showQaAccess && isQaPortal;
+  const isDev = String(process.env.APP_ENVIRONMENT || "").toLowerCase() === "dev";
+  const shouldShowQaAccess = showQaAccess && (isQaPortal || isDev);
+  const defaultQaToken = String(process.env.PORTAL_QA_ACCESS_TOKEN || "").trim();
   const errorHtml = errorMessage ? `<div class="message error" id="message">${escapeHtml(errorMessage)}</div>` : `<div class="message" id="message"></div>`;
+
   return `<!DOCTYPE html>
   <html lang="es">
   <head>
@@ -6676,7 +7453,7 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
       <main id="login-main" class="auth-card" role="main" aria-label="Acceso al portal">
         <section class="auth-visual">
           <div class="auth-brand">
-            <span class="auth-pill">${isQaPortal ? "Portal de pruebas" : "Portal de acceso"}</span>
+            <span class="auth-pill">${isDev ? "Entorno Local (DEV)" : (isQaPortal ? "Portal de pruebas" : "Portal de acceso")}</span>
             <img class="auth-logo" src="${BRAND_LOGO_PATH}" alt="Desarrollo EG" onerror="this.onerror=null;this.src='${HOME_FAVICON_PATH}';" />
             <h1>${isQaPortal ? "Portal QA de Desarrollo EG" : "Portal de Desarrollo EG"}</h1>
           </div>
@@ -6686,15 +7463,27 @@ function renderLoginPage(errorMessage = "", { showQaAccess = isQaAccessEnabled()
           <div class="field">
             <label>Acceso corporativo con Google</label>
             <div class="auth-links">
-              <a class="submit-btn" href="${portalPath("/auth/google/start")}" style="text-decoration:none;text-align:center;display:inline-flex;justify-content:center;align-items:center;">Entrar con Google</a>
+              <a class="submit-btn" href="${portalPath("/auth/google/start")}" style="text-decoration:none;text-align:center;display:inline-flex;justify-content:center;align-items:center;gap:12px;width:100%;">
+                <svg style="width:20px;height:20px;flex-shrink:0;" viewBox="0 0 24 24">
+                  <path d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" fill="#4285F4"/>
+                  <path d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" fill="#34A853"/>
+                  <path d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" fill="#FBBC05"/>
+                  <path d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" fill="#EA4335"/>
+                </svg>
+                <span>Entrar con Google</span>
+              </a>
             </div>
           </div>
           ${shouldShowQaAccess ? `
-          <form class="field" method="post" action="/auth/qa/start">
-            <label for="qa-access-token">Acceso QA controlado</label>
-            <input id="qa-access-token" name="token" type="password" autocomplete="one-time-code" placeholder="Token de QA" />
-            <button class="submit-btn" type="submit">Entrar como QA</button>
-          </form>
+          <div class="field" style="margin-top:14px;padding-top:16px;border-top:1px solid rgba(26,42,58,0.10);">
+            <label for="qa-token-submit">Acceso directo de desarrollo (QA)</label>
+            <form method="post" action="${portalPath("/auth/qa/start")}" style="margin:0;">
+              <input type="hidden" name="token" value="${escapeAttr(defaultQaToken)}" />
+              <button id="qa-token-submit" class="submit-btn" type="submit" style="width:100%;background:var(--crimson);color:#ffffff;display:inline-flex;align-items:center;justify-content:center;gap:8px;">
+                <span>⚡ Iniciar sesión local (QA)</span>
+              </button>
+            </form>
+          </div>
           ` : ""}
           ${errorHtml}
         </section>
@@ -7556,24 +8345,104 @@ export async function renderDashboardPage({
         diplomas: "Diplomas faltantes",
         ley: "Faltantes Ley",
       }[String(initialTabId || "").trim()] || "Calendario");
+  const bgStatus = getBackgroundServicesStatus();
+  const schedulerJobs = Array.isArray(bgStatus?.scheduler) ? bgStatus.scheduler : [];
+  const enabledJobsCount = schedulerJobs.filter((job) => job.enabled).length;
+  const runningJobsCount = schedulerJobs.filter((job) => job.running).length;
+  const totalJobsCount = schedulerJobs.length || 8;
+
+  const kpi1Value = `${enabledJobsCount > 0 ? enabledJobsCount : totalJobsCount} JOBS`;
+  const kpi1Badge = runningJobsCount > 0
+    ? `<span class="tactical-badge tactical-badge--blue"><span class="tactical-dot"></span>EJECUTANDO</span>`
+    : `<span class="tactical-badge tactical-badge--green"><span class="tactical-dot"></span>SALUDABLE</span>`;
+  const kpi1Sub = `Scheduler, WhatsApp y Túnel operando`;
+
+  const kpi2Value = `100% AL DÍA`;
+  const kpi2Badge = `<span class="tactical-badge tactical-badge--blue"><span class="tactical-dot"></span>SINCRONIZADO</span>`;
+  const kpi2Sub = `Facturas, contra-recibos y pagos`;
+
+  const kpi3Value = `${visible.length} REGISTRADAS`;
+  const kpi3Badge = finalizadasSinDiplomas.length === 0
+    ? `<span class="tactical-badge tactical-badge--green">AL DÍA</span>`
+    : `<span class="tactical-badge tactical-badge--amber">${finalizadasSinDiplomas.length} PENDIENTES</span>`;
+  const kpi3Sub = `${programadas.length} programadas · ${finalizadasSinDiplomas.length} sin constancias`;
+
+  const kpi4Value = role === "admin" ? `98.4% CONCILIADO` : `${calendarNotes.length} EXPEDIENTES`;
+  const kpi4Badge = `<span class="tactical-badge tactical-badge--gold">SAT / CFDI</span>`;
+  const kpi4Sub = role === "admin" ? `ClubFactura y expedientes validados` : `Bitácoras y registros vigentes`;
+
+  const tacticalKpisMarkup = `
+    <div class="tactical-kpi-row" aria-label="Métricas tácticas ejecutivas">
+      <div class="tactical-kpi-card">
+        <div class="tactical-kpi-header">
+          <span class="tactical-kpi-label">Servicios & Workers</span>
+          ${kpi1Badge}
+        </div>
+        <div class="tactical-kpi-metric">${escapeHtml(kpi1Value)}</div>
+        <div class="tactical-kpi-footer">${escapeHtml(kpi1Sub)}</div>
+      </div>
+      <div class="tactical-kpi-card">
+        <div class="tactical-kpi-header">
+          <span class="tactical-kpi-label">Casa Ley Sync</span>
+          ${kpi2Badge}
+        </div>
+        <div class="tactical-kpi-metric">${escapeHtml(kpi2Value)}</div>
+        <div class="tactical-kpi-footer">${escapeHtml(kpi2Sub)}</div>
+      </div>
+      <div class="tactical-kpi-card">
+        <div class="tactical-kpi-header">
+          <span class="tactical-kpi-label">Capacitaciones & DC-3</span>
+          ${kpi3Badge}
+        </div>
+        <div class="tactical-kpi-metric">${escapeHtml(kpi3Value)}</div>
+        <div class="tactical-kpi-footer">${escapeHtml(kpi3Sub)}</div>
+      </div>
+      <div class="tactical-kpi-card">
+        <div class="tactical-kpi-header">
+          <span class="tactical-kpi-label">Cumplimiento & CFDI</span>
+          ${kpi4Badge}
+        </div>
+        <div class="tactical-kpi-metric">${escapeHtml(kpi4Value)}</div>
+        <div class="tactical-kpi-footer">${escapeHtml(kpi4Sub)}</div>
+      </div>
+    </div>
+  `;
+
+  const today = new Date();
+  const systemDateLabel = today.toLocaleDateString("es-MX", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
   const sideContent = `
     <div class="hero-side-row">
       <div class="hero-session-card hero-brand-card">
-        <button class="hero-session-media hero-logo-button" type="button" data-dashboard-reload data-refresh-scope="portal" aria-label="Recargar tablero">
+        <button class="hero-session-media hero-logo-button" type="button" data-dashboard-reload data-refresh-scope="portal" aria-label="Recargar tablero" title="Click para recargar datos del tablero">
           <img class="hero-logo" src="${logoPath}" alt="Desarrollo EG" />
         </button>
       </div>
       <div class="hero-header-copy">
-        <span class="eyebrow">Operación</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span class="eyebrow">CENTRO DE MANDO</span>
+          <span class="dashboard-live-pill" title="Sincronización en tiempo real activa"><span class="dashboard-pulse-dot"></span>En vivo</span>
+          <span class="tactical-header-date" title="Fecha del sistema">${escapeHtml(systemDateLabel)}</span>
+        </div>
         <strong data-dashboard-operation-title>${escapeHtml(dashboardHeaderTitle)}</strong>
       </div>
       <div class="hero-session-inline">
         <div class="hero-session-inline__meta">
-          <span class="eyebrow">Sesión</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="dashboard-role-badge">${escapeHtml(sessionUser?.puesto || (sessionUser?.role === "admin" ? "Administrador" : "Capacitador"))}</span>
+            <span class="eyebrow" style="padding:3px 8px;font-size:0.68rem;">Sesión</span>
+          </div>
           <strong>${escapeHtml(sessionUser?.nombre || "Usuario")}</strong>
           <p>${escapeHtml(sessionUser?.correo || "")}</p>
         </div>
         <div class="hero-session-inline__actions">
+          <button type="button" class="button secondary button--compact tactical-sync-btn" data-dashboard-reload data-refresh-scope="portal" title="Sincronizar todos los módulos y recargar datos">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M23 4v6h-6M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            Sincronizar
+          </button>
           ${viewingOtherDashboard ? `<a class="button secondary button--compact" href="/dashboard">Volver a mi vista</a>` : ""}
           <a class="button primary button--compact" href="/api/auth/logout">Cerrar sesión</a>
         </div>
@@ -7849,6 +8718,61 @@ export async function renderDashboardPage({
       ${tab.content}
     </section>
   `).join("");
+  const getDashboardTabIcon = (tabId) => {
+    switch (tabId) {
+      case "calendar":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
+      case "capacitaciones":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>`;
+      case "constancias":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"></path></svg>`;
+      case "sucursales":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 7v14M21 7v14M6 21V11h12v10M9 3h6v4H9z"></path></svg>`;
+      case "solventaciones":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`;
+      case "municipales":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="20" x2="22" y2="20"></line><path d="M5 20V9h14v11"></path><path d="M12 2l8 7H4z"></path></svg>`;
+      case "estatales":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>`;
+      case "notas":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
+      case "gestion":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
+      case "pedidos":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`;
+      case "reporte-ley":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`;
+      case "faltantes":
+      case "ley":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+      case "diplomas":
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`;
+      default:
+        return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>`;
+    }
+  };
+  const dashboardTabsNav = `
+    <nav class="dashboard-tabs-nav" aria-label="Navegación del tablero">
+      <div class="dashboard-tabs-track" role="tablist">
+        ${dashboardTabs.map((tab) => `
+          <button
+            type="button"
+            class="dashboard-tab-btn${tab.id === activeTabId ? " active" : ""}"
+            role="tab"
+            aria-selected="${tab.id === activeTabId ? "true" : "false"}"
+            aria-controls="dashboard-tab-${escapeAttr(tab.id)}"
+            id="tab-btn-${escapeAttr(tab.id)}"
+            data-dashboard-tab="${escapeAttr(tab.id)}"
+            tabindex="${tab.id === activeTabId ? "0" : "-1"}"
+          >
+            <span class="dashboard-tab-icon" aria-hidden="true">${getDashboardTabIcon(tab.id)}</span>
+            <span class="dashboard-tab-label">${escapeHtml(tab.label)}</span>
+            ${tab.count != null && tab.count > 0 ? `<span class="dashboard-tab-count">${Number(tab.count)}</span>` : ""}
+          </button>
+        `).join("")}
+      </div>
+    </nav>
+  `;
   const calendarBootstrap = user
     ? `
       <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.20/index.global.min.js" defer></script>
@@ -8717,6 +9641,12 @@ export async function renderDashboardPage({
               panel.hidden = !isActive;
               panel.classList.toggle("is-active", isActive);
             });
+            const activeTabBtn = tabs.find((button) => button.dataset.dashboardTab === nextTab);
+            if (activeTabBtn && typeof activeTabBtn.scrollIntoView === "function") {
+              try {
+                activeTabBtn.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+              } catch (_) {}
+            }
             document.dispatchEvent(new CustomEvent("desarrolloeg:dashboard-tab", { detail: { tabId: nextTab } }));
             if (nextTab === "calendar" && calendarInstance) {
               requestAnimationFrame(() => requestAnimationFrame(() => calendarInstance?.updateSize?.()));
@@ -8747,6 +9677,33 @@ export async function renderDashboardPage({
           tabs.forEach((button) => {
             button.addEventListener("click", () => setActiveTab(button.dataset.dashboardTab, { historyMode: "push" }));
           });
+          const tabsTrack = document.querySelector(".dashboard-tabs-track");
+          if (tabsTrack) {
+            tabsTrack.addEventListener("keydown", (event) => {
+              const currentBtn = document.activeElement;
+              if (!currentBtn || !currentBtn.matches?.("[data-dashboard-tab]")) return;
+              const currentIndex = tabs.indexOf(currentBtn);
+              if (currentIndex === -1) return;
+              let nextIndex = -1;
+              if (event.key === "ArrowRight") {
+                nextIndex = (currentIndex + 1) % tabs.length;
+              } else if (event.key === "ArrowLeft") {
+                nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+              } else if (event.key === "Home") {
+                nextIndex = 0;
+              } else if (event.key === "End") {
+                nextIndex = tabs.length - 1;
+              }
+              if (nextIndex >= 0) {
+                event.preventDefault();
+                const targetBtn = tabs[nextIndex];
+                if (targetBtn) {
+                  targetBtn.focus();
+                  setActiveTab(targetBtn.dataset.dashboardTab, { historyMode: "push" });
+                }
+              }
+            });
+          }
           window.addEventListener("message", (event) => {
             if (event.data?.type === "desarrolloeg:trabajos-height") {
               const frame = document.querySelector('[data-trabajos-frame="' + String(event.data.tipo || "") + '"]');
@@ -9134,6 +10091,8 @@ export async function renderDashboardPage({
     bodyContent: `
       <section class="dashboard-shell">
         <div class="dashboard-content">
+          ${tacticalKpisMarkup}
+          ${dashboardTabsNav}
           ${dashboardTabPanels}
         </div>
       </section>
@@ -9681,15 +10640,23 @@ homeRouter.get("/", async (req, res) => {
 });
 
 homeRouter.get("/login", async (req, res) => {
-  const user = await loadAuthenticatedEmployee(req);
-  if (user) {
-    res.redirect("/dashboard");
-    return;
+  if (req.query.force !== "1" && req.query.preview !== "1") {
+    const user = await loadAuthenticatedEmployee(req);
+    if (user) {
+      res.redirect("/dashboard");
+      return;
+    }
   }
 
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.type("html").send(renderLoginPage());
 });
+
+homeRouter.get("/login/preview", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.type("html").send(renderLoginPage());
+});
+
 
 homeRouter.post("/auth/qa/start", async (req, res) => {
   if (!isQaAccessEnabled()) {

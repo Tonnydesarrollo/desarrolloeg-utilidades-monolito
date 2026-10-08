@@ -51,6 +51,13 @@ test("dashboard entrega JavaScript ejecutable sin errores de sintaxis", async ()
   assert.match(html, /data-trabajos-frame="estatales"/);
   assert.match(html, /data-solventaciones-frame/);
   assert.match(html, /Sistema de Proteccion Civil/);
+  assert.match(html, /<nav class="dashboard-tabs-nav"/);
+  assert.match(html, /class="dashboard-tabs-track"/);
+  assert.match(html, /data-dashboard-tab="calendar"/);
+  assert.match(html, /data-dashboard-tab="capacitaciones"/);
+  assert.match(html, /class="dashboard-tab-btn active"\s+role="tab"\s+aria-selected="true"/);
+  assert.match(html, /class="dashboard-live-pill"/);
+  assert.match(html, /class="dashboard-role-badge"/);
 });
 
 test("perfil de empresa muestra detalle territorial y carga todos los expandibles contraidos", async () => {

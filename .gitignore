@@ -31,3 +31,4 @@ src/modules/jobs/native/casaley/data/*_replica.json
 src/modules/jobs/native/casaley/data/*_to_upload.csv
 src/modules/jobs/native/casaley/data/debug_*.html
 src/modules/jobs/native/pedidos/data/*_replica.json
+stitch-output/

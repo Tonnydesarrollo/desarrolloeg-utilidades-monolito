@@ -1,0 +1,1133 @@
+<% 
+var pagoDerechos = {
+  estatal: {},    // key = estadoId
+  municipal: {}   // key = municipioId
+};
+
+if (data && data.centros) {
+  for (var i = 0; i < data.centros.length; i++) {
+    var ct = data.centros[i];
+    var lines = ct.lineas || [];
+
+    for (var j = 0; j < lines.length; j++) {
+      var ln = lines[j];
+      var desc = String(ln.descripcion || '').toUpperCase().trim();
+      var precioConcepto = Number(ln.precioUnit || ln.subLinea || 0);
+
+      // MUNICIPAL
+      if (
+        desc === 'PAGO DE DERECHOS MUNICIPAL' &&
+        precioConcepto === 0 &&
+        ct.municipio &&
+        ct.municipio.id
+      ) {
+        var mid = ct.municipio.id;
+
+        if (!pagoDerechos.municipal[mid]) {
+          pagoDerechos.municipal[mid] = {
+            nombre: ct.municipio.nombre,
+            escudo: ct.municipio.escudo,
+            precio: Number(ct.precioMunicipal || ct.municipio.precioMunicipal || 0)
+          };
+        }
+      }
+
+      // ESTATAL
+      if (
+        desc === 'PAGO DE DERECHOS ESTATAL' &&
+        precioConcepto === 0 &&
+        ct.estado &&
+        ct.estado.id
+      ) {
+        var eid = ct.estado.id;
+
+        if (!pagoDerechos.estatal[eid]) {
+          pagoDerechos.estatal[eid] = {
+            nombre: ct.estado.nombre,
+            escudo: ct.estado.escudo,
+            precio: Number(ct.precioEstatal || ct.estado.precioEstatal || 0)
+          };
+        }
+      }
+    }
+  }
+}
+%>
+
+<%
+  var _centrosCountFromView = (data && data.centros) ? data.centros.length : 0;
+  var _centrosCountFromCot = (data && data.cotizacion && data.cotizacion.centroDeTrabajoCount)
+    ? data.cotizacion.centroDeTrabajoCount
+    : 0;
+  var _centrosCount = _centrosCountFromView || _centrosCountFromCot;
+  var _tituloBase = (data && data.cotizacion && data.cotizacion.TITULO) ? data.cotizacion.TITULO : "";
+  var _centroNombreFromView = (data && data.centros && data.centros[0]) ? (data.centros[0].sucursal || "") : "";
+  var _centroNombreFromCot = (data && data.cotizacion && data.cotizacion.centroNombre) ? data.cotizacion.centroNombre : "";
+  var _centroNombre = _centroNombreFromView || _centroNombreFromCot;
+  var _nombrePdf = "Cotización - Sergio González Castillo";
+
+  if (_tituloBase) {
+    if (_centrosCount > 1) {
+      _nombrePdf = "COTIZACION " + _tituloBase;
+    } else if (_centrosCount === 1 && _centroNombre) {
+      _nombrePdf = "COTIZACION " + _centroNombre + " " + _tituloBase;
+    } else {
+      _nombrePdf = "COTIZACION " + _tituloBase;
+    }
+  }
+
+  var desgloseSeleccionado = (data && data.cotizacion && Array.isArray(data.cotizacion.desglose))
+    ? data.cotizacion.desglose
+    : [];
+
+  var desgloseCatalogo = {
+    pipc: {
+      tag: "PIPC",
+      titulo: "PIPC (Programa Interno de Protección Civil)",
+      intro: "Proporcionamos un servicio integral para la elaboración, gestión y tramitación del Programa Interno de Protección Civil ante la autoridad competente. El servicio comprende el desarrollo técnico del documento conforme a la normatividad aplicable, la integración y validación de la información requerida, así como el seguimiento puntual del proceso administrativo hasta la obtención de la opinión técnica correspondiente.",
+      detalles: [
+        "Incluye la elaboración del programa y la gestión ante la autoridad de Protección Civil.",
+        "No incluye el pago de derechos correspondientes a la emisión de la opinión favorable."
+      ]
+    },
+    capacitaciones: {
+      tag: "Capacitación",
+      titulo: "Capacitación de Brigadas",
+      intro: "Brindamos un servicio integral de capacitación multifuncional, orientado al fortalecimiento de las capacidades del personal para la prevención y atención de emergencias. El servicio contempla la planeación, impartición y evaluación de los cursos, bajo un enfoque teórico-práctico y conforme a lineamientos técnicos y normativos vigentes en materia de Protección Civil. Al término de cada capacitación, se emite constancia de participación y/o acreditación para los asistentes.",
+      detalles: [],
+      temario: [
+        "Primeros auxilios: Evaluación primaria de la escena, soporte básico de vida (RCP), control de hemorragias, atención de lesiones comunes y estabilización inicial de personas lesionadas.",
+        "Prevención y combate de incendios: Identificación de riesgos, clasificación de fuegos, manejo y uso adecuado de extintores, así como técnicas básicas para el control y supresión de incendios en su fase inicial.",
+        "Evacuación de inmuebles: Organización y funciones de brigadas, diseño y aplicación de rutas de evacuación, establecimiento de puntos de reunión y ejecución de protocolos de actuación ante situaciones de emergencia."
+      ]
+    },
+  };
+
+  var formaPagoValor = (data && data.cotizacion && data.cotizacion.formaPago)
+    ? String(data.cotizacion.formaPago)
+    : "dos_pagos";
+
+  function esPagoUnico(valor) {
+    var normalizado = String(valor || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ");
+
+    return (
+      normalizado === "una exhibicion" ||
+      normalizado === "una sola exhibicion" ||
+      normalizado === "un pago" ||
+      normalizado === "un solo pago" ||
+      normalizado === "single" ||
+      normalizado === "1" ||
+      normalizado === "contado"
+    );
+  }
+
+  var pagoUnico = esPagoUnico(formaPagoValor);
+
+  var anyTieneTienda = false;
+  if (data && data.centros) {
+    for (var ci = 0; ci < data.centros.length; ci++) {
+      if (data.centros[ci] && data.centros[ci].tienda) {
+        anyTieneTienda = true;
+        break;
+      }
+    }
+  }
+%>
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= _nombrePdf %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@1,600;1,700&display=swap" rel="stylesheet">
+    <style>
+      *,*::before,*::after{box-sizing:border-box}
+      @page {
+        size: letter portrait;
+        margin: 5mm;
+      }
+      body{
+        font-family: Arial, Helvetica, sans-serif;
+        color: #222;
+        margin:0;
+        padding:0;
+        background:#f2f4f8;
+        -webkit-font-smoothing:antialiased;
+      }
+      .skip-link{
+        position:absolute;
+        left:-9999px;
+        top:auto;
+        width:1px;
+        height:1px;
+        overflow:hidden;
+        z-index:9999;
+        background:#1a2a3a;
+        color:#fff;
+        padding:8px 16px;
+        border-radius:4px;
+        font-weight:700;
+        text-decoration:none;
+      }
+      .skip-link:focus{
+        left:16px;
+        top:16px;
+        width:auto;
+        height:auto;
+        overflow:visible;
+      }
+      body.portal-shell main.cotizacion-layout,
+      .cotizacion-layout{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        width:100%;
+        max-width:100%;
+        margin:0 auto;
+        padding:18px 20px 48px;
+        box-sizing:border-box;
+      }
+      .cotizacion-toolbar{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:14px;
+        width:100%;
+        max-width:215.9mm;
+        margin:0 auto 16px;
+        padding:10px 16px;
+        background:#ffffff;
+        border:1px solid #d9e2ec;
+        border-radius:10px;
+        box-shadow:0 2px 8px rgba(15,23,42,0.06);
+        box-sizing:border-box;
+        position:sticky;
+        top:12px;
+        z-index:900;
+      }
+      .cotizacion-toolbar__group{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        flex-wrap:wrap;
+      }
+      .cotizacion-toolbar select{
+        padding:6px 12px;
+        border-radius:6px;
+        border:1px solid #cbd5e1;
+        background:#fff;
+        font-size:13px;
+        font-family:inherit;
+        font-weight:500;
+        color:#1e293b;
+        cursor:pointer;
+      }
+      .cotizacion-toolbar select:focus{
+        outline:none;
+        border-color:#5c7f29;
+        box-shadow:0 0 0 2px rgba(92,127,41,0.2);
+      }
+      .cotizacion-toolbar__actions{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        flex-wrap:wrap;
+      }
+      .cotizacion-toolbar button,
+      .cotizacion-toolbar a.toolbar-btn{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:7px 13px;
+        border-radius:6px;
+        font-size:12.5px;
+        font-weight:600;
+        cursor:pointer;
+        text-decoration:none;
+        line-height:1.2;
+        transition:all 150ms ease;
+      }
+      .cotizacion-sidebar{
+        position:fixed;
+        inset:14px auto 14px 14px;
+        width:340px;
+        max-height:calc(100dvh - 28px);
+        background:rgba(255,255,255,0.98);
+        border:1px solid #cbd5e1;
+        border-radius:16px;
+        box-shadow:0 18px 42px rgba(15,23,42,0.22);
+        padding:18px 16px;
+        display:flex;
+        flex-direction:column;
+        gap:14px;
+        overflow-y:auto;
+        z-index:1600;
+        box-sizing:border-box;
+        transform:translateX(calc(-100% - 24px));
+        transition:transform 220ms cubic-bezier(0.16,1,0.3,1);
+      }
+      .cotizacion-sidebar.is-open{
+        transform:translateX(0);
+      }
+      .cotizacion-sidebar[hidden],
+      .cotizacion-drawer-backdrop[hidden]{
+        display:none !important;
+      }
+      .cotizacion-sidebar__top{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        margin-bottom:2px;
+        padding-bottom:10px;
+        border-bottom:1px solid rgba(26,42,58,0.08);
+      }
+      .cotizacion-sidebar__top strong{
+        color:#1f2d3d;
+        font-family:'Montserrat',sans-serif;
+        font-size:0.82rem;
+        font-weight:900;
+        letter-spacing:0.08em;
+        text-transform:uppercase;
+      }
+      .cotizacion-options-fab,
+      .cotizacion-print-fab{
+        display:none !important;
+      }
+      .cotizacion-drawer-backdrop{
+        position:fixed;
+        inset:0;
+        z-index:1500;
+        background:rgba(8,20,46,0.28);
+        backdrop-filter:blur(6px);
+        opacity:0;
+        pointer-events:none;
+        transition:opacity 220ms ease;
+      }
+      .cotizacion-drawer-backdrop.is-open{
+        opacity:1;
+        pointer-events:auto;
+      }
+      body.portal-shell .cotizacion-document,
+      .cotizacion-document{
+        width:100% !important;
+        max-width:215.9mm !important;
+        display:flex !important;
+        justify-content:center !important;
+        margin:0 auto !important;
+        padding:0 !important;
+        box-sizing:border-box !important;
+      }
+      body.portal-shell .cotizacion-document .page,
+      .cotizacion-document .page,
+      .page{
+        width:100% !important;
+        max-width:215.9mm !important;
+        margin:0 auto !important;
+        padding:8mm 10mm 16mm !important;
+        background:#fff !important;
+        border-radius:6px !important;
+        position:relative !important;
+        display:flex !important;
+        flex-direction:column !important;
+        box-shadow:0 6px 18px rgba(0,0,0,0.08) !important;
+        overflow:hidden !important;
+        box-sizing:border-box !important;
+      }
+      .content{position:relative;z-index:1;padding-bottom:0;flex:1}
+
+      /* HEADER */
+      .header-castillo{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        margin-bottom:12px;
+        border-bottom:3px solid #9BBB59;
+        padding-bottom:10px;
+      }
+      .header-col{flex:1;min-width:0;padding:0 5px;}
+      .header-left{text-align:left;}
+      .header-center{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        text-align:center;
+      }
+      .header-right{text-align:right;font-size:0.75rem;}
+
+      .logo-castillo-banner{
+        max-height:55px;
+        max-width:240px;
+        object-fit:contain;
+        display:block;
+        margin:0 auto 4px;
+      }
+      .proveedor-block{font-size:0.75rem;margin-top:2px;}
+      .proveedor-nombre-header{font-weight:700;font-size:0.80rem;text-transform:uppercase;color:#111;}
+      .proveedor-rfc{font-size:0.70rem;color:#444;font-weight:600;}
+
+      .empresa-logo{max-height:48px;max-width:150px;margin:0 auto 4px;object-fit:contain;display:block;}
+      .empresa-nombre{font-weight:700;font-size:0.86rem;text-transform:uppercase;color:#2e4a1a;}
+      .folio-chip{display:inline-block;background:#9BBB59;color:#000;font-weight:700;padding:3px 8px;border-radius:4px;font-size:0.70rem;text-transform:uppercase;margin-bottom:4px}
+      .folio-num{font-weight:700;font-size:0.9rem;}
+      .fecha-label{margin-top:4px;}
+
+      /* TABLA DE DETALLES */
+      table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-bottom:15px;border:none;table-layout:fixed;}
+      thead{display:table-header-group;}
+      tbody{display:table-row-group;}
+      tr{page-break-inside:avoid;break-inside:avoid;}
+      thead th{
+        background:#f2f5ea;
+        border:none;
+        border-bottom:2px solid #9BBB59;
+        border-top:1px solid #d5dfc5;
+        border-right:1px solid #d5dfc5;
+        padding:7px 4px;
+        text-transform:uppercase;
+        font-size:0.60rem;
+        line-height:1.0;
+        letter-spacing:0.03em;
+        white-space:normal;
+        word-break:keep-all;
+        color:#222;
+        font-weight:700;
+        text-align:center !important;
+        vertical-align:middle !important;
+      }
+      thead th:last-child{border-right:none;}
+      th,td{border:none;padding:6px;vertical-align:top;}
+      tbody tr:nth-child(odd){background:#fafbf8}
+      tbody td{
+        border-bottom:1px solid #eee;
+        border-right:1px solid #f0f0f0;
+      }
+      tbody td:last-child{border-right:none;}
+
+      <% if (anyTieneTienda) { %>
+      col.tienda { width:8%; }
+      col.sucursal { width:17%; }
+      col.desc { width:31%; }
+      col.cantidad { width:7%; }
+      col.precioUnit { width:12%; }
+      col.subtotal { width:10%; }
+      col.iva { width:8%; }
+      col.total { width:8%; }
+      <% } else { %>
+      col.sucursal { width:22%; }
+      col.desc { width:31%; }
+      col.cantidad { width:7%; }
+      col.precioUnit { width:12%; }
+      col.subtotal { width:10%; }
+      col.iva { width:9%; }
+      col.total { width:9%; }
+      <% } %>
+
+      .desc-cell {
+        display: block;
+        overflow: visible;
+        text-overflow: clip;
+        word-break:break-word;
+        font-size:0.72rem;
+        line-height:1.15;
+      }
+      .tienda-cell{font-weight:600;font-size:0.76rem}
+      .sucursal-cell{font-weight:600;font-size:0.78rem}
+      .sucursal-domicilio{display:none;font-size:0.62rem;color:#666;margin-top:4px;font-weight:500;line-height:1.35;}
+      .tipo-linea{font-size:0.64rem;color:#666;margin-top:4px}
+      td.monto{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right;font-size:0.76rem;font-weight:500;}
+
+      /* TOTALES */
+      .bottom-section{
+        display:flex;
+        justify-content:flex-end;
+        align-items:flex-start;
+        margin-top:10px;
+        page-break-inside:avoid;
+      }
+      .totales-wrapper{
+        width:320px;
+        max-width:100%;
+        text-align:right;
+      }
+      .totales{font-size:0.78rem;width:100%;}
+      .totales-row{display:flex;justify-content:space-between;padding:4px 0}
+      .totales-label{color:#444;font-size:0.76rem;padding-right:12px;white-space:nowrap}
+      .totales-value{text-align:right;min-width:100px;font-variant-numeric:tabular-nums;font-size:0.8rem;font-weight:600;}
+      .totales-total{
+        border-top:2px solid #9BBB59;
+        margin-top:6px;
+        padding-top:6px;
+        font-weight:700;
+        font-size:0.9rem;
+      }
+      .importe-letra{
+        text-align:left;
+        white-space:normal;
+        font-size:0.74rem;
+        margin-top:8px;
+        padding:4px 0;
+        border-top:1px solid #ddd;
+      }
+
+      /* BANNERS OLIVE GREEN - FORMATO SERGIO GONZALEZ CASTILLO */
+      .banner-seccion-castillo {
+        background-color: #9BBB59;
+        border-left: 8px solid #000;
+        color: #000;
+        font-weight: 800;
+        font-size: 0.85rem;
+        text-align: center;
+        text-transform: uppercase;
+        padding: 5px 12px;
+        margin: 16px 0 8px;
+        letter-spacing: 0.05em;
+        page-break-after: avoid;
+        break-after: avoid;
+      }
+      .lista-castillo {
+        list-style: none;
+        padding-left: 4px;
+        margin: 6px 0 14px;
+      }
+      .lista-castillo li {
+        margin-bottom: 7px;
+        font-size: 0.76rem;
+        line-height: 1.45;
+        color: #111;
+      }
+      .lista-castillo li strong {
+        font-weight: 700;
+        color: #000;
+      }
+
+      /* BLOQUE ATENTAMENTE Y FIRMA */
+      .bloque-atentamente {
+        text-align: center;
+        margin-top: 18px;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      .atentamente-titulo {
+        font-weight: 800;
+        font-size: 0.88rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 4px;
+        color: #000;
+      }
+      .firma-contenedor-castillo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 2px auto;
+        min-height: 70px;
+      }
+      .firma-img-castillo {
+        display: block;
+        max-height: 75px;
+        width: auto;
+        object-fit: contain;
+      }
+      .firma-pie-castillo {
+        margin-top: 4px;
+      }
+      .firma-nombre-castillo {
+        font-weight: 800;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        color: #000;
+        letter-spacing: 0.03em;
+      }
+      .firma-puesto-castillo {
+        font-weight: 600;
+        font-size: 0.72rem;
+        color: #333;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-top: 2px;
+      }
+
+      /* FOOTER */
+      .footer-bar-castillo {
+        position: relative;
+        margin-top: auto;
+        left: 0;
+        right: 0;
+        background: #fff;
+        border-top: 2px solid #9BBB59;
+        color: #222;
+        font-size: 0.65rem;
+        padding: 6px 10px;
+        text-align: center;
+        z-index: 2;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      .footer-bar-castillo .footer-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        line-height: 1.35;
+      }
+
+      .no-print{display:block}
+      body.is-pdf-export .skip-link,
+      body.is-pdf-export .no-print,
+      body.is-pdf-export .cotizacion-options-fab,
+      body.is-pdf-export .cotizacion-print-fab,
+      body.is-pdf-export .cotizacion-drawer-backdrop,
+      body.is-pdf-export .cotizacion-sidebar,
+      body.is-pdf-export .cotizacion-toolbar{
+        display:none !important;
+      }
+
+      /* PRINT MEDIA */
+      @media print{
+        .skip-link, .no-print{display:none!important}
+        html,body,body.portal-shell{background:#fff!important;min-height:0!important}
+        *,*::before,*::after{filter:none!important;backdrop-filter:none!important;text-shadow:none!important;animation:none!important;transition:none!important}
+        *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
+        .portal-app-topbar,.portal-app-drawer,.portal-live-badge,.portal-refresh-fab{display:none!important}
+        .cotizacion-sidebar,.cotizacion-toolbar,.cotizacion-options-fab,.cotizacion-print-fab,.cotizacion-drawer-backdrop{display:none!important}
+        body.portal-shell main.cotizacion-layout,
+        .cotizacion-layout{display:block!important;padding:0!important}
+        body.portal-shell .cotizacion-document,
+        .cotizacion-document{display:block!important;max-width:none!important}
+        body.portal-shell .cotizacion-document .page,
+        .cotizacion-document .page,
+        .page{margin:0!important;box-shadow:none!important;border-radius:0!important;padding:5mm 5mm 8mm!important;display:block!important;overflow:visible!important;max-width:none!important}
+        .content{display:block!important;overflow:visible!important}
+        html,body{font-size:10px} 
+        table{font-size:0.60rem}
+        thead th{padding:5px 3px;font-size:0.56rem;line-height:1.02;letter-spacing:0.02em;text-align:center !important;vertical-align:middle !important}
+        td{padding:4px 3px}
+        .banner-seccion-castillo{
+          background-color:#9BBB59 !important;
+          -webkit-print-color-adjust:exact !important;
+          print-color-adjust:exact !important;
+          padding:4px 8px !important;
+          font-size:0.75rem !important;
+          margin:12px 0 6px !important;
+        }
+        .lista-castillo li{font-size:0.68rem !important;line-height:1.35 !important;}
+        .footer-bar-castillo{border-top:1.5px solid #9BBB59 !important;font-size:0.58rem !important;padding:4px 6px !important;}
+      }
+
+      @media (max-width:720px){
+        body.portal-shell main.cotizacion-layout,
+        .cotizacion-layout{padding:8px 8px 32px !important;}
+        .cotizacion-toolbar{margin-bottom:12px;padding:10px 12px;position:static;}
+        .cotizacion-toolbar__group,
+        .cotizacion-toolbar__actions{width:100%;}
+        .cotizacion-toolbar select{width:100%;}
+        .cotizacion-toolbar__actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+        .header-castillo{flex-direction:column; text-align: center;}
+        .header-left, .header-center, .header-right{text-align:center; margin-bottom: 8px;}
+        .cotizacion-sidebar{width:calc(100vw - 16px);inset:8px auto 8px 8px;max-height:calc(100dvh - 16px);overflow:auto;padding:14px;}
+        .bottom-section{justify-content:stretch;}
+        .totales-wrapper{width:100%;text-align:left;}
+      }
+
+      <% if (typeof data !== "undefined" && data) { %>
+        <% if (data.mostrarCodigo === true) { %>
+          .catalogo-codigo { display: block !important; }
+        <% } else { %>
+          .catalogo-codigo { display: none !important; }
+        <% } %>
+        <% if (data.mostrarDescripcion === true) { %>
+          .catalogo-descripcion { display: block !important; }
+        <% } else { %>
+          .catalogo-descripcion { display: none !important; }
+        <% } %>
+        <% if (data.mostrarDireccion === true) { %>
+          .sucursal-domicilio { display: block !important; }
+        <% } else { %>
+          .sucursal-domicilio { display: none !important; }
+        <% } %>
+      <% } %>
+    </style>
+    <link rel="stylesheet" href="/ui/portal-shell.css?v=20260831b" />
+  </head>
+
+  <body class="portal-shell portal-cotizaciones <%= (typeof data !== "undefined" && data && data.isPdfExport) ? "is-pdf-export" : "" %>">
+    <% function fmtMoney(v){ var n = Number(v||0); if(!isFinite(n)) n=0; return n.toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2}); } %>
+    <%
+      function fmtDate(v) {
+        var text = String(v || '').trim();
+        if (!text) return '';
+        var isoLike = text.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+        if (isoLike) {
+          return isoLike[3].padStart(2, '0') + '/' + isoLike[2].padStart(2, '0') + '/' + isoLike[1];
+        }
+        var slash = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+        if (slash) {
+          var a = Number(slash[1]);
+          var b = Number(slash[2]);
+          var year = slash[3];
+          var month = a > 12 && b <= 12 ? b : a;
+          var day = a > 12 && b <= 12 ? a : b;
+          return String(day).padStart(2, '0') + '/' + String(month).padStart(2, '0') + '/' + year;
+        }
+        var date = new Date(text);
+        if (!isNaN(date.getTime())) {
+          return new Intl.DateTimeFormat('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+        }
+        return text;
+      }
+    %>
+
+    <% if (!(typeof data !== "undefined" && data && data.isPdfExport)) { %>
+    <a class="skip-link no-print" href="#cotizaciones-main">Saltar al contenido principal</a>
+    <% } %>
+
+    <div class="cotizacion-drawer-backdrop no-print" data-cotizacion-drawer-backdrop hidden></div>
+    <aside id="cotizacion-options" class="cotizacion-sidebar no-print" data-cotizacion-drawer role="dialog" aria-modal="true" aria-label="Opciones de la cotizacion" hidden>
+      <div class="cotizacion-sidebar__top">
+        <strong>Opciones</strong>
+        <button class="button ghost button--compact" type="button" data-cotizacion-drawer-close>Cerrar</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+        <a class="pill" href="/dashboard/general" style="text-decoration:none;">Volver al dashboard</a>
+      </div>
+
+      <div class="desglose-toolbar no-print">
+        <div class="desglose-card" style="background:#f8fafc;padding:12px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:12px;">
+          <h2 style="font-size:13px;margin:0 0 8px;text-transform:uppercase;color:#1e293b;">Alcance de la cotización</h2>
+          <label for="cotizacionCentroSelect" style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Generar documento / PDF:</label>
+          <select id="cotizacionCentroSelect" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:13px;font-family:inherit;">
+            <option value="">📋 Cotización completa (<%= (data.todosLosCentros || []).length %> sucursales)</option>
+            <% (data.todosLosCentros || []).forEach(function(c) { %>
+              <option value="<%= c.key %>" <%= (data.selectedCentroId === c.key || data.selectedCentroId === c.id) ? 'selected' : '' %>>
+                🏢 <%= c.nombre %><%= c.tienda ? ' (' + c.tienda + ')' : '' %>
+              </option>
+            <% }); %>
+          </select>
+
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+            <button type="button" class="button button--compact" onclick="window.print()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;font-size:13px;background:#5c7f29;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+              🖨 Imprimir / Guardar PDF (<%= (data && data.isSingleCenterFiltered) ? 'Sucursal' : 'Completa' %>)
+            </button>
+            <a id="btnDescargarPdfDirecto" class="button ghost button--compact" href="/cotizaciones/cotizacion/<%= data.cotizacion.FOLIO %>/pdf<%= data.selectedCentroId ? '?centro=' + encodeURIComponent(data.selectedCentroId) : '' %>" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;font-size:13px;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;color:#1e293b;">
+              ⬇ Descargar PDF directo
+            </a>
+            <% if ((data.todosLosCentros || []).length > 1) { %>
+            <a id="btnDescargarTodasSucursalesZip" class="button button--compact" href="/cotizaciones/cotizacion/<%= data.cotizacion.FOLIO %>/zip" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;font-size:13px;text-decoration:none;background:#2d4a22;color:#fff;border-radius:6px;font-weight:600;">
+              📦 Descargar todas las sucursales (ZIP)
+            </a>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="desglose-card" style="background:#f8fafc;padding:12px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:12px;">
+          <h2 style="font-size:13px;margin:0 0 8px;text-transform:uppercase;color:#1e293b;">Opciones de visualización</h2>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+              <input type="checkbox" id="desgloseCatalogoCodigo">
+              <strong>Mostrar Código</strong>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+              <input type="checkbox" id="desgloseCatalogoDescripcion">
+              <strong>Mostrar Descripción ampliada</strong>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+              <input type="checkbox" id="mostrarDireccionSucursal">
+              <strong>Mostrar Dirección de sucursal</strong>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+              <input type="checkbox" id="desglosePipc">
+              <strong>Desglose PIPC</strong>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+              <input type="checkbox" id="desgloseCapacitaciones">
+              <strong>Desglose Capacitaciones</strong>
+            </label>
+          </div>
+        </div>
+
+        <div class="forma-pago-card" style="background:#f8fafc;padding:12px;border-radius:10px;border:1px solid #e2e8f0;">
+          <h2 style="font-size:13px;margin:0 0 8px;text-transform:uppercase;color:#1e293b;">Forma de pago</h2>
+          <select id="formaPagoSelect" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:13px;font-family:inherit;">
+            <option value="dos_pagos" <%= !pagoUnico ? 'selected' : '' %>>Dos pagos (50% anticipo / 50% al entregar)</option>
+            <option value="una_exhibicion" <%= pagoUnico ? 'selected' : '' %>>Una sola exhibición</option>
+          </select>
+        </div>
+      </div>
+    </aside>
+
+    <main id="cotizaciones-main" class="cotizacion-layout" role="main" aria-label="Cotizacion">
+      <% if (data && !data.isPdfExport) { %>
+        <div class="cotizacion-toolbar no-print">
+          <div class="cotizacion-toolbar__group">
+            <span style="font-weight:700;font-size:13px;color:#1e293b;">📋 Alcance:</span>
+            <select id="cotizacionCentroSelectTopBar">
+              <option value="">📋 Cotización completa (<%= (data.todosLosCentros || []).length %> sucursales)</option>
+              <% (data.todosLosCentros || []).forEach(function(c) { %>
+                <option value="<%= c.key %>" <%= (data.selectedCentroId === c.key || data.selectedCentroId === c.id) ? 'selected' : '' %>>
+                  🏢 <%= c.nombre %><%= c.tienda ? ' (' + c.tienda + ')' : '' %>
+                </option>
+              <% }); %>
+            </select>
+            <% if (data.isSingleCenterFiltered) { %>
+              <span style="background:#f2f5ea;color:#395217;font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px;border:1px solid #c8d8b2;white-space:nowrap;">
+                Total sucursal: $<%= Number(data.totales.totalGlobal).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %> MXN
+              </span>
+            <% } %>
+          </div>
+          <div class="cotizacion-toolbar__actions">
+            <button type="button" onclick="window.print()" style="background:#5c7f29;color:#fff;border:none;box-shadow:0 2px 6px rgba(92,127,41,0.3);">
+              🖨 Imprimir / PDF <%= (data.isSingleCenterFiltered) ? '(Sucursal)' : '(Completa)' %>
+            </button>
+            <a id="btnDescargarPdfTopBar" class="toolbar-btn" href="/cotizaciones/cotizacion/<%= data.cotizacion.FOLIO %>/pdf<%= data.selectedCentroId ? '?centro=' + encodeURIComponent(data.selectedCentroId) : '' %>" target="_blank" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;">
+              ⬇ Descargar PDF
+            </a>
+            <% if ((data.todosLosCentros || []).length > 1) { %>
+              <a id="btnDescargarTodasSucursalesZipTopBar" class="toolbar-btn" href="/cotizaciones/cotizacion/<%= data.cotizacion.FOLIO %>/zip" target="_blank" style="background:#2d4a22;color:#fff;border:none;box-shadow:0 2px 6px rgba(45,74,34,0.3);">
+                📦 Descargar todas (ZIP)
+              </a>
+            <% } %>
+            <button type="button" data-cotizacion-drawer-open aria-controls="cotizacion-options" aria-expanded="false" style="background:#0f172a;color:#fff;border:none;box-shadow:0 2px 6px rgba(15,23,42,0.25);">
+              ☰ Opciones
+            </button>
+          </div>
+        </div>
+      <% } %>
+
+      <section class="cotizacion-document">
+        <div class="page">
+          <div class="content">
+
+            <!-- HEADER FORMATO CASTILLO -->
+            <div class="header-castillo">
+              <!-- IZQUIERDA: EMPRESA CLIENTE -->
+              <div class="header-col header-left">
+                <% if (data.logoCliente) { %>
+                  <img src="<%= data.logoCliente %>" class="empresa-logo" alt="Logo empresa cliente">
+                <% } %>
+                <div class="empresa-nombre">
+                  <%= data.empresa && data.empresa.razonSocial ? data.empresa.razonSocial : (data.empresa && data.empresa.nombreComercial ? data.empresa.nombreComercial : '') %>
+                </div>
+              </div>
+
+              <!-- CENTRO: SERGIO GONZALEZ CASTILLO -->
+              <div class="header-col header-center">
+                <img class="logo-castillo-banner" src="<%= data.logoEmisor %>" alt="Sergio González Castillo">
+                <div class="proveedor-block">
+                  <div class="proveedor-nombre-header">DR. SERGIO GONZALEZ CASTILLO</div>
+                  <div class="proveedor-rfc">RFC: GOCS580720F24</div>
+                </div>
+              </div>
+
+              <!-- DERECHA: FOLIO Y FECHA -->
+              <div class="header-col header-right">
+                <div class="folio-chip">Cotización</div>
+                <div>
+                  Folio: <span class="folio-num"><%= data.cotizacion && data.cotizacion.FOLIO ? data.cotizacion.FOLIO : '' %></span>
+                </div>
+                <div class="fecha-label">
+                  Fecha: <strong><%= fmtDate(data.cotizacion && data.cotizacion.FECHA) %></strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- TABLA DE CONCEPTOS -->
+            <table>
+              <colgroup>
+                <% if (anyTieneTienda) { %>
+                  <col class="tienda">
+                  <col class="sucursal">
+                <% } else { %>
+                  <col class="sucursal">
+                <% } %>
+                <col class="desc">
+                <col class="cantidad">
+                <col class="precioUnit">
+                <col class="subtotal">
+                <col class="iva">
+                <col class="total">
+              </colgroup>
+              <thead>
+                <tr>
+                  <% if (anyTieneTienda) { %>
+                    <th><span>Tienda</span></th>
+                  <% } %>
+                  <th><span>Sucursal</span></th>
+                  <th><span>Descripción</span></th>
+                  <th><span>Cant.</span></th>
+                  <th><span>P. Unitario</span></th>
+                  <th><span>SubTotal</span></th>
+                  <th><span>IVA</span></th>
+                  <th><span>Total</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <% (data.centros || []).forEach(function(c) { %>
+                  <% (c.lineas || []).forEach(function(l) { %>
+                    <tr>
+                      <% if (anyTieneTienda) { %>
+                        <td class="tienda-cell"><%= c.tienda || '' %></td>
+                      <% } %>
+                      <td class="sucursal-cell">
+                        <div><%= c.sucursal || '' %></div>
+                        <% if (c.domicilio) { %>
+                          <div class="sucursal-domicilio"><%= c.domicilio %></div>
+                        <% } %>
+                      </td>
+                      <td>
+                        <span class="desc-cell"><%= l.descripcion %></span>
+                        <% if (l.codigo) { %>
+                          <span class="catalogo-codigo" style="font-size:0.62rem;color:#555;font-family:monospace;display:none;">[<%= l.codigo %>]</span>
+                        <% } %>
+                        <% if (l.catalogoDescripcion) { %>
+                          <span class="catalogo-descripcion" style="font-size:0.62rem;color:#666;font-style:italic;display:none;"><%= l.catalogoDescripcion %></span>
+                        <% } %>
+                      </td>
+                      <td style="text-align:center;"><%= l.cantidad %></td>
+                      <td class="monto">$ <%= fmtMoney(l.precioUnit) %></td>
+                      <td class="monto">$ <%= fmtMoney(l.subLinea) %></td>
+                      <td class="monto">$ <%= fmtMoney(l.ivaLinea) %></td>
+                      <td class="monto" style="font-weight:700;">$ <%= fmtMoney(l.totalLinea) %></td>
+                    </tr>
+                  <% }); %>
+                <% }); %>
+              </tbody>
+            </table>
+
+            <!-- RESUMEN TOTAL -->
+            <div class="bottom-section">
+              <div class="totales-wrapper">
+                <div class="totales">
+                  <div class="totales-row">
+                    <div class="totales-label">SubTotal general:</div>
+                    <div class="totales-value">$ <%= fmtMoney(data.totales && data.totales.subTotalGlobal) %></div>
+                  </div>
+                  <div class="totales-row">
+                    <div class="totales-label">IVA general:</div>
+                    <div class="totales-value">$ <%= fmtMoney(data.totales && data.totales.ivaGlobal) %></div>
+                  </div>
+                  <div class="totales-row totales-total">
+                    <div class="totales-label">Total general:</div>
+                    <div class="totales-value">$ <%= fmtMoney(data.totales && data.totales.totalGlobal) %></div>
+                  </div>
+                  <div class="importe-letra">
+                    <strong>Importe con letra:</strong> <%= (data.totales && data.totales.totalEnLetra) ? data.totales.totalEnLetra : '' %>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- DESGLOSE OPCIONAL (PIPC / CAPACITACIONES) SI ESTA MARCADO -->
+            <div class="desglose-preview" id="desglosePreview">
+              <% (desgloseSeleccionado || []).forEach(function(key) {
+                   var item = desgloseCatalogo[key];
+                   if (!item) return; %>
+                <div style="background:#fdfefb;border:1px solid #d5dfc5;border-radius:6px;padding:8px 12px;margin:10px 0;">
+                  <strong style="color:#2e4a1a;font-size:0.78rem;text-transform:uppercase;"><%= item.titulo %></strong>
+                  <% if (item.intro) { %><p style="font-size:0.72rem;margin:4px 0;line-height:1.4;"><%= item.intro %></p><% } %>
+                  <% if (item.temario && item.temario.length) { %>
+                    <ul style="margin:4px 0 0;padding-left:16px;font-size:0.70rem;line-height:1.35;">
+                      <% item.temario.forEach(function(t) { %>
+                        <li><%= t %></li>
+                      <% }); %>
+                    </ul>
+                  <% } %>
+                </div>
+              <% }); %>
+            </div>
+
+            <!-- SECCION CONDICIONES - FORMATO SERGIO GONZALEZ CASTILLO -->
+            <div class="banner-seccion-castillo">CONDICIONES</div>
+            <ul class="lista-castillo" id="condicionesBlock">
+              <% if (pagoUnico) { %>
+                <li>• <strong>Se Requiere Pago En Una Sola Exhibición Antes De Iniciar Los Trabajos.</strong></li>
+              <% } else { %>
+                <li>• <strong>Se Requiere Pago De Anticipo Del 50% Antes De Iniciar Los Trabajos Y El Resto Al Entregar en Tienda.</strong></li>
+              <% } %>
+            </ul>
+
+            <!-- SECCION GARANTIAS - FORMATO SERGIO GONZALEZ CASTILLO -->
+            <div class="banner-seccion-castillo">GARANTIAS</div>
+            <ul class="lista-castillo">
+              <li>
+                • <strong>COMPLETA,</strong> en el caso de cualquier aclaración ante las autoridades correspondientes por los trabajos realizados. Me hago responsable de las mismas hasta llegar al total cumplimiento normativo y satisfacción para su representada.
+              </li>
+              <li>
+                • <strong>CONFIDENCIALIDAD DE LA INFORMACION.</strong> Privacidad de los datos, resultados y conclusiones de cualquier trabajo realizado en sus instalaciones.
+              </li>
+            </ul>
+
+            <!-- BLOQUE ATENTAMENTE Y FIRMA -->
+            <div class="bloque-atentamente">
+              <div class="atentamente-titulo">ATENTAMENTE</div>
+              <div class="firma-contenedor-castillo">
+                <% if (data.firma && data.firma.firmaUrl) { %>
+                  <img src="<%= data.firma.firmaUrl %>" class="firma-img-castillo" alt="Firma Dr. Sergio González Castillo">
+                <% } else { %>
+                  <img src="/img/firma_sergio_castillo.png" class="firma-img-castillo" alt="Firma Dr. Sergio González Castillo">
+                <% } %>
+              </div>
+              <div class="firma-pie-castillo">
+                <div class="firma-nombre-castillo">DR. SERGIO GONZALEZ CASTILLO</div>
+                <div class="firma-puesto-castillo">DIRECTOR GENERAL</div>
+              </div>
+            </div>
+
+          </div> <!-- .content -->
+
+          <!-- FOOTER FORMATO CASTILLO -->
+          <div class="footer-bar-castillo">
+            <div class="footer-inner">
+              <div>CALLE: MISION DE CARMELO N° 2602, FRACC. CAPISTRANO, CULIACAN, SINALOA, C.P.80194</div>
+              <div>TEL: 6673403135 · Email: desarrolloeg@gmail.com</div>
+            </div>
+          </div>
+        </div> <!-- .page -->
+      </section>
+    </main>
+
+    <% if (!(typeof data !== "undefined" && data && data.isPdfExport)) { %>
+      <script>
+        (function(){
+          var drawer = document.querySelector('[data-cotizacion-drawer]');
+          var openButtons = Array.from(document.querySelectorAll('[data-cotizacion-drawer-open]'));
+          var closeTargets = Array.from(document.querySelectorAll('[data-cotizacion-drawer-close]'));
+          var backdrop = document.querySelector('[data-cotizacion-drawer-backdrop]');
+          var closeTimer = null;
+          if (!drawer || openButtons.length === 0) return;
+
+          function openDrawer(){
+            if (closeTimer) window.clearTimeout(closeTimer);
+            drawer.hidden = false;
+            drawer.removeAttribute('inert');
+            if (backdrop) backdrop.hidden = false;
+            document.body.classList.add('cotizacion-drawer-open');
+            openButtons.forEach(function(btn){ btn.setAttribute('aria-expanded', 'true'); });
+            requestAnimationFrame(function(){
+              drawer.classList.add('is-open');
+              if (backdrop) backdrop.classList.add('is-open');
+              var closeButton = drawer.querySelector('[data-cotizacion-drawer-close]');
+              if (closeButton) closeButton.focus();
+            });
+          }
+
+          function closeDrawer(){
+            drawer.classList.remove('is-open');
+            if (backdrop) backdrop.classList.remove('is-open');
+            document.body.classList.remove('cotizacion-drawer-open');
+            drawer.setAttribute('inert', '');
+            openButtons.forEach(function(btn){ btn.setAttribute('aria-expanded', 'false'); });
+            closeTimer = window.setTimeout(function(){
+              drawer.hidden = true;
+              if (backdrop) backdrop.hidden = true;
+              closeTimer = null;
+            }, 220);
+          }
+
+          openButtons.forEach(function(btn){ btn.addEventListener('click', openDrawer); });
+          closeTargets.forEach(function(btn){ btn.addEventListener('click', closeDrawer); });
+          if (backdrop) backdrop.addEventListener('click', closeDrawer);
+          document.addEventListener('keydown', function(event){
+            if (event.key === 'Escape' && !drawer.hidden) closeDrawer();
+          });
+          drawer.setAttribute('inert', '');
+        })();
+
+        (function() {
+          var desglosePipc = document.getElementById('desglosePipc');
+          var desgloseCapacitaciones = document.getElementById('desgloseCapacitaciones');
+          var desgloseCatalogoCodigo = document.getElementById('desgloseCatalogoCodigo');
+          var desgloseCatalogoDescripcion = document.getElementById('desgloseCatalogoDescripcion');
+          var mostrarDireccionSucursal = document.getElementById('mostrarDireccionSucursal');
+          var formaPagoSelect = document.getElementById('formaPagoSelect');
+          var centroSelect = document.getElementById('cotizacionCentroSelect');
+          var centroSelectTopBar = document.getElementById('cotizacionCentroSelectTopBar');
+
+          var currentParams = new URLSearchParams(window.location.search);
+
+          if (desglosePipc) {
+            var rawD = (currentParams.get('desglose') || '').toLowerCase();
+            desglosePipc.checked = currentParams.get('pipc') === '1' || rawD.includes('pipc');
+          }
+          if (desgloseCapacitaciones) {
+            var rawD2 = (currentParams.get('desglose') || '').toLowerCase();
+            desgloseCapacitaciones.checked = currentParams.get('capacitaciones') === '1' || currentParams.get('capacitacion') === '1' || rawD2.includes('capacitac');
+          }
+          if (desgloseCatalogoCodigo) {
+            desgloseCatalogoCodigo.checked = currentParams.get('codigo') === '1' || currentParams.get('mostrarCodigo') === '1';
+          }
+          if (desgloseCatalogoDescripcion) {
+            desgloseCatalogoDescripcion.checked = currentParams.get('descripcion') === '1' || currentParams.get('mostrarDescripcion') === '1';
+          }
+          if (mostrarDireccionSucursal) {
+            mostrarDireccionSucursal.checked = currentParams.get('direccion') === '1' || currentParams.get('mostrarDireccion') === '1';
+          }
+
+          function applyChanges() {
+            var params = new URLSearchParams(window.location.search);
+
+            if (formaPagoSelect) {
+              if (formaPagoSelect.value === 'una_exhibicion') params.set('formaPago', 'una_exhibicion');
+              else params.delete('formaPago');
+            }
+
+            var arr = [];
+            if (desglosePipc && desglosePipc.checked) arr.push('pipc');
+            if (desgloseCapacitaciones && desgloseCapacitaciones.checked) arr.push('capacitaciones');
+            if (arr.length > 0) params.set('desglose', arr.join(','));
+            else params.delete('desglose');
+            params.delete('pipc');
+            params.delete('capacitaciones');
+            params.delete('capacitacion');
+
+            if (desgloseCatalogoCodigo) {
+              if (desgloseCatalogoCodigo.checked) params.set('codigo', '1');
+              else params.delete('codigo');
+            }
+            if (desgloseCatalogoDescripcion) {
+              if (desgloseCatalogoDescripcion.checked) params.set('descripcion', '1');
+              else params.delete('descripcion');
+            }
+            if (mostrarDireccionSucursal) {
+              if (mostrarDireccionSucursal.checked) params.set('direccion', '1');
+              else params.delete('direccion');
+            }
+
+            var targetCentro = (centroSelectTopBar ? centroSelectTopBar.value : '') || (centroSelect ? centroSelect.value : '');
+            if (targetCentro) params.set('centro', targetCentro);
+            else params.delete('centro');
+
+            params.delete('autoprint');
+            window.location.search = params.toString();
+          }
+
+          if (formaPagoSelect) formaPagoSelect.addEventListener('change', applyChanges);
+          if (desglosePipc) desglosePipc.addEventListener('change', applyChanges);
+          if (desgloseCapacitaciones) desgloseCapacitaciones.addEventListener('change', applyChanges);
+          if (desgloseCatalogoCodigo) desgloseCatalogoCodigo.addEventListener('change', applyChanges);
+          if (desgloseCatalogoDescripcion) desgloseCatalogoDescripcion.addEventListener('change', applyChanges);
+          if (mostrarDireccionSucursal) mostrarDireccionSucursal.addEventListener('change', applyChanges);
+          if (centroSelect) centroSelect.addEventListener('change', applyChanges);
+          if (centroSelectTopBar) centroSelectTopBar.addEventListener('change', applyChanges);
+
+          <% if (typeof autoprint !== "undefined" && autoprint) { %>
+          window.addEventListener('load', function() {
+            setTimeout(function() { window.print(); }, 400);
+          });
+          <% } %>
+        })();
+      </script>
+      <script src="/ui/portal-shell.js?v=20260901b" defer></script>
+    <% } %>
+  </body>
+</html>
+

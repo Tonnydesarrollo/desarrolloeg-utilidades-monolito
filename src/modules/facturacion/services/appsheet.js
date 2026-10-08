@@ -506,15 +506,18 @@ export async function mapaProveedores(forceFresh = false) {
     : await leerTablaAppSheetCacheadaSuave("PROVEEDORES");
   const map = {};
   rows.forEach(r => {
-    map[r["Row ID"] || r.ID] = {
-      id: r["Row ID"] || r.ID,
+    const provId = String(r["Row ID"] || r.ID || "");
+    const nombre = String(r.NOMBRE || "");
+    const esCastillo = provId === "EiHiUQ9YHf4mA-C7L_ziyc" || nombre.toUpperCase().includes("SERGIO GONZALEZ CASTILLO");
+    map[provId] = {
+      id: provId,
       nombre: r.NOMBRE,
       banco: r.BANCO,
       cuenta: r["CUENTA BANCARIA"],
       clabe: r.CLABE,
-      firmaNombre: r["PIE DE FIRMA"],
-      firmaPuesto: r.PUESTO,
-      firmaUrl: r.FIRMA || ""
+      firmaNombre: r["PIE DE FIRMA"] || (esCastillo ? "DR. SERGIO GONZALEZ CASTILLO" : ""),
+      firmaPuesto: r.PUESTO || (esCastillo ? "DIRECTOR GENERAL" : ""),
+      firmaUrl: r.FIRMA || (esCastillo ? "/img/firma_sergio_castillo.png" : "")
     };
   });
   return map;
@@ -1005,11 +1008,20 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
     // cabecera. Todos los centros se conservan en CONCEPTOS_VARIOS_CT.
     persistedQuoteRow.CONCEPTOS = "";
   }
-  const quoteResult = await writeAppSheetRows(
-    "COTIZACIONES_VARIOS_CT",
-    quoteAction,
-    [persistedQuoteRow],
-  );
+  let quoteResult;
+  try {
+    quoteResult = await writeAppSheetRows(
+      "COTIZACIONES_VARIOS_CT",
+      quoteAction,
+      [persistedQuoteRow],
+    );
+  } catch (error) {
+    if (quoteAction === "Edit" && (String(error?.message || "").includes("Row having key") || String(error?.message || "").includes("not found"))) {
+      console.warn(`[cotizaciones] La cotizacion ${id} no existe en AppSheet (404); recreando como nueva.`);
+      return guardarCotizacion({ ...input, id: "" }, "");
+    }
+    throw error;
+  }
   mark("cabeceraAppSheet");
 
   if (!existing) {
@@ -1022,17 +1034,6 @@ export async function guardarCotizacion(input = {}, quoteId = "") {
     const insertedConceptRows = [];
     try {
       for (const [centerIndex, centerId] of centerIds.entries()) {
-        if (centerIndex > 0) {
-          persistedQuoteRow = quoteRowFromInput({
-            ...input,
-            centrosTrabajo: [centerId],
-            conceptos: [{ id: firstConceptId }],
-            lineas: undefined,
-          }, id, branchesById);
-          persistedQuoteRow.CONCEPTOS = "";
-          await writeAppSheetRows("COTIZACIONES_VARIOS_CT", "Edit", [persistedQuoteRow]);
-        }
-
         const centerConceptRows = desiredConceptRows.filter((row) => row.CENTRO_DE_TRABAJO === centerId);
         await writeAppSheetRowsPartitioned("CONCEPTOS_VARIOS_CT", "Add", centerConceptRows);
         insertedConceptRows.push(...centerConceptRows);

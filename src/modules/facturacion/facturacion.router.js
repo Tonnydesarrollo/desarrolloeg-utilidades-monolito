@@ -1,9 +1,12 @@
 import express from "express";
+import puppeteer from "puppeteer-core";
+import JSZip from "jszip";
 import fetch from "node-fetch";
 import crypto from "node:crypto";
 import { getCompanyAddress } from "../../config/company.js";
 import driveRoutes from "./routes/drive.js";
 import { construirDataHTML } from "./services/construirDataHTML.js";
+import { prepararCotizacionDataParaPdf } from "./services/cotizacionPdfImages.js";
 import { getPedidosLeyBranchOrderCoverage } from "../pedidos-ley/services/pedidosLey.js";
 import {
   guardarCotizacion,
@@ -21,6 +24,49 @@ import {
 export const cotizacionesRouter = express.Router();
 export const facturacionRouter = cotizacionesRouter;
 prewarmCotizacionesCaches();
+
+let pdfBrowserPromise = null;
+
+function getChromePath() {
+  if (process.env.CHROME_PATH && String(process.env.CHROME_PATH).trim()) {
+    return String(process.env.CHROME_PATH).trim();
+  }
+  if (process.platform === "win32") {
+    return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+  }
+  return "/usr/bin/chromium";
+}
+
+async function getPdfBrowser() {
+  if (!pdfBrowserPromise) {
+    pdfBrowserPromise = puppeteer.launch({
+      executablePath: getChromePath(),
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    }).then((browser) => {
+      browser.once("disconnected", () => {
+        pdfBrowserPromise = null;
+      });
+      return browser;
+    }).catch((error) => {
+      pdfBrowserPromise = null;
+      throw error;
+    });
+  }
+  return pdfBrowserPromise;
+}
+
+function buildCotizacionPdfFilename(data) {
+  const tituloBase = data.cotizacion?.TITULO || "Cotizacion";
+  const centroNombre = data.cotizacion?.centroNombre || "";
+  const centrosCount = data.centros?.length || 0;
+  let name = "COTIZACION " + tituloBase;
+  if (centrosCount === 1 && centroNombre) {
+    name = "COTIZACION " + centroNombre + " " + tituloBase;
+  }
+  const safe = name.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+  return (safe || "COTIZACION") + ".pdf";
+}
 
 const quoteSaveJobs = new Map();
 const QUOTE_ASYNC_CENTER_THRESHOLD = 10;
@@ -107,6 +153,41 @@ const handleImgProxy = async (req, res) => {
 cotizacionesRouter.get("/img-proxy", handleImgProxy);
 cotizacionesRouter.get("/cotizaciones/img-proxy", handleImgProxy);
 
+export function extractQuoteOptionsFromQuery(query = {}) {
+  const formaPago = String(query.formaPago || query.forma_pago || query.fp || "").trim();
+
+  const desgloseSet = new Set();
+  const rawDesglose = String(query.desglose || "").trim();
+  if (rawDesglose) {
+    rawDesglose.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).forEach((k) => desgloseSet.add(k));
+  }
+  if (String(query.pipc || "").trim() === "1") desgloseSet.add("pipc");
+  if (String(query.capacitaciones || query.capacitacion || "").trim() === "1") desgloseSet.add("capacitaciones");
+
+  const desglose = desgloseSet.size > 0 ? Array.from(desgloseSet) : null;
+
+  const parseBool = (v) => {
+    if (v === undefined || v === null || v === "") return null;
+    const str = String(v).trim().toLowerCase();
+    return str === "1" || str === "true" || str === "yes" || str === "si";
+  };
+
+  const mostrarCodigo = parseBool(query.codigo ?? query.mostrarCodigo ?? query.mostrar_codigo) === true;
+  const mostrarDescripcion = parseBool(query.descripcion ?? query.mostrarDescripcion ?? query.mostrar_descripcion) === true;
+  const mostrarDireccion = parseBool(query.direccion ?? query.mostrarDireccion ?? query.mostrar_direccion) === true;
+
+  const formato = String(query.formato || query.template || query.fmt || "").trim().toLowerCase();
+
+  return {
+    formaPago: formaPago || undefined,
+    desglose: desglose || undefined,
+    mostrarCodigo,
+    mostrarDescripcion,
+    mostrarDireccion,
+    formato: formato || undefined,
+  };
+}
+
 cotizacionesRouter.get("/cotizacion/:id/html-data", async (req, res) => {
   try {
     const forceFresh = String(req.query.refresh || req.query.fresh || "").trim() === "1";
@@ -114,7 +195,9 @@ cotizacionesRouter.get("/cotizacion/:id/html-data", async (req, res) => {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     }
     const json = await obtenerCotizacionCompleta(req.params.id, { forceFresh });
-    const data = construirDataHTML(json);
+    const centroId = req.query.centro || req.query.sucursal || "";
+    const quoteOptions = extractQuoteOptionsFromQuery(req.query);
+    const data = construirDataHTML(json, { ...quoteOptions, centroId });
     res.json({ ok: true, data });
   } catch (err) {
     console.error("ERROR EN /html-data:", err);
@@ -179,6 +262,7 @@ cotizacionesRouter.get("/api/workspace", async (_req, res) => {
         cliente: String(empresa.nombreComercial || empresa.razonSocial || empresaId || "Cliente sin nombre").trim(),
         empresaId: empresa.id || "",
         logoUrl: logoEmpresaUrl(empresa),
+        centrosCount: (Array.isArray(row.CENTRO_DE_TRABAJO || row.CENTROS_DE_TRABAJO || row["CENTRO DE TRABAJO"] || row["CENTROS DE TRABAJO"]) ? (row.CENTRO_DE_TRABAJO || row.CENTROS_DE_TRABAJO || row["CENTRO DE TRABAJO"] || row["CENTROS DE TRABAJO"]) : String(row.CENTRO_DE_TRABAJO || row.CENTROS_DE_TRABAJO || row["CENTRO DE TRABAJO"] || row["CENTROS DE TRABAJO"] || "").split(/[,;]+/g).filter(Boolean)).length,
       };
     }).filter((row) => row.id).reverse();
     res.json({ ok: true, data: {
@@ -276,6 +360,43 @@ cotizacionesRouter.put("/api/cotizaciones/:id", async (req, res) => {
   }
 });
 
+export const CASTILLO_COMPANY_ADDRESS = "CALLE: MISION DE CARMELO N° 2602, FRACC. CAPISTRANO, CULIACAN, SINALOA, C.P.80194 TEL: 6673403135 Email: desarrolloeg@gmail.com";
+
+export function seleccionarPlantillaCotizacion(json, query = {}, data = {}) {
+  const formatoQuery = String(query.formato || query.template || query.fmt || "").trim().toLowerCase();
+  if (formatoQuery === "castillo" || formatoQuery === "sergio" || formatoQuery === "sergio_castillo") {
+    return "cotizacion_castillo";
+  }
+  if (formatoQuery === "ley") {
+    return "cotizacion_ley";
+  }
+  if (formatoQuery === "estandar" || formatoQuery === "default") {
+    return "cotizacion";
+  }
+
+  if (data?.esCastillo === true) {
+    return "cotizacion_castillo";
+  }
+
+  const provId = String(json?.cotizacion?.proveedorId || json?.cotizacion?.PROVEEDOR || "").trim();
+  const provNombre = String(json?.cotizacion?.proveedor?.nombre || json?.cotizacion?.proveedor || "").toUpperCase();
+  const firmaNombre = String(json?.firma?.nombre || "").toUpperCase();
+
+  const esCastillo =
+    provId === "EiHiUQ9YHf4mA-C7L_ziyc" ||
+    provNombre.includes("CASTILLO") ||
+    firmaNombre.includes("CASTILLO") ||
+    firmaNombre.includes("SERGIO GONZALEZ CASTILLO");
+
+  if (esCastillo) {
+    return "cotizacion_castillo";
+  }
+
+  const empresaId = String(json?.empresaId || "").trim();
+  const usarPlantillaLey = empresaId === "1" || empresaId === "25";
+  return usarPlantillaLey ? "cotizacion_ley" : "cotizacion";
+}
+
 cotizacionesRouter.get("/cotizacion/:id/html", async (req, res) => {
   try {
     const forceFresh = String(req.query.refresh || req.query.fresh || "").trim() === "1";
@@ -283,15 +404,178 @@ cotizacionesRouter.get("/cotizacion/:id/html", async (req, res) => {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     }
     const json = await obtenerCotizacionCompleta(req.params.id, { forceFresh });
-    const data = construirDataHTML(json);
-    const empresaId = String(json.empresaId || "").trim();
-    const usarPlantillaLey = empresaId === "1" || empresaId === "25";
-    res.render(usarPlantillaLey ? "cotizacion_ley" : "cotizacion", {
+    const centroId = req.query.centro || req.query.sucursal || "";
+    const quoteOptions = extractQuoteOptionsFromQuery(req.query);
+    const data = construirDataHTML(json, { ...quoteOptions, centroId });
+    data.isPdfExport = false;
+    const autoprint = String(req.query.autoprint || "").trim() === "1";
+    const templateName = seleccionarPlantillaCotizacion(json, req.query, data);
+    res.render(templateName, {
       data,
-      companyAddress: getCompanyAddress(),
+      companyAddress: data.esCastillo ? CASTILLO_COMPANY_ADDRESS : getCompanyAddress(),
+      autoprint,
     });
   } catch (err) {
     console.error(err);
     res.status(500).send("Error");
+  }
+});
+
+cotizacionesRouter.get("/cotizacion/:id/pdf", async (req, res) => {
+  const forceFresh = String(req.query.refresh || req.query.fresh || "").trim() === "1";
+  const centroId = req.query.centro || req.query.sucursal || "";
+  const quoteOptions = extractQuoteOptionsFromQuery(req.query);
+  try {
+    const json = await obtenerCotizacionCompleta(req.params.id, { forceFresh });
+    const rawData = construirDataHTML(json, { ...quoteOptions, centroId });
+    const data = await prepararCotizacionDataParaPdf(rawData);
+    const templateName = seleccionarPlantillaCotizacion(json, req.query, data);
+
+    const html = await new Promise((resolve, reject) => {
+      res.app.render(templateName, {
+        data,
+        companyAddress: data.esCastillo ? CASTILLO_COMPANY_ADDRESS : getCompanyAddress(),
+        autoprint: false,
+        isPdfExport: true,
+      }, (err, str) => {
+        if (err) reject(err);
+        else resolve(str);
+      });
+    });
+
+    const browser = await getPdfBrowser();
+    let page = null;
+    try {
+      page = await browser.newPage();
+      page.setDefaultNavigationTimeout(30000);
+      await page.setJavaScriptEnabled(true);
+      await page.setContent(html, { waitUntil: "load", timeout: 30000 });
+      await page.emulateMediaType("print");
+      const pdfBytes = await page.pdf({
+        format: "Letter",
+        printBackground: true,
+        margin: {
+          top: "0.2in",
+          right: "0.2in",
+          bottom: "0.2in",
+          left: "0.2in",
+        },
+        preferCSSPageSize: true,
+      });
+
+      const filename = buildCotizacionPdfFilename(data);
+      res.setHeader("Content-Type", "application/pdf");
+      const encoded = encodeURIComponent(filename);
+      res.setHeader("Content-Disposition", 'inline; filename="' + filename + '"; filename*=UTF-8\'\'' + encoded);
+      return res.send(Buffer.from(pdfBytes));
+    } finally {
+      if (page) await page.close().catch(() => {});
+    }
+  } catch (err) {
+    console.warn("Generacion headless de PDF para cotizacion redirigiendo a impresion web:", err?.message || err);
+    const queryStr = new URLSearchParams();
+    queryStr.set("autoprint", "1");
+    if (centroId) queryStr.set("centro", centroId);
+    if (forceFresh) queryStr.set("refresh", "1");
+    if (quoteOptions.formato) queryStr.set("formato", quoteOptions.formato);
+    if (quoteOptions.formaPago) queryStr.set("formaPago", quoteOptions.formaPago);
+    if (quoteOptions.desglose?.length) queryStr.set("desglose", quoteOptions.desglose.join(","));
+    if (quoteOptions.mostrarCodigo !== null && quoteOptions.mostrarCodigo !== undefined) queryStr.set("codigo", quoteOptions.mostrarCodigo ? "1" : "0");
+    if (quoteOptions.mostrarDescripcion !== null && quoteOptions.mostrarDescripcion !== undefined) queryStr.set("descripcion", quoteOptions.mostrarDescripcion ? "1" : "0");
+    if (quoteOptions.mostrarDireccion !== null && quoteOptions.mostrarDireccion !== undefined) queryStr.set("direccion", quoteOptions.mostrarDireccion ? "1" : "0");
+    return res.redirect('/cotizaciones/cotizacion/' + encodeURIComponent(req.params.id) + '/html?' + queryStr.toString());
+  }
+});
+
+cotizacionesRouter.get(["/cotizacion/:id/zip", "/cotizacion/:id/sucursales-zip"], async (req, res) => {
+  req.setTimeout(180000);
+  const forceFresh = String(req.query.refresh || req.query.fresh || "").trim() === "1";
+  const quoteOptions = extractQuoteOptionsFromQuery(req.query);
+  try {
+    const json = await obtenerCotizacionCompleta(req.params.id, { forceFresh });
+    const rawDataCompleta = construirDataHTML(json, { ...quoteOptions });
+    const dataCompleta = await prepararCotizacionDataParaPdf(rawDataCompleta);
+    const templateName = seleccionarPlantillaCotizacion(json, req.query, dataCompleta);
+    const address = dataCompleta.esCastillo ? CASTILLO_COMPANY_ADDRESS : getCompanyAddress();
+    const centros = dataCompleta.todosLosCentros || [];
+
+    if (!centros.length) {
+      return res.status(404).send("Esta cotizacion no tiene centros de trabajo.");
+    }
+
+    const browser = await getPdfBrowser();
+    const page = await browser.newPage();
+    page.setDefaultNavigationTimeout(45000);
+    await page.setJavaScriptEnabled(true);
+    await page.emulateMediaType("print");
+
+    const zip = new JSZip();
+
+    try {
+      // Si hay mas de 1 sucursal, incluir tambien el PDF de la cotizacion completa
+      if (centros.length > 1) {
+        dataCompleta.isPdfExport = true;
+        const htmlCompleta = await new Promise((resolve, reject) => {
+          res.app.render(templateName, {
+            data: dataCompleta,
+            companyAddress: address,
+            autoprint: false,
+            isPdfExport: true,
+          }, (err, str) => (err ? reject(err) : resolve(str)));
+        });
+        await page.setContent(htmlCompleta, { waitUntil: "load", timeout: 45000 });
+        const pdfBytesCompleta = await page.pdf({
+          format: "Letter",
+          printBackground: true,
+          margin: { top: "0.2in", right: "0.2in", bottom: "0.2in", left: "0.2in" },
+          preferCSSPageSize: true,
+        });
+        const nombreCompleto = ("00 - COTIZACION COMPLETA - " + (dataCompleta.cotizacion?.TITULO || "Cotizacion")).replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim() + ".pdf";
+        zip.file(nombreCompleto, pdfBytesCompleta);
+      }
+
+      // Generar PDF individual para cada sucursal
+      for (let i = 0; i < centros.length; i++) {
+        const c = centros[i];
+        const rawDataCentro = construirDataHTML(json, { ...quoteOptions, centroId: c.key });
+        const dataCentro = await prepararCotizacionDataParaPdf(rawDataCentro);
+        const htmlCentro = await new Promise((resolve, reject) => {
+          res.app.render(templateName, {
+            data: dataCentro,
+            companyAddress: address,
+            autoprint: false,
+            isPdfExport: true,
+          }, (err, str) => (err ? reject(err) : resolve(str)));
+        });
+        await page.setContent(htmlCentro, { waitUntil: "load", timeout: 45000 });
+        const pdfBytesCentro = await page.pdf({
+          format: "Letter",
+          printBackground: true,
+          margin: { top: "0.2in", right: "0.2in", bottom: "0.2in", left: "0.2in" },
+          preferCSSPageSize: true,
+        });
+        const numPrefix = centros.length > 1 ? String(i + 1).padStart(2, "0") + " - " : "";
+        const filename = numPrefix + buildCotizacionPdfFilename(dataCentro);
+        zip.file(filename, pdfBytesCentro);
+      }
+    } finally {
+      await page.close().catch(() => {});
+    }
+
+    const zipBuffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+
+    const folio = String(dataCompleta.cotizacion?.FOLIO || req.params.id).replace(/[\\/:*?"<>|]+/g, "-");
+    const zipFilename = "COTIZACIONES_SUCURSALES_" + folio + ".zip";
+    res.setHeader("Content-Type", "application/zip");
+    const encodedZip = encodeURIComponent(zipFilename);
+    res.setHeader("Content-Disposition", 'attachment; filename="' + zipFilename + '"; filename*=UTF-8\'\'' + encodedZip);
+    return res.send(zipBuffer);
+  } catch (err) {
+    console.error("Error al generar ZIP de cotizaciones por sucursal:", err);
+    res.status(500).send("No se pudo generar el archivo ZIP de las cotizaciones por sucursal: " + (err?.message || err));
   }
 });

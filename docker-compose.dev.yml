@@ -59,7 +59,7 @@ services:
       COMPANY_ADDRESS: ${COMPANY_ADDRESS:-Río Tehuantepec 1704-1, Morelos, Los Pinos, 80170 Culiacán Rosales, Sin.}
       CLUSTER_ENABLED: 0
       CLOUDFLARED_ENABLED: 0
-      PORTAL_DEV_AUTH_BYPASS: 1
+      PORTAL_DEV_AUTH_BYPASS: ${PORTAL_DEV_AUTH_BYPASS:-0}
       PORTAL_DEV_AUTH_NAME: Desarrollo Local
       PORTAL_DEV_AUTH_PUESTO: MEJORA CONTINUA
       PORTAL_SESSION_COOKIE_NAME: desarrolloeg_portal_session_dev
@@ -104,6 +104,7 @@ services:
       retries: 8
       start_period: 20s
     volumes:
+      - ./src:/app/src
       - ./runtime-dev:/app/runtime
       - ./secrets:/app/secrets:ro
       - ./publicimg:/app/publicimg

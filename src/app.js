@@ -153,9 +153,15 @@ export function createApp() {
     path.join(__dirname, "modules", "jobs", "views")
   ]);
 
-  const publicImgPath = process.env.PUBLICIMG_PATH;
-  if (publicImgPath) {
+  const publicImgPath = process.env.PUBLICIMG_PATH || path.resolve(__dirname, "..", "publicimg");
+  if (fs.existsSync(publicImgPath)) {
     app.use("/img", express.static(publicImgPath));
+    app.use("/publicimg", express.static(publicImgPath));
+  }
+  const bundledImgPath = path.join(__dirname, "public", "img");
+  if (fs.existsSync(bundledImgPath)) {
+    app.use("/img", express.static(bundledImgPath));
+    app.use("/publicimg", express.static(bundledImgPath));
   }
   app.get("/img/brand-logo.png", sendBrandImage);
   app.get("/img/brand-favicon.png", sendBrandImage);

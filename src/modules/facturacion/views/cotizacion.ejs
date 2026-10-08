@@ -1,4 +1,4 @@
-﻿<% 
+<% 
 var pagoDerechos = {
   estatal: {},    // key = estadoId
   municipal: {}   // key = municipioId
@@ -332,7 +332,7 @@ if (data && data.centros) {
 }
 
 .catalogo-codigo {
-  display: block;
+  display: none;
   font-weight: 700;
   text-transform: uppercase;
   margin-bottom: 2px;
@@ -393,11 +393,82 @@ if (data && data.centros) {
         box-shadow:0 6px 18px rgba(0,0,0,0.08);
         overflow:hidden;
       }
+      body.portal-shell main.cotizacion-layout,
       .cotizacion-layout{
+        display:flex !important;
+        flex-direction:column !important;
+        align-items:center !important;
+        width:100% !important;
+        max-width:100% !important;
+        margin:0 auto !important;
+        padding:16px 16px 48px !important;
+        box-sizing:border-box !important;
+      }
+      .cotizacion-toolbar{
+        width:100%;
+        max-width:215.9mm;
+        margin:0 auto 16px auto;
+        padding:12px 18px;
+        background:#ffffff;
+        border:1px solid #e2e8f0;
+        border-radius:12px;
+        box-shadow:0 4px 16px rgba(15,23,42,0.07);
         display:flex;
-        align-items:flex-start;
-        gap:18px;
-        padding:10px 14px 14px;
+        align-items:center;
+        justify-content:space-between;
+        flex-wrap:wrap;
+        gap:12px;
+        box-sizing:border-box;
+        position:sticky;
+        top:12px;
+        z-index:100;
+      }
+      .cotizacion-toolbar__group{
+        display:flex;
+        align-items:center;
+        gap:10px;
+        flex-wrap:wrap;
+      }
+      .cotizacion-toolbar__actions{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        flex-wrap:wrap;
+      }
+      .cotizacion-toolbar select{
+        padding:7px 12px;
+        font-size:13px;
+        font-weight:500;
+        border-radius:8px;
+        border:1px solid #cbd5e1;
+        background:#f8fafc;
+        color:#0f172a;
+        cursor:pointer;
+        font-family:inherit;
+        outline:none;
+        transition:border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .cotizacion-toolbar select:focus{
+        border-color:#0284c7;
+        box-shadow:0 0 0 3px rgba(2,132,199,0.15);
+      }
+      .cotizacion-toolbar button,
+      .cotizacion-toolbar a.toolbar-btn{
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:7px 14px;
+        font-size:13px;
+        font-weight:600;
+        border-radius:8px;
+        text-decoration:none;
+        cursor:pointer;
+        transition:background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+        line-height:1.4;
+      }
+      .cotizacion-toolbar button:active,
+      .cotizacion-toolbar a.toolbar-btn:active{
+        transform:scale(0.98);
       }
       .cotizacion-sidebar{
         width:min(360px, calc(100vw - 24px));
@@ -461,25 +532,9 @@ if (data && data.centros) {
       .cotizacion-sidebar .desglose-toolbar{
         margin:0;
       }
-      .cotizacion-options-fab{
-        position:fixed;
-        left:12px;
-        top:12px;
-        z-index:1520;
-        min-height:44px;
-        padding:0 14px;
-        border-radius:999px;
-        box-shadow:0 16px 34px rgba(26,42,58,0.18);
-      }
+      .cotizacion-options-fab,
       .cotizacion-print-fab{
-        position:fixed;
-        left:12px;
-        top:64px;
-        z-index:1490;
-        min-height:44px;
-        padding:0 14px;
-        border-radius:999px;
-        box-shadow:0 16px 34px rgba(26,42,58,0.18);
+        display:none !important;
       }
       .cotizacion-drawer-backdrop{
         position:fixed;
@@ -499,16 +554,31 @@ if (data && data.centros) {
         opacity:0;
         pointer-events:none;
       }
+      body.portal-shell .cotizacion-document,
       .cotizacion-document{
-        flex:1;
-        min-width:0;
-        display:flex;
-        justify-content:center;
+        width:100% !important;
+        max-width:215.9mm !important;
+        display:flex !important;
+        justify-content:center !important;
+        margin:0 auto !important;
+        padding:0 !important;
+        box-sizing:border-box !important;
       }
+      body.portal-shell .cotizacion-document .page,
+      .cotizacion-document .page,
       .page{
-        width:100%;
-        max-width:215.9mm;
-        margin:0;
+        width:100% !important;
+        max-width:215.9mm !important;
+        margin:0 auto !important;
+        padding:8mm 10mm 28mm !important;
+        background:#fff !important;
+        border-radius:6px !important;
+        position:relative !important;
+        display:flex !important;
+        flex-direction:column !important;
+        box-shadow:0 6px 18px rgba(0,0,0,0.08) !important;
+        overflow:hidden !important;
+        box-sizing:border-box !important;
       }
       .content{position:relative;z-index:1;padding-bottom:0;flex:1}
       
@@ -717,8 +787,11 @@ button:hover{background:#b3202a;color:#fff}
         line-height:1.2;
       }
 
+      .no-print{display:block}
+      body.is-pdf-export .skip-link,body.is-pdf-export .no-print,body.is-pdf-export .cotizacion-options-fab,body.is-pdf-export .cotizacion-print-fab,body.is-pdf-export .cotizacion-drawer-backdrop,body.is-pdf-export .cotizacion-sidebar,body.is-pdf-export .desglose-toolbar{display:none!important}
       /* MEDIA PRINT (Ajuste de tamaño de imagen para impresión) */
       @media print{
+        .skip-link, .no-print{display:none!important}
         html,body,body.portal-shell{background:#fff!important;min-height:0!important}
         *,*::before,*::after{filter:none!important;backdrop-filter:none!important;text-shadow:none!important;animation:none!important;transition:none!important}
         *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
@@ -729,9 +802,14 @@ button:hover{background:#b3202a;color:#fff}
   .cotizacion-options-fab{display:none!important}
   .cotizacion-print-fab{display:none!important}
   .cotizacion-drawer-backdrop{display:none!important}
+  .cotizacion-toolbar{display:none!important}
+  body.portal-shell main.cotizacion-layout,
   .cotizacion-layout{display:block!important;padding:0!important}
-  .cotizacion-document{display:block!important}
-  .page{margin:0;box-shadow:none;border-radius:0;padding:5mm 5mm 10mm;display:block!important;overflow:visible!important;max-width:none!important}
+  body.portal-shell .cotizacion-document,
+  .cotizacion-document{display:block!important;max-width:none!important}
+  body.portal-shell .cotizacion-document .page,
+  .cotizacion-document .page,
+  .page{margin:0!important;box-shadow:none!important;border-radius:0!important;padding:5mm 5mm 10mm!important;display:block!important;overflow:visible!important;max-width:none!important}
   .content{display:block!important;overflow:visible!important}
         html,body{font-size:10px} 
         table{font-size:0.60rem}
@@ -760,9 +838,34 @@ button:hover{background:#b3202a;color:#fff}
 
       /* Responsive se mantienen */
       @media (max-width:720px){
+        body.portal-shell main.cotizacion-layout,
         .cotizacion-layout{
-          flex-direction:column;
-          padding:0;
+          padding:8px 8px 32px !important;
+        }
+        .cotizacion-toolbar{
+          margin-bottom:12px;
+          padding:10px 12px;
+          position:static;
+        }
+        .cotizacion-toolbar__group,
+        .cotizacion-toolbar__actions{
+          width:100%;
+        }
+        .cotizacion-toolbar select{
+          width:100%;
+        }
+        .cotizacion-toolbar__actions{
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:6px;
+        }
+        .cotizacion-toolbar__actions button,
+        .cotizacion-toolbar__actions a.toolbar-btn{
+          justify-content:center;
+          width:100%;
+          padding:8px 10px;
+          font-size:12px;
+          box-sizing:border-box;
         }
         .header{flex-direction:column; text-align: center;}
         .header-left, .header-center, .header-right{text-align:center; margin-bottom: 8px;}
@@ -773,13 +876,16 @@ button:hover{background:#b3202a;color:#fff}
           overflow:auto;
           padding:14px;
         }
+        body.portal-shell .cotizacion-document,
         .cotizacion-document{
-          width:100%;
+          width:100% !important;
         }
+        body.portal-shell .cotizacion-document .page,
+        .cotizacion-document .page,
         .page{
-          width:auto;
-          max-width:none;
-          margin:6mm 0;
+          width:auto !important;
+          max-width:none !important;
+          margin:6mm 0 !important;
         }
         .bottom-section{flex-direction: column; align-items: stretch;}
         .firma-wrapper, .totales-wrapper{flex-basis: 100%; order: unset; margin-top: 15px;}
@@ -794,12 +900,28 @@ button:hover{background:#b3202a;color:#fff}
   justify-content:center;
   text-align:center;
 }
-
+      <% if (typeof data !== "undefined" && data) { %>
+        <% if (data.mostrarCodigo === true) { %>
+          .catalogo-codigo { display: block !important; }
+        <% } else { %>
+          .catalogo-codigo { display: none !important; }
+        <% } %>
+        <% if (data.mostrarDescripcion === true) { %>
+          .catalogo-descripcion { display: block !important; }
+        <% } else { %>
+          .catalogo-descripcion { display: none !important; }
+        <% } %>
+        <% if (data.mostrarDireccion === true) { %>
+          .sucursal-domicilio { display: block !important; }
+        <% } else { %>
+          .sucursal-domicilio { display: none !important; }
+        <% } %>
+      <% } %>
     </style>
     <link rel="stylesheet" href="/ui/portal-shell.css?v=20260831b" />
   </head>
 
-  <body class="portal-shell portal-cotizaciones portal-facturacion">
+  <body class="portal-shell portal-cotizaciones portal-facturacion <%= (typeof data !== "undefined" && data && data.isPdfExport) ? "is-pdf-export" : "" %>">
     <style>
       .cotizacion-loading{
         position:fixed;
@@ -945,9 +1067,11 @@ function shouldOmitLine(ln){
 }
 %>
 
-    <a class="skip-link" href="#cotizaciones-main">Saltar al contenido principal</a>
+    <% if (!(typeof data !== "undefined" && data && data.isPdfExport)) { %>
+    <a class="skip-link no-print" href="#cotizaciones-main">Saltar al contenido principal</a>
+    <% } %>
     <button class="cotizacion-options-fab no-print" type="button" data-cotizacion-drawer-open aria-controls="cotizacion-options" aria-expanded="false">☰ Opciones</button>
-    <button class="cotizacion-print-fab no-print" type="button" onclick="window.print()">🖨 Imprimir / PDF</button>
+    <button class="cotizacion-print-fab no-print" type="button" onclick="window.print()">🖨 Imprimir / PDF <%= (data && data.isSingleCenterFiltered) ? "(Sucursal)" : "(Completa)" %></button>
     <div class="cotizacion-drawer-backdrop no-print" data-cotizacion-drawer-backdrop hidden></div>
     <aside id="cotizacion-options" class="cotizacion-sidebar no-print" data-cotizacion-drawer role="dialog" aria-modal="true" aria-label="Opciones de la cotizacion" hidden>
           <div class="cotizacion-sidebar__top">
@@ -959,6 +1083,34 @@ function shouldOmitLine(ln){
           </div>
 
           <div class="desglose-toolbar no-print">
+        <div class="desglose-card">
+          <h2>Alcance de la cotización</h2>
+          <div style="margin-top:8px;">
+            <label for="cotizacionCentroSelect" style="display:block;font-size:12px;font-weight:600;color:var(--text-muted,#475569);margin-bottom:6px;">Generar documento / PDF:</label>
+            <select id="cotizacionCentroSelect" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:13px;font-family:inherit;">
+              <option value="">📋 Cotización completa (<%= (data.todosLosCentros || []).length %> sucursales)</option>
+              <% (data.todosLosCentros || []).forEach(function(c) { %>
+                <option value="<%= c.key %>" <%= (data.selectedCentroId === c.key || data.selectedCentroId === c.id) ? 'selected' : '' %>>
+                  🏢 <%= c.nombre %><%= c.tienda ? ' (' + c.tienda + ')' : '' %>
+                </option>
+              <% }); %>
+            </select>
+          </div>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+            <button type="button" class="button button--compact" onclick="window.print()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;font-size:13px;background:var(--primary,#0284c7);color:#fff;border:none;border-radius:6px;cursor:pointer;">
+              🖨 Imprimir / Guardar PDF (<%= (data && data.isSingleCenterFiltered) ? 'Sucursal' : 'Completa' %>)
+            </button>
+            <a id="btnDescargarPdfDirecto" class="button ghost button--compact" href="/cotizaciones/cotizacion/<%= data.cotizacion.FOLIO %>/pdf<%= data.selectedCentroId ? '?centro=' + encodeURIComponent(data.selectedCentroId) : '' %>" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;font-size:13px;text-decoration:none;border:1px solid #cbd5e1;border-radius:6px;color:#1e293b;">
+              ⬇ Descargar PDF directo
+            </a>
+            <% if ((data.todosLosCentros || []).length > 1) { %>
+            <a id="btnDescargarTodasSucursalesZip" class="button button--compact" href="/cotizaciones/cotizacion/<%= data.cotizacion.FOLIO %>/zip" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;font-size:13px;text-decoration:none;background:#047857;color:#fff;border-radius:6px;font-weight:600;">
+              📦 Descargar todas las sucursales (ZIP)
+            </a>
+            <% } %>
+          </div>
+        </div>
+
         <div class="desglose-card">
           <h2>Desglose opcional</h2>
           <div class="desglose-options">
@@ -1010,6 +1162,42 @@ function shouldOmitLine(ln){
     </aside>
 
     <main id="cotizaciones-main" class="cotizacion-layout" role="main" aria-label="Cotizacion">
+      <% if (data && !data.isPdfExport) { %>
+        <div class="cotizacion-toolbar no-print">
+          <div class="cotizacion-toolbar__group">
+            <span style="font-weight:700;font-size:13px;color:#1e293b;">📋 Alcance:</span>
+            <select id="cotizacionCentroSelectTopBar">
+              <option value="">📋 Cotización completa (<%= (data.todosLosCentros || []).length %> sucursales)</option>
+              <% (data.todosLosCentros || []).forEach(function(c) { %>
+                <option value="<%= c.key %>" <%= (data.selectedCentroId === c.key || data.selectedCentroId === c.id) ? 'selected' : '' %>>
+                  🏢 <%= c.nombre %><%= c.tienda ? ' (' + c.tienda + ')' : '' %>
+                </option>
+              <% }); %>
+            </select>
+            <% if (data.isSingleCenterFiltered) { %>
+              <span style="background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:600;padding:5px 10px;border-radius:6px;border:1px solid #bfdbfe;white-space:nowrap;">
+                Total sucursal: $<%= Number(data.totales.totalGlobal).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %> MXN
+              </span>
+            <% } %>
+          </div>
+          <div class="cotizacion-toolbar__actions">
+            <button type="button" onclick="window.print()" style="background:#0284c7;color:#fff;border:none;box-shadow:0 2px 6px rgba(2,132,199,0.3);">
+              🖨 Imprimir / PDF <%= (data.isSingleCenterFiltered) ? '(Sucursal)' : '(Completa)' %>
+            </button>
+            <a id="btnDescargarPdfTopBar" class="toolbar-btn" href="/cotizaciones/cotizacion/<%= data.cotizacion.FOLIO %>/pdf<%= data.selectedCentroId ? '?centro=' + encodeURIComponent(data.selectedCentroId) : '' %>" target="_blank" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;">
+              ⬇ Descargar PDF
+            </a>
+            <% if ((data.todosLosCentros || []).length > 1) { %>
+              <a id="btnDescargarTodasSucursalesZipTopBar" class="toolbar-btn" href="/cotizaciones/cotizacion/<%= data.cotizacion.FOLIO %>/zip" target="_blank" style="background:#047857;color:#fff;border:none;box-shadow:0 2px 6px rgba(4,120,87,0.3);">
+                📦 Descargar todas (ZIP)
+              </a>
+            <% } %>
+            <button type="button" data-cotizacion-drawer-open aria-controls="cotizacion-options" aria-expanded="false" style="background:#0f172a;color:#fff;border:none;box-shadow:0 2px 6px rgba(15,23,42,0.25);">
+              ☰ Opciones
+            </button>
+          </div>
+        </div>
+      <% } %>
       <section class="cotizacion-document">
         <div class="page">
       <div class="content">
@@ -1019,14 +1207,20 @@ function shouldOmitLine(ln){
 <div class="header-col header-left header-empresa">
 
   <% if (data.logoCliente) { %>
+  <%
+    var logoClienteSrc = String(data.logoCliente || '').trim();
+    if (logoClienteSrc && !logoClienteSrc.startsWith('data:')) {
+      logoClienteSrc += (logoClienteSrc.includes('?') ? '&' : '?') + 'sz=200&cb=' + Date.now();
+    }
+  %>
   <img
-    src="<%= data.logoCliente %><%= data.logoCliente.includes('?') ? '&' : '?' %>sz=200&cb=<%= Date.now() %>"
+    src="<%= logoClienteSrc %>"
     class="empresa-logo"
     alt="Logo empresa cliente"
     referrerpolicy="no-referrer"
     loading="eager"
     decoding="async"
-    onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src=this.src+(this.src.indexOf('?')===-1?'?':'&')+'retry='+Date.now();}"
+    onerror="if(!this.dataset.retry && !this.src.startsWith('data:')){this.dataset.retry='1';this.src=this.src+(this.src.indexOf('?')===-1?'?':'&')+'retry='+Date.now();}"
   >
 <% } %>
 
@@ -1159,7 +1353,9 @@ for (var i = 0; i < (data.centros || []).length; i++) {
             <div class="firma-wrapper">
               <div class="firma-block">
                 
+                <% if (data.firma && data.firma.firmaUrl) { %>
                 <img src="<%= data.firma.firmaUrl %>" alt="Firma">
+                <% } %>
                 
                 <div class="firma-linea"></div>
 
@@ -1205,7 +1401,34 @@ for (var i = 0; i < (data.centros || []).length; i++) {
   </div>
   <% } %>
 
-        <div class="desglose-preview" id="desglosePreview"></div>
+        <div class="desglose-preview" id="desglosePreview">
+          <% (desgloseSeleccionado || []).forEach(function(key) {
+               var item = desgloseCatalogo[key];
+               if (!item) return; %>
+            <div class="info-section desglose-section">
+              <div class="info-box desglose-item">
+                <div class="desglose-tag"><%= item.tag %></div>
+                <h3><%= item.titulo %></h3>
+                <% if (item.intro) { %><p><%= item.intro %></p><% } %>
+                <% if (item.detalles && item.detalles.length) { %>
+                  <ul>
+                    <% item.detalles.forEach(function(text) { %>
+                      <li><%= text %></li>
+                    <% }); %>
+                  </ul>
+                <% } %>
+                <% if (item.temario && item.temario.length) { %>
+                  <p><strong>Temario:</strong></p>
+                  <ul class="desglose-temario">
+                    <% item.temario.forEach(function(text) { %>
+                      <li><%= text %></li>
+                    <% }); %>
+                  </ul>
+                <% } %>
+              </div>
+            </div>
+          <% }); %>
+        </div>
 
               <div class="info-section">
  <% 
@@ -1300,6 +1523,7 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
 
       </div>
 
+    <% if (!(typeof data !== "undefined" && data && data.isPdfExport)) { %>
       <script>
         (function(){
           var drawer = document.querySelector('[data-cotizacion-drawer]');
@@ -1510,21 +1734,141 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
             }
           }
 
-          desglosePipc.checked = hasDesglose('pipc');
-          desgloseCapacitaciones.checked = hasDesglose('capacitaciones');
-          formaPagoSelect.value = <%- JSON.stringify((data && data.cotizacion && data.cotizacion.formaPago) ? data.cotizacion.formaPago : 'dos_pagos') %>;
-          desglosePipc.addEventListener('change', renderDesglose);
-          desgloseCapacitaciones.addEventListener('change', renderDesglose);
-          if (desgloseCatalogoCodigo) desgloseCatalogoCodigo.addEventListener('change', toggleCatalogoPartes);
-          if (desgloseCatalogoDescripcion) desgloseCatalogoDescripcion.addEventListener('change', toggleCatalogoPartes);
-          if (mostrarDireccionSucursal) mostrarDireccionSucursal.addEventListener('change', toggleDireccionesSucursal);
-          formaPagoSelect.addEventListener('change', renderCondiciones);
+          var searchParams = new URLSearchParams(window.location.search);
+          var fpFromUrl = searchParams.get('formaPago') || searchParams.get('forma_pago') || searchParams.get('fp');
+          var serverFp = <%- JSON.stringify((data && data.cotizacion && data.cotizacion.formaPago) ? data.cotizacion.formaPago : 'dos_pagos') %>;
+          var initialFp = fpFromUrl ? (esPagoUnico(fpFromUrl) ? 'una_exhibicion' : 'dos_pagos') : serverFp;
+          if (formaPagoSelect) formaPagoSelect.value = initialFp;
+
+          var urlDesgloseStr = searchParams.get('desglose') || '';
+          var urlDesgloseList = urlDesgloseStr ? urlDesgloseStr.split(',').map(function(s){ return s.trim().toLowerCase(); }) : [];
+          var hasPipc = hasDesglose('pipc') || urlDesgloseList.indexOf('pipc') !== -1 || searchParams.get('pipc') === '1';
+          var hasCap = hasDesglose('capacitaciones') || urlDesgloseList.indexOf('capacitaciones') !== -1 || searchParams.get('capacitaciones') === '1';
+          if (desglosePipc) desglosePipc.checked = hasPipc;
+          if (desgloseCapacitaciones) desgloseCapacitaciones.checked = hasCap;
+
+          var serverMostrarCodigo = <%- JSON.stringify(data && data.mostrarCodigo === true) %>;
+          var serverMostrarDescripcion = <%- JSON.stringify(data && data.mostrarDescripcion === true) %>;
+          var serverMostrarDireccion = <%- JSON.stringify(data && data.mostrarDireccion === true) %>;
+
+          if (desgloseCatalogoCodigo) {
+            var urlCodigo = searchParams.get('codigo');
+            desgloseCatalogoCodigo.checked = urlCodigo !== null ? (urlCodigo === '1' || urlCodigo === 'true') : serverMostrarCodigo;
+          }
+          if (desgloseCatalogoDescripcion) {
+            var urlDesc = searchParams.get('descripcion');
+            desgloseCatalogoDescripcion.checked = urlDesc !== null ? (urlDesc === '1' || urlDesc === 'true') : serverMostrarDescripcion;
+          }
+          if (mostrarDireccionSucursal) {
+            var urlDir = searchParams.get('direccion');
+            mostrarDireccionSucursal.checked = urlDir !== null ? (urlDir === '1' || urlDir === 'true') : serverMostrarDireccion;
+          }
+
+          var cotizacionCentroSelect = document.getElementById('cotizacionCentroSelect');
+          var cotizacionCentroSelectTopBar = document.getElementById('cotizacionCentroSelectTopBar');
+
+          function getQuoteOptions() {
+            var fp = formaPagoSelect ? formaPagoSelect.value : '';
+            var pipc = !!(desglosePipc && desglosePipc.checked);
+            var cap = !!(desgloseCapacitaciones && desgloseCapacitaciones.checked);
+            var cod = !!(desgloseCatalogoCodigo && desgloseCatalogoCodigo.checked);
+            var desc = !!(desgloseCatalogoDescripcion && desgloseCatalogoDescripcion.checked);
+            var dir = !!(mostrarDireccionSucursal && mostrarDireccionSucursal.checked);
+            return {
+              formaPago: fp,
+              pipc: pipc,
+              capacitaciones: cap,
+              codigo: cod,
+              descripcion: desc,
+              direccion: dir
+            };
+          }
+
+          function buildQueryString(opts, centroVal) {
+            var params = new URLSearchParams();
+            if (centroVal) params.set('centro', centroVal);
+            if (opts.formaPago && opts.formaPago !== 'dos_pagos') params.set('formaPago', opts.formaPago);
+            var desg = [];
+            if (opts.pipc) desg.push('pipc');
+            if (opts.capacitaciones) desg.push('capacitaciones');
+            if (desg.length) params.set('desglose', desg.join(','));
+            if (opts.codigo) params.set('codigo', '1');
+            if (opts.descripcion) params.set('descripcion', '1');
+            if (opts.direccion) params.set('direccion', '1');
+            return params.toString();
+          }
+
+          function updateActionUrls() {
+            var opts = getQuoteOptions();
+            var centroVal = (cotizacionCentroSelect && cotizacionCentroSelect.value) ||
+                            (cotizacionCentroSelectTopBar && cotizacionCentroSelectTopBar.value) ||
+                            <%- JSON.stringify(data.selectedCentroId || '') %>;
+
+            var folio = <%- JSON.stringify(data.cotizacion && data.cotizacion.FOLIO ? data.cotizacion.FOLIO : '') %>;
+            var qStrPdf = buildQueryString(opts, centroVal);
+            var qStrZip = buildQueryString(opts, '');
+
+            var pdfUrl = '/cotizaciones/cotizacion/' + encodeURIComponent(folio) + '/pdf' + (qStrPdf ? '?' + qStrPdf : '');
+            var zipUrl = '/cotizaciones/cotizacion/' + encodeURIComponent(folio) + '/zip' + (qStrZip ? '?' + qStrZip : '');
+
+            var btnPdfDirecto = document.getElementById('btnDescargarPdfDirecto');
+            if (btnPdfDirecto) btnPdfDirecto.href = pdfUrl;
+
+            var btnPdfTopBar = document.getElementById('btnDescargarPdfTopBar');
+            if (btnPdfTopBar) btnPdfTopBar.href = pdfUrl;
+
+            var btnZip = document.getElementById('btnDescargarTodasSucursalesZip');
+            if (btnZip) btnZip.href = zipUrl;
+
+            var btnZipTopBar = document.getElementById('btnDescargarTodasSucursalesZipTopBar');
+            if (btnZipTopBar) btnZipTopBar.href = zipUrl;
+
+            if (window.history && window.history.replaceState) {
+              var pageQuery = buildQueryString(opts, centroVal);
+              var newUrl = window.location.pathname + (pageQuery ? '?' + pageQuery : '');
+              window.history.replaceState(null, '', newUrl);
+            }
+          }
+
+          if (desglosePipc) desglosePipc.addEventListener('change', function() { renderDesglose(); updateActionUrls(); });
+          if (desgloseCapacitaciones) desgloseCapacitaciones.addEventListener('change', function() { renderDesglose(); updateActionUrls(); });
+          if (desgloseCatalogoCodigo) desgloseCatalogoCodigo.addEventListener('change', function() { toggleCatalogoPartes(); updateActionUrls(); });
+          if (desgloseCatalogoDescripcion) desgloseCatalogoDescripcion.addEventListener('change', function() { toggleCatalogoPartes(); updateActionUrls(); });
+          if (mostrarDireccionSucursal) mostrarDireccionSucursal.addEventListener('change', function() { toggleDireccionesSucursal(); updateActionUrls(); });
+          if (formaPagoSelect) formaPagoSelect.addEventListener('change', function() { renderCondiciones(); updateActionUrls(); });
+
           renderDesglose();
           toggleCatalogoPartes();
           toggleDireccionesSucursal();
           renderCondiciones();
+          updateActionUrls();
+
+          function onCentroChange(newVal) {
+            var opts = getQuoteOptions();
+            var qStr = buildQueryString(opts, newVal);
+            var folio = <%- JSON.stringify(data.cotizacion && data.cotizacion.FOLIO ? data.cotizacion.FOLIO : '') %>;
+            window.location.href = '/cotizaciones/cotizacion/' + encodeURIComponent(folio) + '/html' + (qStr ? '?' + qStr : '');
+          }
+
+          if (cotizacionCentroSelect) {
+            cotizacionCentroSelect.addEventListener('change', function() {
+              onCentroChange(cotizacionCentroSelect.value);
+            });
+          }
+          if (cotizacionCentroSelectTopBar) {
+            cotizacionCentroSelectTopBar.addEventListener('change', function() {
+              onCentroChange(cotizacionCentroSelectTopBar.value);
+            });
+          }
+
+          <% if (typeof autoprint !== 'undefined' && autoprint) { %>
+          window.addEventListener('load', function() {
+            setTimeout(function() { window.print(); }, 400);
+          });
+          <% } %>
         })();
       </script>
+    <% } %>
 
       <div class="footer-bar">
         <div class="footer-bar-inner">
@@ -1536,7 +1880,9 @@ var hasMunicipal = Object.keys(pagoDerechos.municipal).length > 0;
         </div>
       </section>
     </main>
+    <% if (!(typeof data !== "undefined" && data && data.isPdfExport)) { %>
     <script src="/ui/portal-shell.js?v=20260901b" defer></script>
+    <% } %>
   </body>
 </html>
 
